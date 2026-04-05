@@ -81,20 +81,56 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
 
 std::vector<uint64_t> MaterializeKeys(const VirtualSST& vsst) {
   std::vector<uint64_t> keys;
+  if (vsst.num_entries == 0 || vsst.plr_model.Empty()) return keys;
   keys.reserve(vsst.num_entries);
 
+  // Walk segments linearly since positions are sequential (0, 1, 2, ...).
+  // Much faster than calling Inverse() with its per-call search.
+  const auto& segments = vsst.plr_model.Segments();
+  size_t seg_idx = 0;
+
   for (uint64_t pos = 0; pos < vsst.num_entries; pos++) {
-    uint64_t key = vsst.plr_model.Inverse(static_cast<double>(pos));
-    // Clamp to valid range.
+    double position = static_cast<double>(pos);
+
+    // Advance segment if current one's position range is exceeded.
+    while (seg_idx + 1 < segments.size()) {
+      double pos_end = segments[seg_idx].slope *
+                           static_cast<double>(segments[seg_idx].key_end) +
+                       segments[seg_idx].intercept;
+      if (position <= pos_end) break;
+      seg_idx++;
+    }
+
+    const auto& seg = segments[seg_idx];
+    uint64_t key;
+    if (std::abs(seg.slope) < 1e-15) {
+      key = (seg.key_start + seg.key_end) / 2;
+    } else {
+      double key_d = (position - seg.intercept) / seg.slope;
+      key_d = std::max(key_d, static_cast<double>(seg.key_start));
+      key_d = std::min(key_d, static_cast<double>(seg.key_end));
+      key = static_cast<uint64_t>(std::round(key_d));
+    }
+
     key = std::max(key, vsst.key_min);
     key = std::min(key, vsst.key_max);
     keys.push_back(key);
   }
 
-  // Ensure strictly increasing (PLR inverse might produce duplicates).
+  // Ensure strictly increasing. Clamp to key_max.
   for (size_t i = 1; i < keys.size(); i++) {
     if (keys[i] <= keys[i - 1]) {
       keys[i] = keys[i - 1] + 1;
+    }
+  }
+  // If +1 accumulation pushed past key_max, cap and deduplicate.
+  if (!keys.empty() && keys.back() > vsst.key_max) {
+    for (size_t i = keys.size(); i > 0; i--) {
+      if (keys[i - 1] > vsst.key_max) {
+        keys[i - 1] = vsst.key_max;
+      } else {
+        break;
+      }
     }
   }
 

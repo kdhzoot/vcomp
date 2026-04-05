@@ -5327,121 +5327,196 @@ class Benchmark {
     fprintf(stderr, "FillVirtual: materializing to DB...\n");
     auto phase2_start = FLAGS_env->NowMicros();
 
-    // Materialize all keys from all levels.
-    auto all_keys = vlsm.MaterializeAll();
+    // Phase 2a: Materialize keys from all VirtualSSTs in parallel.
+    auto phase2a_start = FLAGS_env->NowMicros();
 
-    // Access DB internals for direct SST placement.
+    // Collect all VirtualSSTs with their level info.
+    struct LevelSST {
+      int level;
+      size_t idx;
+    };
+    std::vector<LevelSST> all_vssts;
+    for (int l = 0; l < vlsm.NumLevels(); l++) {
+      for (size_t i = 0; i < vlsm.GetLevel(l).size(); i++) {
+        all_vssts.push_back({l, i});
+      }
+    }
+
+    // Materialize in parallel.
+    std::vector<std::vector<uint64_t>> mat_keys(all_vssts.size());
+    {
+      std::vector<std::thread> threads;
+      const size_t num_workers = std::min(
+          static_cast<size_t>(FLAGS_max_background_jobs),
+          all_vssts.size());
+      std::atomic<size_t> next_task{0};
+
+      for (size_t w = 0; w < num_workers; w++) {
+        threads.emplace_back([&]() {
+          while (true) {
+            size_t task = next_task.fetch_add(1);
+            if (task >= all_vssts.size()) break;
+            const auto& info = all_vssts[task];
+            const auto& vsst = vlsm.GetLevel(info.level)[info.idx];
+            mat_keys[task] = MaterializeKeys(vsst);
+          }
+        });
+      }
+      for (auto& t : threads) t.join();
+    }
+    auto phase2a_end = FLAGS_env->NowMicros();
+    fprintf(stderr, "  Phase 2a (PLR inverse): %.3f sec\n",
+            (phase2a_end - phase2a_start) / 1e6);
+
+    // Phase 2b: Per-level merge, sort, dedup, then split into chunks.
+    auto phase2b_start = FLAGS_env->NowMicros();
+
+    struct SSTChunk {
+      int level;
+      std::vector<uint64_t> keys;
+    };
+    std::vector<SSTChunk> chunks;
+    const uint64_t target_file_size = vconfig.target_sst_size;
+    uint64_t keys_per_file = target_file_size / vconfig.avg_entry_size;
+    if (keys_per_file == 0) keys_per_file = 1;
+
+    for (int level = 0; level < vlsm.NumLevels(); level++) {
+      std::vector<uint64_t> level_keys;
+      for (size_t t = 0; t < all_vssts.size(); t++) {
+        if (all_vssts[t].level != level) continue;
+        level_keys.insert(level_keys.end(), mat_keys[t].begin(),
+                          mat_keys[t].end());
+      }
+      if (level_keys.empty()) continue;
+
+      std::sort(level_keys.begin(), level_keys.end());
+      level_keys.erase(std::unique(level_keys.begin(), level_keys.end()),
+                       level_keys.end());
+
+      for (size_t start = 0; start < level_keys.size();
+           start += keys_per_file) {
+        size_t end = std::min(start + keys_per_file, level_keys.size());
+        chunks.push_back(
+            {level, {level_keys.begin() + start, level_keys.begin() + end}});
+      }
+    }
+    auto phase2b_end = FLAGS_env->NowMicros();
+    fprintf(stderr, "  Phase 2b (sort/dedup/split): %.3f sec, %zu chunks\n",
+            (phase2b_end - phase2b_start) / 1e6, chunks.size());
+
+    // Phase 2c: Write SST files in parallel.
+    auto phase2c_start = FLAGS_env->NowMicros();
+
     auto* db_impl = static_cast<DBImpl*>(db_.db);
     auto* versions = db_impl->GetVersionSet();
     auto* cfd = static_cast<ColumnFamilyHandleImpl*>(
                     db_impl->DefaultColumnFamily())
                     ->cfd();
 
-    RandomGenerator gen;
-    std::unique_ptr<const char[]> key_guard;
-    Slice key_slice = AllocateKey(&key_guard);
-    int64_t total_written = 0;
-
-    VersionEdit edit;
-    const uint64_t target_file_size = vconfig.target_sst_size;
-
-    // Helper: write a batch of uint64_t keys as one SST file, register in edit.
-    auto write_sst = [&](const std::vector<uint64_t>& keys, int level) {
-      if (keys.empty()) return;
-
-      uint64_t file_number = versions->NewFileNumber();
-      std::string sst_path = TableFileName(
-          cfd->ioptions().cf_paths, file_number, 0u);
-
-      Options sst_opts;
-      sst_opts.comparator = open_options_.comparator;
-      if (FLAGS_compression_type_e != ROCKSDB_NAMESPACE::kNoCompression) {
-        sst_opts.compression = FLAGS_compression_type_e;
-      }
-      SstFileWriter sst_writer(EnvOptions(), sst_opts);
-      Status s = sst_writer.Open(sst_path);
-      if (!s.ok()) {
-        fprintf(stderr, "Error opening SST %s: %s\n", sst_path.c_str(),
-                s.ToString().c_str());
-        return;
-      }
-
-      std::string first_key_str, last_key_str;
-      std::string prev_key_str;
-      uint64_t keys_in_file = 0;
-
-      for (const auto& k : keys) {
-        GenerateKeyFromInt(k, FLAGS_num, &key_slice);
-        std::string cur_key_str(key_slice.data(), key_slice.size());
-        if (cur_key_str <= prev_key_str) continue;
-        s = sst_writer.Put(key_slice, gen.Generate());
-        if (!s.ok()) break;
-        if (first_key_str.empty()) first_key_str = cur_key_str;
-        last_key_str = cur_key_str;
-        prev_key_str = cur_key_str;
-        keys_in_file++;
-        total_written++;
-      }
-
-      if (keys_in_file == 0) return;
-
-      s = sst_writer.Finish();
-      if (!s.ok()) {
-        fprintf(stderr, "Error finishing SST: %s\n", s.ToString().c_str());
-        return;
-      }
-
-      uint64_t file_size = 0;
-      FLAGS_env->GetFileSize(sst_path, &file_size);
-
-      InternalKey smallest(Slice(first_key_str), 0, kTypeValue);
-      InternalKey largest(Slice(last_key_str), 0, kTypeValue);
-
-      edit.AddFile(level, file_number, 0, file_size, smallest, largest,
-                   0, 0, false, Temperature::kUnknown,
-                   kInvalidBlobFileNumber,
-                   /* oldest_ancester_time */ 0,
-                   /* file_creation_time */ 0,
-                   /* epoch_number */ 1,
-                   /* file_checksum */ "",
-                   /* file_checksum_func_name */ "",
-                   UniqueId64x2{}, 0, 0, true);
-
-      fprintf(stderr, "  L%d File #%" PRIu64 ": %" PRIu64
-                      " keys, %.1f MB\n",
-              level, file_number, keys_in_file,
-              file_size / (1024.0 * 1024.0));
-    };
-
-    for (int level = 0; level < vlsm.NumLevels(); level++) {
-      if (all_keys[level].empty()) continue;
-
-      // Merge all VirtualSST keys in this level into one sorted stream,
-      // then split into non-overlapping SST files.
-      std::vector<uint64_t> level_keys;
-      for (const auto& file_keys : all_keys[level]) {
-        level_keys.insert(level_keys.end(), file_keys.begin(),
-                          file_keys.end());
-      }
-      std::sort(level_keys.begin(), level_keys.end());
-      // Deduplicate.
-      level_keys.erase(std::unique(level_keys.begin(), level_keys.end()),
-                       level_keys.end());
-
-      // Split into files of ~target_file_size.
-      uint64_t keys_per_file = target_file_size / vconfig.avg_entry_size;
-      if (keys_per_file == 0) keys_per_file = 1;
-
-      for (size_t start = 0; start < level_keys.size();
-           start += keys_per_file) {
-        size_t end = std::min(start + keys_per_file, level_keys.size());
-        std::vector<uint64_t> chunk(level_keys.begin() + start,
-                                    level_keys.begin() + end);
-        write_sst(chunk, level);
-      }
+    // Pre-allocate file numbers (must be sequential, done on main thread).
+    std::vector<uint64_t> file_numbers(chunks.size());
+    for (size_t i = 0; i < chunks.size(); i++) {
+      file_numbers[i] = versions->NewFileNumber();
     }
 
-    // Apply VersionEdit to register all files at once.
+    struct SSTResult {
+      uint64_t file_number;
+      int level;
+      uint64_t file_size;
+      uint64_t keys_written;
+      std::string first_key;
+      std::string last_key;
+      bool ok;
+    };
+    std::vector<SSTResult> results(chunks.size());
+    std::atomic<int64_t> total_written{0};
+
+    {
+      std::vector<std::thread> threads;
+      const size_t num_workers = std::min(
+          static_cast<size_t>(FLAGS_max_background_jobs), chunks.size());
+      std::atomic<size_t> next_task{0};
+
+      for (size_t w = 0; w < num_workers; w++) {
+        threads.emplace_back([&]() {
+          // Thread-local key buffer and value generator.
+          std::unique_ptr<const char[]> local_key_guard;
+          Slice local_key(new char[key_size_], key_size_);
+          local_key_guard.reset(local_key.data());
+          RandomGenerator local_gen;
+
+          while (true) {
+            size_t task = next_task.fetch_add(1);
+            if (task >= chunks.size()) break;
+
+            const auto& chunk = chunks[task];
+            auto& res = results[task];
+            res.file_number = file_numbers[task];
+            res.level = chunk.level;
+            res.ok = false;
+
+            std::string sst_path = TableFileName(
+                cfd->ioptions().cf_paths, res.file_number, 0u);
+
+            Options sst_opts;
+            sst_opts.comparator = open_options_.comparator;
+            if (FLAGS_compression_type_e != kNoCompression) {
+              sst_opts.compression = FLAGS_compression_type_e;
+            }
+            SstFileWriter sst_writer(EnvOptions(), sst_opts);
+            Status s = sst_writer.Open(sst_path);
+            if (!s.ok()) continue;
+
+            std::string prev_key_str;
+            uint64_t keys_in_file = 0;
+
+            for (const auto& k : chunk.keys) {
+              GenerateKeyFromInt(k, FLAGS_num, &local_key);
+              std::string cur(local_key.data(), local_key.size());
+              if (cur <= prev_key_str) continue;
+              s = sst_writer.Put(local_key, local_gen.Generate());
+              if (!s.ok()) break;
+              if (res.first_key.empty()) res.first_key = cur;
+              res.last_key = cur;
+              prev_key_str = cur;
+              keys_in_file++;
+            }
+
+            if (keys_in_file == 0) continue;
+            s = sst_writer.Finish();
+            if (!s.ok()) continue;
+
+            uint64_t fsize = 0;
+            FLAGS_env->GetFileSize(sst_path, &fsize);
+            res.file_size = fsize;
+            res.keys_written = keys_in_file;
+            res.ok = true;
+            total_written.fetch_add(keys_in_file);
+          }
+        });
+      }
+      for (auto& t : threads) t.join();
+    }
+    auto phase2c_end = FLAGS_env->NowMicros();
+    fprintf(stderr, "  Phase 2c (parallel SST write): %.3f sec\n",
+            (phase2c_end - phase2c_start) / 1e6);
+
+    // Phase 2d: Register all files via VersionEdit.
+    VersionEdit edit;
+    for (const auto& res : results) {
+      if (!res.ok) continue;
+      InternalKey smallest(Slice(res.first_key), 0, kTypeValue);
+      InternalKey largest(Slice(res.last_key), 0, kTypeValue);
+      edit.AddFile(res.level, res.file_number, 0, res.file_size,
+                   smallest, largest, 0, 0, false, Temperature::kUnknown,
+                   kInvalidBlobFileNumber, 0, 0, 1, "", "",
+                   UniqueId64x2{}, 0, 0, true);
+      fprintf(stderr, "  L%d File #%" PRIu64 ": %" PRIu64
+                      " keys, %.1f MB\n",
+              res.level, res.file_number, res.keys_written,
+              res.file_size / (1024.0 * 1024.0));
+    }
+
     {
       ReadOptions ro;
       WriteOptions wo;
@@ -5458,12 +5533,13 @@ class Benchmark {
     auto phase2_end = FLAGS_env->NowMicros();
     double phase2_secs = (phase2_end - phase2_start) / 1e6;
 
+    int64_t tw = total_written.load();
     fprintf(stderr, "Phase 2 (materialization): %.3f sec, %" PRId64
                     " keys written\n",
-            phase2_secs, total_written);
+            phase2_secs, tw);
     fprintf(stderr, "Total: %.3f sec\n", phase1_secs + phase2_secs);
 
-    thread->stats.AddBytes(total_written * (key_size_ + value_size));
+    thread->stats.AddBytes(tw * (key_size_ + value_size));
     thread->stats.AddMessage("fillvirtual done");
   }
 

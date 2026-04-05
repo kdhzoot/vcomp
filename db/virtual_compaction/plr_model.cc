@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
-#include <set>
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -176,22 +175,28 @@ PLRModel NWayMergePLR(const std::vector<const PLRModel*>& models,
   const size_t N = models.size();
   if (N == 0) return PLRModel();
 
-  // Step 1: Collect all breakpoints from all models.
-  std::set<uint64_t> bp_set;
-  for (size_t j = 0; j < N; j++) {
-    bp_set.insert(key_mins[j]);
-    bp_set.insert(key_maxs[j]);
-    for (const auto& seg : models[j]->Segments()) {
-      bp_set.insert(seg.key_start);
-      bp_set.insert(seg.key_end);
+  // Step 1: Collect all breakpoints into a sorted unique vector.
+  std::vector<uint64_t> breakpoints;
+  {
+    size_t total_bp = 0;
+    for (size_t j = 0; j < N; j++) {
+      total_bp += models[j]->NumSegments() * 2 + 2;
     }
+    breakpoints.reserve(total_bp);
+    for (size_t j = 0; j < N; j++) {
+      breakpoints.push_back(key_mins[j]);
+      breakpoints.push_back(key_maxs[j]);
+      for (const auto& seg : models[j]->Segments()) {
+        breakpoints.push_back(seg.key_start);
+        breakpoints.push_back(seg.key_end);
+      }
+    }
+    std::sort(breakpoints.begin(), breakpoints.end());
+    breakpoints.erase(std::unique(breakpoints.begin(), breakpoints.end()),
+                      breakpoints.end());
   }
 
-  std::vector<uint64_t> breakpoints(bp_set.begin(), bp_set.end());
-  // Already sorted by std::set.
-
   if (breakpoints.size() < 2) {
-    // All models cover a single key — degenerate case.
     double total = 0;
     for (size_t j = 0; j < N; j++) total += num_entries[j];
     PLRSegment seg = {breakpoints[0], breakpoints[0], 0.0, total / 2.0};
@@ -199,13 +204,15 @@ PLRModel NWayMergePLR(const std::vector<const PLRModel*>& models,
   }
 
   // Step 2: For each sub-interval, sum slope/intercept from all models.
+  // Maintain a segment cursor per model to avoid repeated binary searches.
+  std::vector<size_t> seg_idx(N, 0);
+
   std::vector<PLRSegment> merged;
   merged.reserve(breakpoints.size() - 1);
 
   for (size_t i = 0; i + 1 < breakpoints.size(); i++) {
     uint64_t k_start = breakpoints[i];
     uint64_t k_end = breakpoints[i + 1];
-    // Representative key in this interval.
     uint64_t k_mid = k_start + (k_end - k_start) / 2;
 
     double slope_sum = 0.0;
@@ -213,14 +220,17 @@ PLRModel NWayMergePLR(const std::vector<const PLRModel*>& models,
 
     for (size_t j = 0; j < N; j++) {
       if (k_mid < key_mins[j]) {
-        // Before this model's range — contributes 0.
         continue;
       } else if (k_mid > key_maxs[j]) {
-        // After this model's range — all entries are before this key.
         intercept_sum += static_cast<double>(num_entries[j]);
       } else {
-        // Within range — add segment's slope/intercept.
-        const auto& seg = models[j]->GetSegmentAt(k_mid);
+        // Advance cursor to the segment covering k_mid.
+        const auto& segs = models[j]->Segments();
+        while (seg_idx[j] + 1 < segs.size() &&
+               segs[seg_idx[j]].key_end < k_mid) {
+          seg_idx[j]++;
+        }
+        const auto& seg = segs[seg_idx[j]];
         slope_sum += seg.slope;
         intercept_sum += seg.intercept;
       }

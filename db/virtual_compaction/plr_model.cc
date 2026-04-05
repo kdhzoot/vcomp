@@ -203,37 +203,69 @@ PLRModel NWayMergePLR(const std::vector<const PLRModel*>& models,
     return PLRModel({seg});
   }
 
-  // Step 2: For each sub-interval, sum slope/intercept from all models.
-  // Maintain a segment cursor per model to avoid repeated binary searches.
-  std::vector<size_t> seg_idx(N, 0);
+  // Step 2: Sort models by key_min so we can track active set efficiently.
+  // For each breakpoint interval, we only need to consider models whose
+  // key range overlaps with the interval.
 
+  // Sort model indices by key_min.
+  std::vector<size_t> model_order(N);
+  for (size_t j = 0; j < N; j++) model_order[j] = j;
+  std::sort(model_order.begin(), model_order.end(),
+            [&](size_t a, size_t b) { return key_mins[a] < key_mins[b]; });
+
+  // Pre-compute total intercept contribution from all "finished" models
+  // (models whose key_max < current breakpoint).
+  // As we sweep breakpoints left-to-right, models transition:
+  //   not-yet-started → active → finished
+  // finished models contribute a constant num_entries[j] to intercept.
+
+  std::vector<size_t> seg_idx(N, 0);
   std::vector<PLRSegment> merged;
   merged.reserve(breakpoints.size() - 1);
+
+  size_t next_model = 0;  // Next model in model_order to activate.
+  double finished_intercept = 0.0;
+  // Track active models (those with key_min <= k_mid <= key_max).
+  std::vector<size_t> active;
+  active.reserve(N);
 
   for (size_t i = 0; i + 1 < breakpoints.size(); i++) {
     uint64_t k_start = breakpoints[i];
     uint64_t k_end = breakpoints[i + 1];
     uint64_t k_mid = k_start + (k_end - k_start) / 2;
 
-    double slope_sum = 0.0;
-    double intercept_sum = 0.0;
+    // Activate new models whose key_min <= k_mid.
+    while (next_model < N &&
+           key_mins[model_order[next_model]] <= k_mid) {
+      active.push_back(model_order[next_model]);
+      next_model++;
+    }
 
-    for (size_t j = 0; j < N; j++) {
-      if (k_mid < key_mins[j]) {
-        continue;
-      } else if (k_mid > key_maxs[j]) {
-        intercept_sum += static_cast<double>(num_entries[j]);
+    // Remove finished models (key_max < k_mid) from active list.
+    size_t write = 0;
+    for (size_t r = 0; r < active.size(); r++) {
+      size_t j = active[r];
+      if (key_maxs[j] < k_mid) {
+        finished_intercept += static_cast<double>(num_entries[j]);
       } else {
-        // Advance cursor to the segment covering k_mid.
-        const auto& segs = models[j]->Segments();
-        while (seg_idx[j] + 1 < segs.size() &&
-               segs[seg_idx[j]].key_end < k_mid) {
-          seg_idx[j]++;
-        }
-        const auto& seg = segs[seg_idx[j]];
-        slope_sum += seg.slope;
-        intercept_sum += seg.intercept;
+        active[write++] = j;
       }
+    }
+    active.resize(write);
+
+    // Sum slope/intercept from active models only.
+    double slope_sum = 0.0;
+    double intercept_sum = finished_intercept;
+
+    for (size_t j : active) {
+      const auto& segs = models[j]->Segments();
+      while (seg_idx[j] + 1 < segs.size() &&
+             segs[seg_idx[j]].key_end < k_mid) {
+        seg_idx[j]++;
+      }
+      const auto& seg = segs[seg_idx[j]];
+      slope_sum += seg.slope;
+      intercept_sum += seg.intercept;
     }
 
     merged.push_back({k_start, k_end, slope_sum, intercept_sum});

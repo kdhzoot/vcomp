@@ -885,6 +885,10 @@ static enum ROCKSDB_NAMESPACE::CompressionType FLAGS_wal_compression_e =
 
 DEFINE_string(wal_dir, "", "If not empty, use the given dir for WAL");
 
+DEFINE_string(compaction_trace_dir, "",
+              "If not empty, write per-compaction trace log files to this "
+              "directory with detailed key-level information.");
+
 DEFINE_string(truth_db, "/dev/shm/truth_db/dbbench",
               "Truth key/values used when using verify");
 
@@ -4349,6 +4353,7 @@ class Benchmark {
 
     options.env = FLAGS_env;
     options.wal_dir = FLAGS_wal_dir;
+    options.compaction_trace_dir = FLAGS_compaction_trace_dir;
     options.dump_malloc_stats = FLAGS_dump_malloc_stats;
     options.stats_dump_period_sec =
         static_cast<unsigned int>(FLAGS_stats_dump_period_sec);

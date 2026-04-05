@@ -21,6 +21,7 @@
 #include "db/column_family.h"
 #include "db/compaction/compaction_iterator.h"
 #include "db/compaction/compaction_outputs.h"
+#include "db/compaction/compaction_trace_logger.h"
 #include "db/flush_scheduler.h"
 #include "db/internal_stats.h"
 #include "db/job_context.h"
@@ -492,6 +493,10 @@ class CompactionJob {
   // or updating it.
   int* bg_compaction_scheduled_;
   int* bg_bottom_compaction_scheduled_;
+
+  // Per-compaction trace logger for detailed key-level tracing.
+  // Created when compaction_trace_dir is non-empty.
+  std::unique_ptr<CompactionTraceLogger> trace_logger_;
 
   // Stores the sequence number to time mapping gathered from all input files
   // it also collects the smallest_seqno -> oldest_ancester_time from the SST.

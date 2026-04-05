@@ -42,6 +42,7 @@ LIB_SOURCES =                                                   \
   db/compaction/compaction_picker_universal.cc                  \
   db/compaction/compaction_service_job.cc                       \
   db/compaction/compaction_state.cc                             \
+  db/compaction/compaction_trace_logger.cc                      \
   db/compaction/compaction_outputs.cc                           \
   db/compaction/sst_partitioner.cc                              \
   db/compaction/subcompaction_state.cc                          \

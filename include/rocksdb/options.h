@@ -855,6 +855,14 @@ struct DBOptions {
   // NOTE: not for WALs
   std::string db_log_dir = "";
 
+  // If non-empty, RocksDB will write per-compaction trace log files to this
+  // directory. Each compaction job produces a separate log file containing
+  // detailed information: job metadata, input/output file details, and every
+  // key-value pair processed during compaction.
+  // The directory will be created if it does not exist.
+  // Default: "" (disabled)
+  std::string compaction_trace_dir = "";
+
   // This specifies the absolute dir path for write-ahead logs (WAL).
   // If it is empty, the log files will be in the same dir as data,
   //   dbname is used as the data dir by default

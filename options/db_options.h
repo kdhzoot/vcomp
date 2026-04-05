@@ -39,6 +39,7 @@ struct ImmutableDBOptions {
   bool use_fsync;
   std::vector<DbPath> db_paths;
   std::string db_log_dir;
+  std::string compaction_trace_dir;
   // The wal_dir option from the file.  To determine the
   // directory in use, the GetWalDir or IsWalDirSameAsDBPath
   // methods should be used instead of accessing this variable directly.

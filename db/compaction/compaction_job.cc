@@ -994,6 +994,50 @@ void CompactionJob::FinalizeCompactionRun(
 Status CompactionJob::Run() {
   InitializeCompactionRun();
 
+  // Initialize per-compaction trace logger if enabled
+  trace_logger_ = CompactionTraceLogger::Create(
+      db_options_.compaction_trace_dir, env_, job_id_);
+  if (trace_logger_) {
+    trace_logger_->LogJobStart(compact_->compaction, job_id_);
+
+    // Dump keys per input file
+    const auto* compaction = compact_->compaction;
+    auto* cfd = compaction->column_family_data();
+    ReadOptions ro;
+    ro.total_order_seek = true;
+    for (size_t lvl = 0; lvl < compaction->num_input_levels(); lvl++) {
+      int level = compaction->level(lvl);
+      for (size_t i = 0; i < compaction->num_input_files(lvl); i++) {
+        const FileMetaData* f = compaction->input(lvl, i);
+        trace_logger_->LogInputFileKeysHeader(level, f->fd.GetNumber());
+
+        InternalIterator* iter = cfd->table_cache()->NewIterator(
+            ro, file_options_for_read_, cfd->internal_comparator(), *f,
+            /*range_del_agg=*/nullptr, compaction->mutable_cf_options(),
+            /*table_reader_ptr=*/nullptr, /*file_read_hist=*/nullptr,
+            TableReaderCaller::kCompaction, /*arena=*/nullptr,
+            /*skip_filters=*/true, level,
+            MaxFileSizeForL0MetaPin(compaction->mutable_cf_options()),
+            /*smallest_compaction_key=*/nullptr,
+            /*largest_compaction_key=*/nullptr,
+            /*allow_unprepared_value=*/false);
+
+        uint64_t num_keys = 0;
+        if (iter->status().ok()) {
+          for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+            ParsedInternalKey pik;
+            if (ParseInternalKey(iter->key(), &pik, true).ok()) {
+              trace_logger_->LogInputKey(pik);
+              num_keys++;
+            }
+          }
+        }
+        trace_logger_->LogInputFileKeysFooter(num_keys);
+        delete iter;
+      }
+    }
+  }
+
   const uint64_t start_micros = db_options_.clock->NowMicros();
 
   RunSubcompactions();
@@ -1029,6 +1073,62 @@ Status CompactionJob::Run() {
 
   FinalizeCompactionRun(status, stats_built_from_input_table_prop,
                         num_input_range_del);
+
+  // Finalize compaction trace log
+  if (trace_logger_) {
+    trace_logger_->LogOutputFiles(compact_);
+
+    // Dump keys per output file
+    const auto* compaction = compact_->compaction;
+    auto* cfd = compaction->column_family_data();
+    ReadOptions ro;
+    ro.total_order_seek = true;
+    for (size_t sc = 0; sc < compact_->sub_compact_states.size(); sc++) {
+      auto& sub = compact_->sub_compact_states[sc];
+      auto dump_output_keys = [&](const std::vector<CompactionOutputs::Output>& outputs,
+                                  int level) {
+        for (const auto& out : outputs) {
+          const auto& meta = out.meta;
+          trace_logger_->LogInputFileKeysHeader(level, meta.fd.GetNumber());
+
+          InternalIterator* iter = cfd->table_cache()->NewIterator(
+              ro, file_options_for_read_, cfd->internal_comparator(), meta,
+              /*range_del_agg=*/nullptr, compaction->mutable_cf_options(),
+              /*table_reader_ptr=*/nullptr, /*file_read_hist=*/nullptr,
+              TableReaderCaller::kCompaction, /*arena=*/nullptr,
+              /*skip_filters=*/true, level,
+              MaxFileSizeForL0MetaPin(compaction->mutable_cf_options()),
+              /*smallest_compaction_key=*/nullptr,
+              /*largest_compaction_key=*/nullptr,
+              /*allow_unprepared_value=*/false);
+
+          uint64_t num_keys = 0;
+          if (iter->status().ok()) {
+            for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+              ParsedInternalKey pik;
+              if (ParseInternalKey(iter->key(), &pik, true).ok()) {
+                trace_logger_->LogInputKey(pik);
+                num_keys++;
+              }
+            }
+          }
+          trace_logger_->LogInputFileKeysFooter(num_keys);
+          delete iter;
+        }
+      };
+
+      const auto& outputs = sub.Outputs(false)->GetOutputs();
+      dump_output_keys(outputs, compaction->output_level());
+
+      if (compaction->SupportsPerKeyPlacement()) {
+        const auto& prox_outputs = sub.Outputs(true)->GetOutputs();
+        dump_output_keys(prox_outputs, compaction->GetProximalLevel());
+      }
+    }
+
+    trace_logger_->LogJobEnd(job_stats_);
+    trace_logger_->Close();
+  }
 
   return status;
 }

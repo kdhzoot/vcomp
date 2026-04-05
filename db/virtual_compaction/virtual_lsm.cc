@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <sstream>
 
 namespace ROCKSDB_NAMESPACE {
@@ -17,7 +18,10 @@ VirtualLSMTree::VirtualLSMTree(const VirtualLSMConfig& config)
 void VirtualLSMTree::FlushMemtable(const std::vector<uint64_t>& sorted_keys) {
   if (sorted_keys.empty()) return;
 
+  auto t0 = std::chrono::high_resolution_clock::now();
   PLRModel plr = GreedyPLRFit(sorted_keys, config_.plr_error_bound);
+  auto t1 = std::chrono::high_resolution_clock::now();
+  plr_fit_us_ += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
 
   VirtualSST vsst;
   vsst.plr_model = std::move(plr);
@@ -146,8 +150,11 @@ void VirtualLSMTree::MaybeTriggerCompaction(int level) {
     }
 
     // Virtual compaction.
+    auto tc0 = std::chrono::high_resolution_clock::now();
     auto new_ssts = VirtualCompact(inputs, config_.target_sst_size,
                                    config_.avg_entry_size, output_level);
+    auto tc1 = std::chrono::high_resolution_clock::now();
+    merge_us_ += std::chrono::duration_cast<std::chrono::microseconds>(tc1 - tc0).count();
 
     uint64_t in_entries = 0;
     for (const auto* s : inputs) in_entries += s->num_entries;

@@ -5277,6 +5277,8 @@ class Benchmark {
     fprintf(stderr, "FillVirtual: generating %" PRId64 " keys...\n", num_ops);
     auto phase1_start = FLAGS_env->NowMicros();
 
+    uint64_t keygen_us = 0, sort_us = 0, flush_us = 0;
+
     Random64 rng(thread->rand.Next());
     std::vector<uint64_t> memtable_buf;
     memtable_buf.reserve(memtable_capacity);
@@ -5286,19 +5288,33 @@ class Benchmark {
       memtable_buf.push_back(rand_num);
 
       if (memtable_buf.size() >= memtable_capacity) {
+        auto t0 = FLAGS_env->NowMicros();
         std::sort(memtable_buf.begin(), memtable_buf.end());
+        auto t1 = FLAGS_env->NowMicros();
         vlsm.FlushMemtable(memtable_buf);
+        auto t2 = FLAGS_env->NowMicros();
+        sort_us += (t1 - t0);
+        flush_us += (t2 - t1);
         memtable_buf.clear();
       }
     }
-    // Flush remaining.
     if (!memtable_buf.empty()) {
+      auto t0 = FLAGS_env->NowMicros();
       std::sort(memtable_buf.begin(), memtable_buf.end());
+      auto t1 = FLAGS_env->NowMicros();
       vlsm.FlushMemtable(memtable_buf);
+      auto t2 = FLAGS_env->NowMicros();
+      sort_us += (t1 - t0);
+      flush_us += (t2 - t1);
       memtable_buf.clear();
     }
 
     auto phase1_end = FLAGS_env->NowMicros();
+    keygen_us = (phase1_end - phase1_start) - sort_us - flush_us;
+    fprintf(stderr, "  Phase 1 breakdown: keygen=%.3fs sort=%.3fs flush+compact=%.3fs\n",
+            keygen_us / 1e6, sort_us / 1e6, flush_us / 1e6);
+    fprintf(stderr, "    PLR fit=%.3fs, VirtualCompact=%.3fs\n",
+            vlsm.plr_fit_us_ / 1e6, vlsm.merge_us_ / 1e6);
     double phase1_secs = (phase1_end - phase1_start) / 1e6;
 
     // Print LSM state.

@@ -239,6 +239,24 @@ PLRModel NWayMergePLR(const std::vector<const PLRModel*>& models,
     merged.push_back({k_start, k_end, slope_sum, intercept_sum});
   }
 
+  // Merge adjacent segments with identical slope/intercept.
+  if (merged.size() > 1) {
+    std::vector<PLRSegment> compacted;
+    compacted.push_back(merged[0]);
+    for (size_t i = 1; i < merged.size(); i++) {
+      auto& prev = compacted.back();
+      const auto& cur = merged[i];
+      if (std::abs(prev.slope - cur.slope) < 1e-12 &&
+          std::abs(prev.intercept - cur.intercept) < 1e-9) {
+        // Same line — extend previous segment.
+        prev.key_end = cur.key_end;
+      } else {
+        compacted.push_back(cur);
+      }
+    }
+    merged = std::move(compacted);
+  }
+
   return PLRModel(std::move(merged));
 }
 

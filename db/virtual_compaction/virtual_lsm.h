@@ -86,6 +86,12 @@ class VirtualLSMTree {
 
   uint64_t total_compactions_ = 0;
   uint64_t total_flushes_ = 0;
+
+ public:
+  // Timing stats (microseconds).
+  uint64_t plr_fit_us_ = 0;
+  uint64_t merge_us_ = 0;
+  uint64_t split_us_ = 0;
 };
 
 }  // namespace ROCKSDB_NAMESPACE

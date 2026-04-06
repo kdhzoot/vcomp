@@ -5461,14 +5461,14 @@ class Benchmark {
     fprintf(stderr, "  Phase 2a (PLR inverse): %.3f sec\n",
             (phase2a_end - phase2a_start) / 1e6);
 
-    // Phase 2b: Per-level merge, sort, dedup, split into chunks.
+    // Phase 2b: Per-level k-way merge (inputs are already sorted), dedup,
+    // split into chunks.
     auto phase2b_start = FLAGS_env->NowMicros();
 
-    // Group by level.
-    std::map<int, std::vector<uint64_t>> level_keys_map;
-    for (const auto& mr : mat_results) {
-      auto& lk = level_keys_map[mr.level];
-      lk.insert(lk.end(), mr.keys.begin(), mr.keys.end());
+    // Group materialized results by level.
+    std::map<int, std::vector<size_t>> level_file_indices;
+    for (size_t i = 0; i < mat_results.size(); i++) {
+      level_file_indices[mat_results[i].level].push_back(i);
     }
 
     struct SSTChunk {
@@ -5479,20 +5479,56 @@ class Benchmark {
     uint64_t keys_per_file = target_sst_size / avg_entry_size;
     if (keys_per_file == 0) keys_per_file = 1;
 
-    for (auto& [level, level_keys] : level_keys_map) {
-      std::sort(level_keys.begin(), level_keys.end());
-      level_keys.erase(std::unique(level_keys.begin(), level_keys.end()),
-                       level_keys.end());
+    for (auto& [level, indices] : level_file_indices) {
+      // K-way merge of already-sorted per-file key lists.
+      // Use a min-heap of (key, file_index, position_in_file).
+      using HeapEntry = std::tuple<uint64_t, size_t, size_t>;
+      std::priority_queue<HeapEntry, std::vector<HeapEntry>,
+                          std::greater<HeapEntry>> heap;
 
-      for (size_t start = 0; start < level_keys.size();
+      for (size_t fi : indices) {
+        if (!mat_results[fi].keys.empty()) {
+          heap.push({mat_results[fi].keys[0], fi, 0});
+        }
+      }
+
+      std::vector<uint64_t> merged;
+      uint64_t total_keys = 0;
+      for (size_t fi : indices) total_keys += mat_results[fi].keys.size();
+      merged.reserve(total_keys);
+
+      uint64_t prev_key = std::numeric_limits<uint64_t>::max();
+      while (!heap.empty()) {
+        auto [key, fi, pos] = heap.top();
+        heap.pop();
+
+        // Dedup: skip if same as previous.
+        if (key != prev_key) {
+          merged.push_back(key);
+          prev_key = key;
+        }
+
+        // Advance this file's cursor.
+        if (pos + 1 < mat_results[fi].keys.size()) {
+          heap.push({mat_results[fi].keys[pos + 1], fi, pos + 1});
+        }
+      }
+
+      // Split into chunks.
+      for (size_t start = 0; start < merged.size();
            start += keys_per_file) {
-        size_t end = std::min(start + keys_per_file, level_keys.size());
+        size_t end = std::min(start + keys_per_file, merged.size());
         chunks.push_back(
-            {level, {level_keys.begin() + start, level_keys.begin() + end}});
+            {level, {merged.begin() + start, merged.begin() + end}});
+      }
+
+      // Free materialized keys for this level.
+      for (size_t fi : indices) {
+        std::vector<uint64_t>().swap(mat_results[fi].keys);
       }
     }
     auto phase2b_end = FLAGS_env->NowMicros();
-    fprintf(stderr, "  Phase 2b (sort/dedup/split): %.3f sec, %zu chunks\n",
+    fprintf(stderr, "  Phase 2b (k-way merge/dedup/split): %.3f sec, %zu chunks\n",
             (phase2b_end - phase2b_start) / 1e6, chunks.size());
 
     // Phase 2c: Write SST files in parallel.
@@ -5545,8 +5581,7 @@ class Benchmark {
             std::string sst_path = TableFileName(
                 cfd->ioptions().cf_paths, res.file_number, 0u);
 
-            Options sst_opts;
-            sst_opts.comparator = open_options_.comparator;
+            Options sst_opts = open_options_;
             if (FLAGS_compression_type_e != kNoCompression) {
               sst_opts.compression = FLAGS_compression_type_e;
             }

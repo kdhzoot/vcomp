@@ -4916,6 +4916,14 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
                                     LogBuffer* log_buffer) {
   mutex_.AssertHeld();
   assert(virtual_sst_registry_);
+  static std::atomic<uint64_t> vcomp_count{0};
+  uint64_t cnt = vcomp_count.fetch_add(1) + 1;
+  fprintf(stderr, "[VComp #%" PRIu64 "] L%d -> L%d, inputs:",
+          cnt, c->start_level(), c->output_level());
+  for (size_t lvl = 0; lvl < c->num_input_levels(); lvl++) {
+    fprintf(stderr, " %zu", c->num_input_files(lvl));
+  }
+  fprintf(stderr, "\n");
 
   auto* cfd = c->column_family_data();
   int output_level = c->output_level();

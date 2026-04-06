@@ -10,6 +10,8 @@
 #include <deque>
 
 #include "db/builder.h"
+#include "db/virtual_compaction/plr_model.h"
+#include "db/virtual_compaction/virtual_sst.h"
 #include "db/db_impl/db_impl.h"
 #include "db/error_handler.h"
 #include "db/event_helpers.h"
@@ -4264,6 +4266,15 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     assert(c == nullptr);
     env_->Schedule(&DBImpl::BGWorkBottomCompaction, ca, Env::Priority::BOTTOM,
                    this, &DBImpl::UnscheduleCompactionCallback);
+  } else if (immutable_db_options_.use_virtual_compaction &&
+             virtual_sst_registry_) {
+    // ── Virtual compaction: PLR model merge instead of actual I/O ──
+    status = RunVirtualCompaction(c.get(), job_context, log_buffer);
+    if (status.ok()) {
+      InstallSuperVersionAndScheduleWork(
+          c->column_family_data(), job_context->superversion_contexts.data());
+    }
+    *made_progress = true;
   } else {
     TEST_SYNC_POINT_CALLBACK("DBImpl::BackgroundCompaction:BeforeCompaction",
                              c->column_family_data());
@@ -4881,6 +4892,151 @@ void DBImpl::ResetBottomPriCompactionIntent(ColumnFamilyData* cfd,
   cfd->current()->storage_info()->ComputeCompactionScore(
       c->immutable_options(), c->mutable_cf_options());
   c.reset();
+}
+
+Status DBImpl::RegisterVirtualL0File(VersionEdit* edit) {
+  InstrumentedMutexLock l(&mutex_);
+  auto* cfd = static_cast<ColumnFamilyHandleImpl*>(
+                  DefaultColumnFamily())->cfd();
+
+  const ReadOptions ro;
+  const WriteOptions wo;
+  Status s = versions_->LogAndApply(cfd, ro, wo, edit, &mutex_,
+                                     directories_.GetDbDir());
+  if (s.ok()) {
+    SuperVersionContext sv_context(/* create_superversion = */ true);
+    InstallSuperVersionAndScheduleWork(cfd, &sv_context);
+    sv_context.Clean();
+  }
+  return s;
+}
+
+Status DBImpl::RunVirtualCompaction(Compaction* c,
+                                    JobContext* /*job_context*/,
+                                    LogBuffer* log_buffer) {
+  mutex_.AssertHeld();
+  assert(virtual_sst_registry_);
+
+  auto* cfd = c->column_family_data();
+  int output_level = c->output_level();
+
+  // Gather input PLR models from all input levels.
+  std::vector<const PLRModel*> models;
+  std::vector<uint64_t> num_entries_vec;
+  std::vector<uint64_t> key_mins_vec;
+  std::vector<uint64_t> key_maxs_vec;
+  std::vector<uint64_t> input_file_numbers;
+
+  for (size_t lvl = 0; lvl < c->num_input_levels(); lvl++) {
+    for (size_t i = 0; i < c->num_input_files(lvl); i++) {
+      auto* fmd = c->input(lvl, i);
+      uint64_t fnum = fmd->fd.GetNumber();
+      const VirtualSST* vsst = virtual_sst_registry_->Lookup(fnum);
+      if (!vsst) {
+        // Not a virtual file — skip (shouldn't happen in virtual mode).
+        continue;
+      }
+      models.push_back(&vsst->plr_model);
+      num_entries_vec.push_back(vsst->num_entries);
+      key_mins_vec.push_back(vsst->key_min);
+      key_maxs_vec.push_back(vsst->key_max);
+      input_file_numbers.push_back(fnum);
+    }
+  }
+
+  if (models.empty()) {
+    c->ReleaseCompactionFiles(Status::OK());
+    return Status::OK();
+  }
+
+  // Release mutex during PLR merge (CPU-intensive, no shared state).
+  mutex_.Unlock();
+
+  // N-way PLR merge.
+  PLRModel merged = NWayMergePLR(models, num_entries_vec,
+                                  key_mins_vec, key_maxs_vec);
+
+  // Compute total entries and global key range.
+  uint64_t total_entries = 0;
+  uint64_t global_min = std::numeric_limits<uint64_t>::max();
+  uint64_t global_max = 0;
+  for (size_t i = 0; i < models.size(); i++) {
+    total_entries += num_entries_vec[i];
+    global_min = std::min(global_min, key_mins_vec[i]);
+    global_max = std::max(global_max, key_maxs_vec[i]);
+  }
+
+  uint64_t target_sst_size = virtual_sst_registry_->GetTargetSSTSize();
+  uint64_t avg_entry_size = virtual_sst_registry_->GetAvgEntrySize();
+
+  // Split into output VirtualSSTs.
+  std::vector<VirtualSST> output_vssts = SplitIntoSSTs(
+      merged, total_entries, target_sst_size, avg_entry_size,
+      global_min, global_max, output_level);
+
+  mutex_.Lock();
+
+  // Build VersionEdit: delete inputs, add outputs.
+  VersionEdit* edit = c->edit();
+
+  // Delete input files.
+  c->AddInputDeletions(edit);
+
+  // Allocate file numbers and register output VirtualSSTs.
+  for (auto& vsst : output_vssts) {
+    uint64_t fnum = versions_->NewFileNumber();
+    virtual_sst_registry_->Register(fnum, vsst);
+
+    std::string smallest_key = virtual_sst_registry_->EncodeUserKey(vsst.key_min);
+    std::string largest_key = virtual_sst_registry_->EncodeUserKey(vsst.key_max);
+    InternalKey smallest(Slice(smallest_key), kMaxSequenceNumber, kTypeValue);
+    InternalKey largest(Slice(largest_key), 0, kTypeValue);
+
+    edit->AddFile(output_level, fnum, /*path_id=*/0,
+                  vsst.size_bytes, smallest, largest,
+                  /*smallest_seqno=*/0, /*largest_seqno=*/0,
+                  /*marked_for_compaction=*/false,
+                  Temperature::kUnknown,
+                  kInvalidBlobFileNumber,
+                  /*oldest_ancester_time=*/0,
+                  /*file_creation_time=*/0,
+                  /*epoch_number=*/fnum,
+                  /*file_checksum=*/"",
+                  /*file_checksum_func_name=*/"",
+                  UniqueId64x2{},
+                  /*compensated_range_deletion_size=*/0,
+                  /*tail_size=*/0,
+                  /*user_defined_timestamps_persisted=*/true);
+  }
+
+  // Remove old VirtualSSTs from registry.
+  for (uint64_t fnum : input_file_numbers) {
+    virtual_sst_registry_->Remove(fnum);
+  }
+
+  // Release compaction files and apply edit.
+  auto manifest_wcb = [&c](const Status& s) {
+    c->ReleaseCompactionFiles(s);
+  };
+
+  const ReadOptions read_options(Env::IOActivity::kCompaction);
+  const WriteOptions write_options(Env::IOActivity::kCompaction);
+
+  Status s = versions_->LogAndApply(
+      cfd, read_options, write_options, edit, &mutex_,
+      directories_.GetDbDir(), /*new_descriptor_log=*/false,
+      /*column_family_options=*/nullptr, manifest_wcb);
+
+  if (s.ok()) {
+    ROCKS_LOG_BUFFER(
+        log_buffer,
+        "[%s] Virtual compaction L%d -> L%d: %zu inputs, %zu outputs, "
+        "%" PRIu64 " entries",
+        cfd->GetName().c_str(), c->start_level(), output_level,
+        input_file_numbers.size(), output_vssts.size(), total_entries);
+  }
+
+  return s;
 }
 
 }  // namespace ROCKSDB_NAMESPACE

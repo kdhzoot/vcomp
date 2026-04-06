@@ -5941,7 +5941,8 @@ Status VersionSet::ProcessManifestWrites(
     mu->Unlock();
     TEST_SYNC_POINT("VersionSet::LogAndApply:WriteManifestStart");
     TEST_SYNC_POINT_CALLBACK("VersionSet::LogAndApply:WriteManifest", nullptr);
-    if (!first_writer.edit_list.front()->IsColumnFamilyManipulation()) {
+    if (!first_writer.edit_list.front()->IsColumnFamilyManipulation() &&
+        !db_options_->use_virtual_compaction) {
       for (int i = 0; i < static_cast<int>(versions.size()); ++i) {
         assert(!builder_guards.empty() &&
                builder_guards.size() == versions.size());
@@ -7790,6 +7791,11 @@ Status VersionSet::VerifyFileMetadata(const ReadOptions& read_options,
                                       ColumnFamilyData* cfd,
                                       const std::string& fpath, int level,
                                       const FileMetaData& meta) {
+  // Skip verification for virtual compaction mode (no physical SST files).
+  if (db_options_->use_virtual_compaction) {
+    return Status::OK();
+  }
+
   uint64_t fsize = 0;
   Status status = fs_->GetFileSize(fpath, IOOptions(), &fsize, nullptr);
   if (status.ok()) {

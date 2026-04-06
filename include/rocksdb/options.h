@@ -1504,6 +1504,14 @@ struct DBOptions {
   // eventually be obsolete and removed as Identity files are phased out.
   bool write_identity_file = true;
 
+  // When true, compaction operates on virtual SSTs (PLR models) instead of
+  // actual data.  SST files are only materialized at the end.  This is used
+  // by the "fillvirtual" benchmark for fast bulk loading.
+  bool use_virtual_compaction = false;
+
+  // PLR error bound (delta) used for virtual compaction.
+  double plr_error_bound = 8.0;
+
   // Historically, when prefix_extractor != nullptr, iterators have an
   // unfortunate default semantics of *possibly* only returning data
   // within the same prefix. To avoid "spooky action at a distance," iterator

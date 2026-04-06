@@ -44,6 +44,7 @@
 #include "db/snapshot_impl.h"
 #include "db/trim_history_scheduler.h"
 #include "db/version_edit.h"
+#include "db/virtual_compaction/virtual_sst_registry.h"
 #include "db/wal_manager.h"
 #include "db/write_controller.h"
 #include "db/write_thread.h"
@@ -1101,6 +1102,14 @@ class DBImpl : public DB {
 
   InstrumentedMutex* mutex() const { return &mutex_; }
 
+  VirtualSSTRegistry* GetVirtualSSTRegistry() {
+    return virtual_sst_registry_.get();
+  }
+
+  // Register a virtual L0 file and trigger compaction scheduling.
+  // Must NOT hold mutex when calling.
+  Status RegisterVirtualL0File(VersionEdit* edit);
+
   // Initialize a brand new DB. The DB directory is expected to be empty before
   // calling it. Push new manifest file name into `new_filenames`.
   Status NewDB(std::vector<std::string>* new_filenames);
@@ -1408,6 +1417,9 @@ class DBImpl : public DB {
 
   // table_cache_ provides its own synchronization
   std::shared_ptr<Cache> table_cache_;
+
+  // Virtual SST registry for PLR-based virtual compaction.
+  std::unique_ptr<VirtualSSTRegistry> virtual_sst_registry_;
 
   ErrorHandler error_handler_;
 
@@ -2479,6 +2491,10 @@ class DBImpl : public DB {
                               LogBuffer* log_buffer,
                               PrepickedCompaction* prepicked_compaction,
                               Env::Priority thread_pri);
+  // Virtual compaction: PLR model merge instead of actual I/O.
+  Status RunVirtualCompaction(Compaction* c, JobContext* job_context,
+                              LogBuffer* log_buffer);
+
   Status BackgroundFlush(bool* madeProgress, JobContext* job_context,
                          LogBuffer* log_buffer, FlushReason* reason,
                          bool* flush_rescheduled_to_retain_udt,

@@ -373,6 +373,13 @@ void DBImpl::DeleteObsoleteFileImpl(int job_id, const std::string& fname,
                            const_cast<std::string*>(&fname));
   IGNORE_STATUS_IF_ERROR(Status::IOError());
 
+  // Skip deletion for virtual SST files (no physical file on disk).
+  if (type == kTableFile && virtual_sst_registry_ &&
+      virtual_sst_registry_->IsVirtual(number)) {
+    virtual_sst_registry_->Remove(number);
+    return;
+  }
+
   Status file_deletion_status;
   if (type == kTableFile || type == kBlobFile || type == kWalFile) {
     // Rate limit WAL deletion only if its in the DB dir

@@ -241,6 +241,9 @@ DBImpl::DBImpl(const DBOptions& options, const std::string& dbname,
   // dealt with
   co.hash_seed = 0;
   table_cache_ = NewLRUCache(co);
+  if (immutable_db_options_.use_virtual_compaction) {
+    virtual_sst_registry_ = std::make_unique<VirtualSSTRegistry>();
+  }
   SetDbSessionId();
   assert(!db_session_id_.empty());
 

@@ -809,7 +809,9 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions& options)
       metadata_write_temperature(options.metadata_write_temperature),
       wal_write_temperature(options.wal_write_temperature),
       calculate_sst_write_lifetime_hint_set(
-          options.calculate_sst_write_lifetime_hint_set) {
+          options.calculate_sst_write_lifetime_hint_set),
+      use_virtual_compaction(options.use_virtual_compaction),
+      plr_error_bound(options.plr_error_bound) {
   fs = env->GetFileSystem();
   clock = env->GetSystemClock().get();
   logger = info_log.get();

@@ -46,6 +46,13 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
                            ? global_max
                            : plr.Inverse(static_cast<double>(pos_end));
 
+    // Ensure non-overlapping ranges between adjacent SSTs.
+    // For non-last SSTs, subtract 1 from key_end so it doesn't overlap
+    // with the next SST's key_start.
+    if (i < num_ssts - 1 && key_end > key_start) {
+      key_end = key_end - 1;
+    }
+
     // Ensure key ordering.
     if (key_end < key_start) key_end = key_start;
 

@@ -106,6 +106,8 @@ struct ImmutableDBOptions {
   Temperature metadata_write_temperature;
   Temperature wal_write_temperature;
   CompactionStyleSet calculate_sst_write_lifetime_hint_set;
+  bool use_virtual_compaction;
+  double plr_error_bound;
 
   // Beginning convenience/helper objects that are not part of the base
   // DBOptions

@@ -5288,9 +5288,63 @@ class Benchmark {
     std::vector<uint64_t> memtable_buf;
     memtable_buf.reserve(memtable_capacity);
 
+    // Batch pending L0 files and register them in a single LogAndApply
+    // call per l0_compaction_trigger batch. This reduces MANIFEST writes
+    // from N to N/batch_size.
+    VersionEdit pending_edit;
+    int pending_count = 0;
+    int l0_trigger = FLAGS_level0_file_num_compaction_trigger > 0
+                         ? FLAGS_level0_file_num_compaction_trigger
+                         : 4;
+
+    auto flush_pending_edit = [&]() {
+      if (pending_count == 0) return;
+      auto t0 = FLAGS_env->NowMicros();
+      Status s = db_impl->RegisterVirtualL0File(&pending_edit);
+      if (!s.ok()) {
+        fprintf(stderr, "Error registering virtual L0 batch: %s\n",
+                s.ToString().c_str());
+      }
+      flush_us += (FLAGS_env->NowMicros() - t0);
+      pending_edit = VersionEdit();
+      pending_count = 0;
+    };
+
+    // Radix sort buffer and pass count, computed once based on key range.
+    std::vector<uint64_t> radix_tmp;
+    radix_tmp.reserve(memtable_capacity);
+    int radix_passes = 0;
+    {
+      uint64_t max_val = static_cast<uint64_t>(FLAGS_num);
+      while (max_val > 0) { radix_passes++; max_val >>= 8; }
+      if (radix_passes == 0) radix_passes = 1;
+    }
+
     auto do_flush = [&]() {
       auto t0 = FLAGS_env->NowMicros();
-      std::sort(memtable_buf.begin(), memtable_buf.end());
+
+      // Radix sort: 8-bit radix, only the bytes needed to cover [0, FLAGS_num).
+      const size_t n = memtable_buf.size();
+      radix_tmp.resize(n);
+      uint64_t* src = memtable_buf.data();
+      uint64_t* dst = radix_tmp.data();
+
+      for (int pass = 0; pass < radix_passes; pass++) {
+        const int shift = pass * 8;
+        size_t count[256] = {};
+        for (size_t i = 0; i < n; i++)
+          count[(src[i] >> shift) & 0xFF]++;
+        size_t offset[256];
+        offset[0] = 0;
+        for (int b = 1; b < 256; b++)
+          offset[b] = offset[b - 1] + count[b - 1];
+        for (size_t i = 0; i < n; i++)
+          dst[offset[(src[i] >> shift) & 0xFF]++] = src[i];
+        std::swap(src, dst);
+      }
+      if (src != memtable_buf.data()) {
+        memcpy(memtable_buf.data(), src, n * sizeof(uint64_t));
+      }
       auto t1 = FLAGS_env->NowMicros();
 
       PLRModel plr = GreedyPLRFit(memtable_buf, plr_error_bound);
@@ -5309,7 +5363,6 @@ class Benchmark {
       vsst.size_bytes =
           VirtualSST::EstimateSize(memtable_buf.size(), avg_entry_size);
 
-      // Allocate file number and register.
       uint64_t fnum;
       {
         InstrumentedMutexLock l(db_impl->mutex());
@@ -5320,11 +5373,9 @@ class Benchmark {
       std::string largest_key = registry->EncodeUserKey(vsst.key_max);
       registry->Register(fnum, std::move(vsst));
 
-      // Create VersionEdit to add L0 file.
-      VersionEdit edit;
       InternalKey smallest(Slice(smallest_key), kMaxSequenceNumber, kTypeValue);
       InternalKey largest(Slice(largest_key), 0, kTypeValue);
-      edit.AddFile(0 /*level*/, fnum, /*path_id=*/0,
+      pending_edit.AddFile(0 /*level*/, fnum, /*path_id=*/0,
                    VirtualSST::EstimateSize(memtable_buf.size(), avg_entry_size),
                    smallest, largest,
                    /*smallest_seqno=*/0, /*largest_seqno=*/0,
@@ -5341,17 +5392,14 @@ class Benchmark {
                    /*tail_size=*/0,
                    /*user_defined_timestamps_persisted=*/true);
 
-      // Apply edit and trigger compaction scheduling.
-      Status s = db_impl->RegisterVirtualL0File(&edit);
-      if (!s.ok()) {
-        fprintf(stderr, "Error registering virtual L0: %s\n",
-                s.ToString().c_str());
-      }
-
-      auto t3 = FLAGS_env->NowMicros();
-      flush_us += (t3 - t2);
+      pending_count++;
       total_flushes++;
       memtable_buf.clear();
+
+      // Flush batch when we hit l0_compaction_trigger files.
+      if (pending_count >= l0_trigger) {
+        flush_pending_edit();
+      }
     };
 
     for (int64_t i = 0; i < num_ops; i++) {
@@ -5365,6 +5413,7 @@ class Benchmark {
     if (!memtable_buf.empty()) {
       do_flush();
     }
+    flush_pending_edit();  // Register remaining files.
 
     auto phase1_end = FLAGS_env->NowMicros();
     double phase1_secs = (phase1_end - phase1_start) / 1e6;
@@ -5393,7 +5442,9 @@ class Benchmark {
     fprintf(stderr, "  Virtual SSTs remaining in registry: %zu\n",
             registry->Size());
 
-    // ── Phase 2: Materialize virtual SSTs to real SST files ──
+    // ── Phase 2: Materialize each VirtualSST directly to a real SST file ──
+    // BG compaction ensures L1+ files are non-overlapping, so each VirtualSST
+    // can be materialized independently — no cross-file merge/dedup needed.
     fprintf(stderr, "FillVirtual: materializing to DB...\n");
     auto phase2_start = FLAGS_env->NowMicros();
 
@@ -5408,141 +5459,40 @@ class Benchmark {
       db_.db->GetColumnFamilyMetaData(&cf_meta);
       for (const auto& level_meta : cf_meta.levels) {
         for (const auto& file_meta : level_meta.files) {
-          // Extract file number from name (e.g., "/000012.sst" → 12).
           std::string name = file_meta.name;
           size_t slash = name.rfind('/');
           if (slash != std::string::npos) name = name.substr(slash + 1);
           size_t dot = name.find('.');
           if (dot != std::string::npos) name = name.substr(0, dot);
-          uint64_t fnum = std::stoull(name);
-          file_level_map[fnum] = level_meta.level;
+          file_level_map[std::stoull(name)] = level_meta.level;
         }
       }
     }
 
     fprintf(stderr, "  Materializing %zu virtual SSTs\n", all_vssts.size());
 
-    // Phase 2a: Materialize keys in parallel.
-    auto phase2a_start = FLAGS_env->NowMicros();
-    struct MatResult {
-      uint64_t file_number;
-      std::vector<uint64_t> keys;
+    // Pre-allocate output file numbers (one real SST per VirtualSST).
+    struct SSTTask {
+      uint64_t virtual_fnum;
+      uint64_t real_fnum;
       int level;
+      const VirtualSST* vsst;
     };
-    std::vector<MatResult> mat_results(all_vssts.size());
-    for (size_t i = 0; i < all_vssts.size(); i++) {
-      mat_results[i].file_number = all_vssts[i].first;
-      auto it = file_level_map.find(all_vssts[i].first);
-      mat_results[i].level = (it != file_level_map.end())
-                                 ? it->second
-                                 : all_vssts[i].second->level;
-    }
-
-    {
-      std::vector<std::thread> threads;
-      const size_t num_workers = std::min(
-          static_cast<size_t>(FLAGS_max_background_jobs),
-          all_vssts.size());
-      std::atomic<size_t> next_task{0};
-
-      for (size_t w = 0; w < num_workers; w++) {
-        threads.emplace_back([&]() {
-          while (true) {
-            size_t task = next_task.fetch_add(1);
-            if (task >= all_vssts.size()) break;
-            mat_results[task].keys =
-                MaterializeKeys(*all_vssts[task].second);
-          }
-        });
-      }
-      for (auto& t : threads) t.join();
-    }
-    auto phase2a_end = FLAGS_env->NowMicros();
-    fprintf(stderr, "  Phase 2a (PLR inverse): %.3f sec\n",
-            (phase2a_end - phase2a_start) / 1e6);
-
-    // Phase 2b: Per-level k-way merge (inputs are already sorted), dedup,
-    // split into chunks.
-    auto phase2b_start = FLAGS_env->NowMicros();
-
-    // Group materialized results by level.
-    std::map<int, std::vector<size_t>> level_file_indices;
-    for (size_t i = 0; i < mat_results.size(); i++) {
-      level_file_indices[mat_results[i].level].push_back(i);
-    }
-
-    struct SSTChunk {
-      int level;
-      std::vector<uint64_t> keys;
-    };
-    std::vector<SSTChunk> chunks;
-    uint64_t keys_per_file = target_sst_size / avg_entry_size;
-    if (keys_per_file == 0) keys_per_file = 1;
-
-    for (auto& [level, indices] : level_file_indices) {
-      // K-way merge of already-sorted per-file key lists.
-      // Use a min-heap of (key, file_index, position_in_file).
-      using HeapEntry = std::tuple<uint64_t, size_t, size_t>;
-      std::priority_queue<HeapEntry, std::vector<HeapEntry>,
-                          std::greater<HeapEntry>> heap;
-
-      for (size_t fi : indices) {
-        if (!mat_results[fi].keys.empty()) {
-          heap.push({mat_results[fi].keys[0], fi, 0});
-        }
-      }
-
-      std::vector<uint64_t> merged;
-      uint64_t total_keys = 0;
-      for (size_t fi : indices) total_keys += mat_results[fi].keys.size();
-      merged.reserve(total_keys);
-
-      uint64_t prev_key = std::numeric_limits<uint64_t>::max();
-      while (!heap.empty()) {
-        auto [key, fi, pos] = heap.top();
-        heap.pop();
-
-        // Dedup: skip if same as previous.
-        if (key != prev_key) {
-          merged.push_back(key);
-          prev_key = key;
-        }
-
-        // Advance this file's cursor.
-        if (pos + 1 < mat_results[fi].keys.size()) {
-          heap.push({mat_results[fi].keys[pos + 1], fi, pos + 1});
-        }
-      }
-
-      // Split into chunks.
-      for (size_t start = 0; start < merged.size();
-           start += keys_per_file) {
-        size_t end = std::min(start + keys_per_file, merged.size());
-        chunks.push_back(
-            {level, {merged.begin() + start, merged.begin() + end}});
-      }
-
-      // Free materialized keys for this level.
-      for (size_t fi : indices) {
-        std::vector<uint64_t>().swap(mat_results[fi].keys);
-      }
-    }
-    auto phase2b_end = FLAGS_env->NowMicros();
-    fprintf(stderr, "  Phase 2b (k-way merge/dedup/split): %.3f sec, %zu chunks\n",
-            (phase2b_end - phase2b_start) / 1e6, chunks.size());
-
-    // Phase 2c: Write SST files in parallel.
-    auto phase2c_start = FLAGS_env->NowMicros();
-
-    // Pre-allocate file numbers for real SST files.
-    std::vector<uint64_t> file_numbers(chunks.size());
+    std::vector<SSTTask> tasks(all_vssts.size());
     {
       InstrumentedMutexLock l(db_impl->mutex());
-      for (size_t i = 0; i < chunks.size(); i++) {
-        file_numbers[i] = versions->NewFileNumber();
+      for (size_t i = 0; i < all_vssts.size(); i++) {
+        tasks[i].virtual_fnum = all_vssts[i].first;
+        tasks[i].vsst = all_vssts[i].second;
+        tasks[i].real_fnum = versions->NewFileNumber();
+        auto it = file_level_map.find(all_vssts[i].first);
+        tasks[i].level = (it != file_level_map.end())
+                             ? it->second
+                             : all_vssts[i].second->level;
       }
     }
 
+    // Parallel: materialize keys + write SST, one per VirtualSST.
     struct SSTResult {
       uint64_t file_number;
       int level;
@@ -5552,13 +5502,14 @@ class Benchmark {
       std::string last_key;
       bool ok;
     };
-    std::vector<SSTResult> results(chunks.size());
+    std::vector<SSTResult> results(tasks.size());
     std::atomic<int64_t> total_written{0};
 
+    auto phase2a_start = FLAGS_env->NowMicros();
     {
       std::vector<std::thread> threads;
       const size_t num_workers = std::min(
-          static_cast<size_t>(FLAGS_max_background_jobs), chunks.size());
+          static_cast<size_t>(FLAGS_max_background_jobs), tasks.size());
       std::atomic<size_t> next_task{0};
 
       for (size_t w = 0; w < num_workers; w++) {
@@ -5569,15 +5520,20 @@ class Benchmark {
           RandomGenerator local_gen;
 
           while (true) {
-            size_t task = next_task.fetch_add(1);
-            if (task >= chunks.size()) break;
+            size_t idx = next_task.fetch_add(1);
+            if (idx >= tasks.size()) break;
 
-            const auto& chunk = chunks[task];
-            auto& res = results[task];
-            res.file_number = file_numbers[task];
-            res.level = chunk.level;
+            const auto& task = tasks[idx];
+            auto& res = results[idx];
+            res.file_number = task.real_fnum;
+            res.level = task.level;
             res.ok = false;
 
+            // Materialize keys from PLR model.
+            std::vector<uint64_t> keys = MaterializeKeys(*task.vsst);
+            if (keys.empty()) continue;
+
+            // Write SST file.
             std::string sst_path = TableFileName(
                 cfd->ioptions().cf_paths, res.file_number, 0u);
 
@@ -5592,7 +5548,7 @@ class Benchmark {
             std::string prev_key_str;
             uint64_t keys_in_file = 0;
 
-            for (const auto& k : chunk.keys) {
+            for (const auto& k : keys) {
               GenerateKeyFromInt(k, FLAGS_num, &local_key);
               std::string cur(local_key.data(), local_key.size());
               if (cur <= prev_key_str) continue;
@@ -5619,20 +5575,16 @@ class Benchmark {
       }
       for (auto& t : threads) t.join();
     }
-    auto phase2c_end = FLAGS_env->NowMicros();
-    fprintf(stderr, "  Phase 2c (parallel SST write): %.3f sec\n",
-            (phase2c_end - phase2c_start) / 1e6);
+    auto phase2a_end = FLAGS_env->NowMicros();
+    fprintf(stderr, "  Phase 2a (materialize + SST write): %.3f sec\n",
+            (phase2a_end - phase2a_start) / 1e6);
 
-    // Phase 2d: Delete virtual files + register real files in one VersionEdit.
+    // Phase 2b: Delete virtual files + register real files in one VersionEdit.
     VersionEdit edit;
-
-    // Delete all virtual file entries.
-    for (const auto& mr : mat_results) {
-      edit.DeleteFile(mr.level, mr.file_number);
-      registry->Remove(mr.file_number);
+    for (size_t i = 0; i < tasks.size(); i++) {
+      edit.DeleteFile(tasks[i].level, tasks[i].virtual_fnum);
+      registry->Remove(tasks[i].virtual_fnum);
     }
-
-    // Add all real files.
     for (const auto& res : results) {
       if (!res.ok) continue;
       InternalKey smallest(Slice(res.first_key), 0, kTypeValue);
@@ -5642,7 +5594,6 @@ class Benchmark {
                    kInvalidBlobFileNumber, 0, 0, 1, "", "",
                    UniqueId64x2{}, 0, 0, true);
     }
-
     {
       ReadOptions ro;
       WriteOptions wo;

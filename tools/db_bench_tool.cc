@@ -5509,7 +5509,8 @@ class Benchmark {
     {
       std::vector<std::thread> threads;
       const size_t num_workers = std::min(
-          static_cast<size_t>(FLAGS_max_background_jobs), tasks.size());
+          static_cast<size_t>(std::thread::hardware_concurrency()),
+          tasks.size());
       std::atomic<size_t> next_task{0};
 
       for (size_t w = 0; w < num_workers; w++) {
@@ -5541,9 +5542,18 @@ class Benchmark {
             if (FLAGS_compression_type_e != kNoCompression) {
               sst_opts.compression = FLAGS_compression_type_e;
             }
-            SstFileWriter sst_writer(EnvOptions(), sst_opts);
+            EnvOptions env_opts;
+            if (FLAGS_use_direct_io_for_flush_and_compaction) {
+              env_opts.use_direct_writes = true;
+              env_opts.use_mmap_writes = false;
+            }
+            SstFileWriter sst_writer(env_opts, sst_opts);
             Status s = sst_writer.Open(sst_path);
-            if (!s.ok()) continue;
+            if (!s.ok()) {
+              fprintf(stderr, "SST Open failed: %s path=%s\n",
+                      s.ToString().c_str(), sst_path.c_str());
+              continue;
+            }
 
             std::string prev_key_str;
             uint64_t keys_in_file = 0;
@@ -5553,7 +5563,13 @@ class Benchmark {
               std::string cur(local_key.data(), local_key.size());
               if (cur <= prev_key_str) continue;
               s = sst_writer.Put(local_key, local_gen.Generate());
-              if (!s.ok()) break;
+              if (!s.ok()) {
+                static std::atomic<int> put_err_count{0};
+                if (put_err_count.fetch_add(1) < 3) {
+                  fprintf(stderr, "SST Put failed: %s\n", s.ToString().c_str());
+                }
+                break;
+              }
               if (res.first_key.empty()) res.first_key = cur;
               res.last_key = cur;
               prev_key_str = cur;
@@ -5562,7 +5578,13 @@ class Benchmark {
 
             if (keys_in_file == 0) continue;
             s = sst_writer.Finish();
-            if (!s.ok()) continue;
+            if (!s.ok()) {
+              static std::atomic<int> fin_err_count{0};
+              if (fin_err_count.fetch_add(1) < 3) {
+                fprintf(stderr, "SST Finish failed: %s\n", s.ToString().c_str());
+              }
+              continue;
+            }
 
             uint64_t fsize = 0;
             FLAGS_env->GetFileSize(sst_path, &fsize);

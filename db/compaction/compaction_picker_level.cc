@@ -899,11 +899,6 @@ bool LevelCompactionBuilder::PickFileToCompact() {
 }
 
 bool LevelCompactionBuilder::PickIntraL0Compaction() {
-  // Skip intra-L0 compaction in virtual compaction mode — L0→L1 compaction
-  // is fast enough (no I/O) that L0 files don't need pre-merging.
-  if (ioptions_.use_virtual_compaction) {
-    return false;
-  }
   start_level_inputs_.clear();
   const std::vector<FileMetaData*>& level_files =
       vstorage_->LevelFiles(0 /* level */);
@@ -922,9 +917,6 @@ bool LevelCompactionBuilder::PickIntraL0Compaction() {
 }
 
 bool LevelCompactionBuilder::PickSizeBasedIntraL0Compaction() {
-  if (ioptions_.use_virtual_compaction) {
-    return false;
-  }
   assert(start_level_ == 0);
   int base_level = vstorage_->base_level();
   if (base_level <= 0) {

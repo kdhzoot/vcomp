@@ -5284,7 +5284,7 @@ class Benchmark {
     uint64_t total_flushes = 0;
     uint64_t next_epoch = 1;
 
-    Random64 rng(thread->rand.Next());
+    Random64& rng = thread->rand;
     std::vector<uint64_t> memtable_buf;
     memtable_buf.reserve(memtable_capacity);
 
@@ -5345,6 +5345,10 @@ class Benchmark {
       if (src != memtable_buf.data()) {
         memcpy(memtable_buf.data(), src, n * sizeof(uint64_t));
       }
+      // Remove intra-batch duplicates (sorted, so duplicates are adjacent).
+      memtable_buf.erase(
+          std::unique(memtable_buf.begin(), memtable_buf.end()),
+          memtable_buf.end());
       auto t1 = FLAGS_env->NowMicros();
 
       PLRModel plr = GreedyPLRFit(memtable_buf, plr_error_bound);

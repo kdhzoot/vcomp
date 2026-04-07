@@ -4334,6 +4334,56 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     if (status.ok()) {
       InstallSuperVersionAndScheduleWork(
           c->column_family_data(), job_context->superversion_contexts.data());
+
+      // Emit structured compaction trace (same format as virtual compaction).
+      static std::atomic<uint64_t> real_compaction_count{0};
+      uint64_t comp_id = real_compaction_count.fetch_add(1) + 1;
+
+      uint64_t gmin = std::numeric_limits<uint64_t>::max();
+      uint64_t gmax = 0;
+      uint64_t total_in_entries = 0;
+      std::string in_trace;
+      size_t total_in_files = 0;
+      for (size_t lvl = 0; lvl < c->num_input_levels(); lvl++) {
+        for (size_t i = 0; i < c->num_input_files(lvl); i++) {
+          auto* fmd = c->input(lvl, i);
+          if (total_in_files > 0) in_trace += ";";
+          uint64_t fnum = fmd->fd.GetNumber();
+          int in_level = c->start_level() + static_cast<int>(lvl);
+          // Extract uint64 key from InternalKey (first 8 bytes, big-endian).
+          uint64_t kmin = 0, kmax = 0;
+          if (fmd->smallest.size() >= 8) {
+            const char* d = fmd->smallest.user_key().data();
+            for (int b = 0; b < 8; b++)
+              kmin = (kmin << 8) | static_cast<uint8_t>(d[b]);
+          }
+          if (fmd->largest.size() >= 8) {
+            const char* d = fmd->largest.user_key().data();
+            for (int b = 0; b < 8; b++)
+              kmax = (kmax << 8) | static_cast<uint8_t>(d[b]);
+          }
+          gmin = std::min(gmin, kmin);
+          gmax = std::max(gmax, kmax);
+          total_in_entries += fmd->num_entries;
+          in_trace += std::to_string(fnum) + "," +
+                      std::to_string(in_level) + "," +
+                      std::to_string(kmin) + "," +
+                      std::to_string(kmax) + "," +
+                      std::to_string(fmd->num_entries) + ",0";
+          total_in_files++;
+        }
+      }
+
+      // Output files from compaction stats.
+      std::string out_trace;
+      size_t total_out_files = compaction_job_stats.num_output_files;
+
+      fprintf(stderr,
+              "[REAL_COMP_TRACE]\t%" PRIu64 "\t%d\t%d\t%" PRIu64 "\t%" PRIu64
+              "\t%" PRIu64 "\t%zu\t%zu\t0\tINPUT:%s\tOUTPUT:none\n",
+              comp_id, c->start_level(), c->output_level(),
+              gmin, gmax, total_in_entries,
+              total_in_files, total_out_files, in_trace.c_str());
     }
     *made_progress = true;
     TEST_SYNC_POINT_CALLBACK("DBImpl::BackgroundCompaction:AfterCompaction",

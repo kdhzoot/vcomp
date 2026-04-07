@@ -4895,7 +4895,9 @@ void DBImpl::ResetBottomPriCompactionIntent(ColumnFamilyData* cfd,
 }
 
 Status DBImpl::RegisterVirtualL0File(VersionEdit* edit) {
+  auto t0 = immutable_db_options_.clock->NowMicros();
   InstrumentedMutexLock l(&mutex_);
+  auto t1 = immutable_db_options_.clock->NowMicros();
   auto* cfd = static_cast<ColumnFamilyHandleImpl*>(
                   DefaultColumnFamily())->cfd();
 
@@ -4903,10 +4905,27 @@ Status DBImpl::RegisterVirtualL0File(VersionEdit* edit) {
   const WriteOptions wo;
   Status s = versions_->LogAndApply(cfd, ro, wo, edit, &mutex_,
                                      directories_.GetDbDir());
+  auto t2 = immutable_db_options_.clock->NowMicros();
   if (s.ok()) {
     SuperVersionContext sv_context(/* create_superversion = */ true);
     InstallSuperVersionAndScheduleWork(cfd, &sv_context);
     sv_context.Clean();
+  }
+  auto t3 = immutable_db_options_.clock->NowMicros();
+
+  static std::atomic<uint64_t> total_mutex_us{0};
+  static std::atomic<uint64_t> total_laa_us{0};
+  static std::atomic<uint64_t> total_sv_us{0};
+  static std::atomic<uint64_t> call_count{0};
+  total_mutex_us += (t1 - t0);
+  total_laa_us += (t2 - t1);
+  total_sv_us += (t3 - t2);
+  uint64_t cnt = call_count.fetch_add(1) + 1;
+  if (cnt % 200 == 0) {
+    fprintf(stderr, "[Register #%" PRIu64 "] mutex=%.3fs LogAndApply=%.3fs "
+            "SuperVersion=%.3fs\n",
+            cnt, total_mutex_us.load() / 1e6,
+            total_laa_us.load() / 1e6, total_sv_us.load() / 1e6);
   }
   return s;
 }
@@ -4917,13 +4936,7 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   mutex_.AssertHeld();
   assert(virtual_sst_registry_);
   static std::atomic<uint64_t> vcomp_count{0};
-  uint64_t cnt = vcomp_count.fetch_add(1) + 1;
-  fprintf(stderr, "[VComp #%" PRIu64 "] L%d -> L%d, inputs:",
-          cnt, c->start_level(), c->output_level());
-  for (size_t lvl = 0; lvl < c->num_input_levels(); lvl++) {
-    fprintf(stderr, " %zu", c->num_input_files(lvl));
-  }
-  fprintf(stderr, "\n");
+  uint64_t compaction_id = vcomp_count.fetch_add(1) + 1;
 
   auto* cfd = c->column_family_data();
   int output_level = c->output_level();
@@ -4935,13 +4948,15 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   std::vector<uint64_t> key_maxs_vec;
   std::vector<uint64_t> input_file_numbers;
 
+  std::vector<size_t> input_segments_vec;
+  std::vector<int> input_levels_vec;
+
   for (size_t lvl = 0; lvl < c->num_input_levels(); lvl++) {
     for (size_t i = 0; i < c->num_input_files(lvl); i++) {
       auto* fmd = c->input(lvl, i);
       uint64_t fnum = fmd->fd.GetNumber();
       const VirtualSST* vsst = virtual_sst_registry_->Lookup(fnum);
       if (!vsst) {
-        // Not a virtual file — skip (shouldn't happen in virtual mode).
         continue;
       }
       models.push_back(&vsst->plr_model);
@@ -4949,6 +4964,8 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
       key_mins_vec.push_back(vsst->key_min);
       key_maxs_vec.push_back(vsst->key_max);
       input_file_numbers.push_back(fnum);
+      input_segments_vec.push_back(vsst->plr_model.NumSegments());
+      input_levels_vec.push_back(c->start_level() + static_cast<int>(lvl));
     }
   }
 
@@ -5042,6 +5059,49 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
         "%" PRIu64 " entries",
         cfd->GetName().c_str(), c->start_level(), output_level,
         input_file_numbers.size(), output_vssts.size(), total_entries);
+
+    // Emit structured compaction trace to stderr.
+    // Format: [VCOMP_TRACE] <compaction_id> <start_level> <output_level>
+    //         <global_key_min> <global_key_max> <total_entries>
+    //         <num_input_files> <num_output_files>
+    //         <merged_segments>
+    //         INPUT:<fnum>,<level>,<key_min>,<key_max>,<entries>,<segments>;...
+    //         OUTPUT:<fnum>,<level>,<key_min>,<key_max>,<entries>,<segments>;...
+    std::string trace;
+    trace += "[VCOMP_TRACE]\t";
+    trace += std::to_string(compaction_id) + "\t";
+    trace += std::to_string(c->start_level()) + "\t";
+    trace += std::to_string(output_level) + "\t";
+    trace += std::to_string(global_min) + "\t";
+    trace += std::to_string(global_max) + "\t";
+    trace += std::to_string(total_entries) + "\t";
+    trace += std::to_string(input_file_numbers.size()) + "\t";
+    trace += std::to_string(output_vssts.size()) + "\t";
+    trace += std::to_string(merged.NumSegments()) + "\t";
+
+    // Input files detail.
+    trace += "INPUT:";
+    for (size_t i = 0; i < input_file_numbers.size(); i++) {
+      if (i > 0) trace += ";";
+      trace += std::to_string(input_file_numbers[i]) + ",";
+      trace += std::to_string(input_levels_vec[i]) + ",";
+      trace += std::to_string(key_mins_vec[i]) + ",";
+      trace += std::to_string(key_maxs_vec[i]) + ",";
+      trace += std::to_string(num_entries_vec[i]) + ",";
+      trace += std::to_string(input_segments_vec[i]);
+    }
+
+    // Output files detail.
+    trace += "\tOUTPUT:";
+    for (size_t i = 0; i < output_vssts.size(); i++) {
+      if (i > 0) trace += ";";
+      trace += std::to_string(output_vssts[i].key_min) + ",";
+      trace += std::to_string(output_vssts[i].key_max) + ",";
+      trace += std::to_string(output_vssts[i].num_entries) + ",";
+      trace += std::to_string(output_vssts[i].plr_model.NumSegments());
+    }
+    trace += "\n";
+    fprintf(stderr, "%s", trace.c_str());
   }
 
   return s;

@@ -4895,9 +4895,7 @@ void DBImpl::ResetBottomPriCompactionIntent(ColumnFamilyData* cfd,
 }
 
 Status DBImpl::RegisterVirtualL0File(VersionEdit* edit) {
-  auto t0 = immutable_db_options_.clock->NowMicros();
   InstrumentedMutexLock l(&mutex_);
-  auto t1 = immutable_db_options_.clock->NowMicros();
   auto* cfd = static_cast<ColumnFamilyHandleImpl*>(
                   DefaultColumnFamily())->cfd();
 
@@ -4905,27 +4903,10 @@ Status DBImpl::RegisterVirtualL0File(VersionEdit* edit) {
   const WriteOptions wo;
   Status s = versions_->LogAndApply(cfd, ro, wo, edit, &mutex_,
                                      directories_.GetDbDir());
-  auto t2 = immutable_db_options_.clock->NowMicros();
   if (s.ok()) {
     SuperVersionContext sv_context(/* create_superversion = */ true);
     InstallSuperVersionAndScheduleWork(cfd, &sv_context);
     sv_context.Clean();
-  }
-  auto t3 = immutable_db_options_.clock->NowMicros();
-
-  static std::atomic<uint64_t> total_mutex_us{0};
-  static std::atomic<uint64_t> total_laa_us{0};
-  static std::atomic<uint64_t> total_sv_us{0};
-  static std::atomic<uint64_t> call_count{0};
-  total_mutex_us += (t1 - t0);
-  total_laa_us += (t2 - t1);
-  total_sv_us += (t3 - t2);
-  uint64_t cnt = call_count.fetch_add(1) + 1;
-  if (cnt % 200 == 0) {
-    fprintf(stderr, "[Register #%" PRIu64 "] mutex=%.3fs LogAndApply=%.3fs "
-            "SuperVersion=%.3fs\n",
-            cnt, total_mutex_us.load() / 1e6,
-            total_laa_us.load() / 1e6, total_sv_us.load() / 1e6);
   }
   return s;
 }

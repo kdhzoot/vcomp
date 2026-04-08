@@ -401,6 +401,16 @@ direct I/O (O_DIRECT) to bypass page cache overhead.
    non-overlapping ranges within each level.
    `VersionEdit`: delete all virtual files + add all real files atomically.
 
+   Per-SST pipeline: `MaterializeKeys` (PLR inverse) → `GenerateKeyFromInt`
+   (uint64→string) → `SstFileWriter::Put` (block build + bloom filter) →
+   `SstFileWriter::Finish` (flush + fsync).
+   
+   Phase 2 is CPU-bound at 48 cores. `perf` profiling shows 90%+ of cycles
+   in SST build operations (memcpy 21%, checksum 16%, block encoding 4%,
+   bloom filter 3%), with kernel I/O at only ~2.3%. Disk write reaches
+   ~40 GB/s out of ~100 GB/s RAID0 capacity — under-utilized due to CPU
+   being the bottleneck, not I/O.
+
 ### 6.3 Key Modifications to RocksDB
 
 | File | Change |

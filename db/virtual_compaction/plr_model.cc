@@ -167,7 +167,9 @@ PLRModel GreedyPLRFit(const std::vector<uint64_t>& sorted_keys,
 PLRModel NWayMergePLR(const std::vector<const PLRModel*>& models,
                       const std::vector<uint64_t>& num_entries,
                       const std::vector<uint64_t>& key_mins,
-                      const std::vector<uint64_t>& key_maxs) {
+                      const std::vector<uint64_t>& key_maxs,
+                      bool dedup,
+                      uint64_t* adjusted_total) {
   assert(models.size() == num_entries.size());
   assert(models.size() == key_mins.size());
   assert(models.size() == key_maxs.size());
@@ -256,6 +258,7 @@ PLRModel NWayMergePLR(const std::vector<const PLRModel*>& models,
     // Sum slope/intercept from active models only.
     double slope_sum = 0.0;
     double intercept_sum = finished_intercept;
+    double dedup_prod = 1.0;
 
     for (size_t j : active) {
       const auto& segs = models[j]->Segments();
@@ -266,9 +269,35 @@ PLRModel NWayMergePLR(const std::vector<const PLRModel*>& models,
       const auto& seg = segs[seg_idx[j]];
       slope_sum += seg.slope;
       intercept_sum += seg.intercept;
+      if (dedup) {
+        // Clamp slope to [0, 1] — it represents key density per unit key space.
+        double s = std::min(std::max(seg.slope, 0.0), 1.0);
+        dedup_prod *= (1.0 - s);
+      }
     }
 
-    merged.push_back({k_start, k_end, slope_sum, intercept_sum});
+    if (dedup) {
+      // Inclusion-exclusion: P(at least one) = 1 - Π(1 - P_i)
+      double adj_slope = active.empty() ? 0.0 : 1.0 - dedup_prod;
+      merged.push_back({k_start, k_end, adj_slope, 0.0});
+    } else {
+      merged.push_back({k_start, k_end, slope_sum, intercept_sum});
+    }
+  }
+
+  // If dedup, recompute intercepts so the position function is continuous.
+  // pos(k) = slope * k + intercept, starting from cumulative_pos = 0.
+  if (dedup) {
+    double cumulative_pos = 0.0;
+    for (auto& seg : merged) {
+      seg.intercept =
+          cumulative_pos - seg.slope * static_cast<double>(seg.key_start);
+      cumulative_pos +=
+          seg.slope * static_cast<double>(seg.key_end - seg.key_start);
+    }
+    if (adjusted_total) {
+      *adjusted_total = static_cast<uint64_t>(std::round(cumulative_pos));
+    }
   }
 
   // Merge adjacent segments with identical slope/intercept.

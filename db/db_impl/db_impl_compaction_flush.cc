@@ -5008,19 +5008,32 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   // Release mutex during PLR merge (CPU-intensive, no shared state).
   mutex_.Unlock();
 
-  // N-way PLR merge.
+  // N-way PLR merge with probabilistic dedup correction.
+  // To rollback to naive (no dedup): change dedup to false, use naive_entries.
+  // PLRModel merged = NWayMergePLR(models, num_entries_vec,
+  //                                 key_mins_vec, key_maxs_vec);
+  uint64_t adjusted_entries = 0;
   PLRModel merged = NWayMergePLR(models, num_entries_vec,
-                                  key_mins_vec, key_maxs_vec);
+                                  key_mins_vec, key_maxs_vec,
+                                  /*dedup=*/true, &adjusted_entries);
 
-  // Compute total entries and global key range.
-  uint64_t total_entries = 0;
+  // Compute naive total entries and global key range.
+  uint64_t naive_entries = 0;
   uint64_t global_min = std::numeric_limits<uint64_t>::max();
   uint64_t global_max = 0;
   for (size_t i = 0; i < models.size(); i++) {
-    total_entries += num_entries_vec[i];
+    naive_entries += num_entries_vec[i];
     global_min = std::min(global_min, key_mins_vec[i]);
     global_max = std::max(global_max, key_maxs_vec[i]);
   }
+  // Dedup path: use adjusted_entries from inclusion-exclusion estimate.
+  // When density is very low, PLR integration error can exceed the dedup
+  // signal, causing adjusted > naive. Cap to avoid underflow.
+  // Naive path: uint64_t total_entries = naive_entries;
+  uint64_t total_entries = (adjusted_entries > 0 && adjusted_entries <= naive_entries)
+                               ? adjusted_entries
+                               : naive_entries;
+  uint64_t dedup_estimate = naive_entries - total_entries;
 
   uint64_t target_sst_size = virtual_sst_registry_->GetTargetSSTSize();
   uint64_t avg_entry_size = virtual_sst_registry_->GetAvgEntrySize();
@@ -5087,13 +5100,15 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
     ROCKS_LOG_BUFFER(
         log_buffer,
         "[%s] Virtual compaction L%d -> L%d: %zu inputs, %zu outputs, "
-        "%" PRIu64 " entries",
+        "%" PRIu64 " entries (naive %" PRIu64 ", dedup %" PRIu64 ")",
         cfd->GetName().c_str(), c->start_level(), output_level,
-        input_file_numbers.size(), output_vssts.size(), total_entries);
+        input_file_numbers.size(), output_vssts.size(), total_entries,
+        naive_entries, dedup_estimate);
 
     // Emit structured compaction trace to stderr.
     // Format: [VCOMP_TRACE] <compaction_id> <start_level> <output_level>
-    //         <global_key_min> <global_key_max> <total_entries>
+    //         <global_key_min> <global_key_max>
+    //         <naive_entries> <adjusted_entries> <dedup_estimate>
     //         <num_input_files> <num_output_files>
     //         <merged_segments>
     //         INPUT:<fnum>,<level>,<key_min>,<key_max>,<entries>,<segments>;...
@@ -5105,7 +5120,9 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
     trace += std::to_string(output_level) + "\t";
     trace += std::to_string(global_min) + "\t";
     trace += std::to_string(global_max) + "\t";
+    trace += std::to_string(naive_entries) + "\t";
     trace += std::to_string(total_entries) + "\t";
+    trace += std::to_string(dedup_estimate) + "\t";
     trace += std::to_string(input_file_numbers.size()) + "\t";
     trace += std::to_string(output_vssts.size()) + "\t";
     trace += std::to_string(merged.NumSegments()) + "\t";

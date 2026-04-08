@@ -66,9 +66,16 @@ PLRModel GreedyPLRFit(const std::vector<uint64_t>& sorted_keys,
 // Merge N PLR models into one.
 // The merged model represents the CDF of the merged sorted sequence.
 // pos_merged(x) = sum of pos_i(x) for all models.
+//
+// When dedup=true, applies probabilistic dedup correction per breakpoint:
+//   adjusted_slope = 1 - Π(1 - slope_i)   (inclusion-exclusion)
+// This estimates unique key density assuming independent random placement.
+// If adjusted_total is non-null, the estimated unique entry count is stored.
 PLRModel NWayMergePLR(const std::vector<const PLRModel*>& models,
                       const std::vector<uint64_t>& num_entries,
                       const std::vector<uint64_t>& key_mins,
-                      const std::vector<uint64_t>& key_maxs);
+                      const std::vector<uint64_t>& key_maxs,
+                      bool dedup = false,
+                      uint64_t* adjusted_total = nullptr);
 
 }  // namespace ROCKSDB_NAMESPACE

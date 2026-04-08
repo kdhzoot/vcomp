@@ -4335,55 +4335,6 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
       InstallSuperVersionAndScheduleWork(
           c->column_family_data(), job_context->superversion_contexts.data());
 
-      // Emit structured compaction trace (same format as virtual compaction).
-      static std::atomic<uint64_t> real_compaction_count{0};
-      uint64_t comp_id = real_compaction_count.fetch_add(1) + 1;
-
-      uint64_t gmin = std::numeric_limits<uint64_t>::max();
-      uint64_t gmax = 0;
-      uint64_t total_in_entries = 0;
-      std::string in_trace;
-      size_t total_in_files = 0;
-      for (size_t lvl = 0; lvl < c->num_input_levels(); lvl++) {
-        for (size_t i = 0; i < c->num_input_files(lvl); i++) {
-          auto* fmd = c->input(lvl, i);
-          if (total_in_files > 0) in_trace += ";";
-          uint64_t fnum = fmd->fd.GetNumber();
-          int in_level = c->start_level() + static_cast<int>(lvl);
-          // Extract uint64 key from InternalKey (first 8 bytes, big-endian).
-          uint64_t kmin = 0, kmax = 0;
-          if (fmd->smallest.size() >= 8) {
-            const char* d = fmd->smallest.user_key().data();
-            for (int b = 0; b < 8; b++)
-              kmin = (kmin << 8) | static_cast<uint8_t>(d[b]);
-          }
-          if (fmd->largest.size() >= 8) {
-            const char* d = fmd->largest.user_key().data();
-            for (int b = 0; b < 8; b++)
-              kmax = (kmax << 8) | static_cast<uint8_t>(d[b]);
-          }
-          gmin = std::min(gmin, kmin);
-          gmax = std::max(gmax, kmax);
-          total_in_entries += fmd->num_entries;
-          in_trace += std::to_string(fnum) + "," +
-                      std::to_string(in_level) + "," +
-                      std::to_string(kmin) + "," +
-                      std::to_string(kmax) + "," +
-                      std::to_string(fmd->num_entries) + ",0";
-          total_in_files++;
-        }
-      }
-
-      // Output files from compaction stats.
-      std::string out_trace;
-      size_t total_out_files = compaction_job_stats.num_output_files;
-
-      fprintf(stderr,
-              "[REAL_COMP_TRACE]\t%" PRIu64 "\t%d\t%d\t%" PRIu64 "\t%" PRIu64
-              "\t%" PRIu64 "\t%zu\t%zu\t0\tINPUT:%s\tOUTPUT:none\n",
-              comp_id, c->start_level(), c->output_level(),
-              gmin, gmax, total_in_entries,
-              total_in_files, total_out_files, in_trace.c_str());
     }
     *made_progress = true;
     TEST_SYNC_POINT_CALLBACK("DBImpl::BackgroundCompaction:AfterCompaction",
@@ -4966,9 +4917,6 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
                                     LogBuffer* log_buffer) {
   mutex_.AssertHeld();
   assert(virtual_sst_registry_);
-  static std::atomic<uint64_t> vcomp_count{0};
-  uint64_t compaction_id = vcomp_count.fetch_add(1) + 1;
-
   auto* cfd = c->column_family_data();
   int output_level = c->output_level();
 
@@ -4978,9 +4926,6 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   std::vector<uint64_t> key_mins_vec;
   std::vector<uint64_t> key_maxs_vec;
   std::vector<uint64_t> input_file_numbers;
-
-  std::vector<size_t> input_segments_vec;
-  std::vector<int> input_levels_vec;
 
   for (size_t lvl = 0; lvl < c->num_input_levels(); lvl++) {
     for (size_t i = 0; i < c->num_input_files(lvl); i++) {
@@ -4995,8 +4940,6 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
       key_mins_vec.push_back(vsst->key_min);
       key_maxs_vec.push_back(vsst->key_max);
       input_file_numbers.push_back(fnum);
-      input_segments_vec.push_back(vsst->plr_model.NumSegments());
-      input_levels_vec.push_back(c->start_level() + static_cast<int>(lvl));
     }
   }
 
@@ -5105,51 +5048,6 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
         input_file_numbers.size(), output_vssts.size(), total_entries,
         naive_entries, dedup_estimate);
 
-    // Emit structured compaction trace to stderr.
-    // Format: [VCOMP_TRACE] <compaction_id> <start_level> <output_level>
-    //         <global_key_min> <global_key_max>
-    //         <naive_entries> <adjusted_entries> <dedup_estimate>
-    //         <num_input_files> <num_output_files>
-    //         <merged_segments>
-    //         INPUT:<fnum>,<level>,<key_min>,<key_max>,<entries>,<segments>;...
-    //         OUTPUT:<fnum>,<level>,<key_min>,<key_max>,<entries>,<segments>;...
-    std::string trace;
-    trace += "[VCOMP_TRACE]\t";
-    trace += std::to_string(compaction_id) + "\t";
-    trace += std::to_string(c->start_level()) + "\t";
-    trace += std::to_string(output_level) + "\t";
-    trace += std::to_string(global_min) + "\t";
-    trace += std::to_string(global_max) + "\t";
-    trace += std::to_string(naive_entries) + "\t";
-    trace += std::to_string(total_entries) + "\t";
-    trace += std::to_string(dedup_estimate) + "\t";
-    trace += std::to_string(input_file_numbers.size()) + "\t";
-    trace += std::to_string(output_vssts.size()) + "\t";
-    trace += std::to_string(merged.NumSegments()) + "\t";
-
-    // Input files detail.
-    trace += "INPUT:";
-    for (size_t i = 0; i < input_file_numbers.size(); i++) {
-      if (i > 0) trace += ";";
-      trace += std::to_string(input_file_numbers[i]) + ",";
-      trace += std::to_string(input_levels_vec[i]) + ",";
-      trace += std::to_string(key_mins_vec[i]) + ",";
-      trace += std::to_string(key_maxs_vec[i]) + ",";
-      trace += std::to_string(num_entries_vec[i]) + ",";
-      trace += std::to_string(input_segments_vec[i]);
-    }
-
-    // Output files detail.
-    trace += "\tOUTPUT:";
-    for (size_t i = 0; i < output_vssts.size(); i++) {
-      if (i > 0) trace += ";";
-      trace += std::to_string(output_vssts[i].key_min) + ",";
-      trace += std::to_string(output_vssts[i].key_max) + ",";
-      trace += std::to_string(output_vssts[i].num_entries) + ",";
-      trace += std::to_string(output_vssts[i].plr_model.NumSegments());
-    }
-    trace += "\n";
-    fprintf(stderr, "%s", trace.c_str());
   }
 
   return s;

@@ -5282,6 +5282,8 @@ class Benchmark {
 
     uint64_t sort_us = 0, flush_us = 0, plr_fit_us = 0;
     uint64_t total_flushes = 0;
+    uint64_t total_keys_before_dedup = 0, total_keys_after_dedup = 0;
+    uint64_t total_segments = 0;
     uint64_t next_epoch = 1;
 
     Random64& rng = thread->rand;
@@ -5356,6 +5358,9 @@ class Benchmark {
 
       sort_us += (t1 - t0);
       plr_fit_us += (t2 - t1);
+      total_keys_before_dedup += n;
+      total_keys_after_dedup += memtable_buf.size();
+      total_segments += plr.NumSegments();
 
       // Build VirtualSST.
       VirtualSST vsst;
@@ -5424,7 +5429,15 @@ class Benchmark {
     uint64_t keygen_us = (phase1_end - phase1_start) - sort_us - plr_fit_us - flush_us;
     fprintf(stderr, "  Phase 1 breakdown: keygen=%.3fs sort=%.3fs plr_fit=%.3fs register=%.3fs\n",
             keygen_us / 1e6, sort_us / 1e6, plr_fit_us / 1e6, flush_us / 1e6);
-    fprintf(stderr, "  Total flushes: %" PRIu64 "\n", total_flushes);
+    fprintf(stderr, "  Flushes: %" PRIu64 " (avg %.0f keys/batch, %" PRIu64 " segments total)\n",
+            total_flushes,
+            total_flushes > 0 ? (double)total_keys_after_dedup / total_flushes : 0,
+            total_segments);
+    fprintf(stderr, "  Intra-batch dedup: %" PRIu64 " -> %" PRIu64 " keys (%.2f%% removed)\n",
+            total_keys_before_dedup, total_keys_after_dedup,
+            total_keys_before_dedup > 0
+                ? 100.0 * (total_keys_before_dedup - total_keys_after_dedup) / total_keys_before_dedup
+                : 0.0);
     fprintf(stderr, "Phase 1 (flush + bg compaction started): %.3f sec\n\n",
             phase1_secs);
 
@@ -5473,7 +5486,21 @@ class Benchmark {
       }
     }
 
-    fprintf(stderr, "  Materializing %zu virtual SSTs\n", all_vssts.size());
+    // Collect level distribution for reporting.
+    std::map<int, size_t> level_dist;
+    for (const auto& [fnum, vsst_ptr] : all_vssts) {
+      auto it = file_level_map.find(fnum);
+      int lvl = (it != file_level_map.end()) ? it->second : vsst_ptr->level;
+      level_dist[lvl]++;
+    }
+    fprintf(stderr, "  Virtual SSTs: %zu (", all_vssts.size());
+    bool first = true;
+    for (const auto& [lvl, cnt] : level_dist) {
+      if (!first) fprintf(stderr, ", ");
+      fprintf(stderr, "L%d:%zu", lvl, cnt);
+      first = false;
+    }
+    fprintf(stderr, ")\n");
 
     // Pre-allocate output file numbers (one real SST per VirtualSST).
     struct SSTTask {
@@ -5606,6 +5633,7 @@ class Benchmark {
             (phase2a_end - phase2a_start) / 1e6);
 
     // Phase 2b: Delete virtual files + register real files in one VersionEdit.
+    auto phase2b_start = FLAGS_env->NowMicros();
     VersionEdit edit;
     for (size_t i = 0; i < tasks.size(); i++) {
       edit.DeleteFile(tasks[i].level, tasks[i].virtual_fnum);
@@ -5634,14 +5662,19 @@ class Benchmark {
 
     auto phase2_end = FLAGS_env->NowMicros();
     double phase2_secs = (phase2_end - phase2_start) / 1e6;
+    double phase2a_secs = (phase2a_end - phase2a_start) / 1e6;
+    double phase2b_secs = (phase2_end - phase2b_start) / 1e6;
 
     int64_t tw = total_written.load();
+    fprintf(stderr, "  Phase 2 breakdown: sst_write=%.3fs version_edit=%.3fs\n",
+            phase2a_secs, phase2b_secs);
     fprintf(stderr, "Phase 2 (materialization): %.3f sec, %" PRId64
                     " keys written\n",
             phase2_secs, tw);
+    double wait_secs = (wait_end - wait_start) / 1e6;
+    double total_secs = phase1_secs + wait_secs + phase2_secs;
     fprintf(stderr, "Total: %.3f sec (phase1=%.3f + wait=%.3f + phase2=%.3f)\n",
-            phase1_secs + (wait_end - wait_start) / 1e6 + phase2_secs,
-            phase1_secs, (wait_end - wait_start) / 1e6, phase2_secs);
+            total_secs, phase1_secs, wait_secs, phase2_secs);
 
     thread->stats.AddBytes(tw * (key_size_ + value_size));
     thread->stats.AddMessage("fillvirtual done");

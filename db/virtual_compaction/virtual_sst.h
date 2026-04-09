@@ -29,13 +29,17 @@ struct VirtualSST {
 
 // Split a merged PLR model into multiple VirtualSSTs, each with approximately
 // target_sst_size bytes. Uses PLR Inverse to find split key boundaries.
+// If grandparent_boundaries is non-empty, output SSTs are also split at these
+// key boundaries to limit overlap with the next level (matching RocksDB's
+// grandparent boundary split behavior).
 std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
                                       uint64_t total_entries,
                                       uint64_t target_sst_size,
                                       uint64_t avg_entry_size,
                                       uint64_t global_min,
                                       uint64_t global_max,
-                                      int target_level);
+                                      int target_level,
+                                      const std::vector<uint64_t>& grandparent_boundaries = {});
 
 // Materialize keys from a VirtualSST using PLR Inverse.
 // Returns sorted keys reconstructed from the model.

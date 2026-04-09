@@ -4981,10 +4981,37 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   uint64_t target_sst_size = virtual_sst_registry_->GetTargetSSTSize();
   uint64_t avg_entry_size = virtual_sst_registry_->GetAvgEntrySize();
 
+  // Extract grandparent file boundaries to align output SST splits.
+  // This matches RocksDB's compaction behavior of splitting at grandparent
+  // boundaries to limit overlap with the next level.
+  std::vector<uint64_t> gp_boundaries;
+  {
+    const auto& grandparents = c->grandparents();
+    gp_boundaries.reserve(grandparents.size() * 2);
+    for (const auto* fmd : grandparents) {
+      // Extract uint64 key from InternalKey (first 8 bytes, big-endian).
+      auto extract_key = [](const InternalKey& ik) -> uint64_t {
+        uint64_t k = 0;
+        if (ik.size() >= 8) {
+          const char* d = ik.user_key().data();
+          for (int b = 0; b < 8; b++)
+            k = (k << 8) | static_cast<uint8_t>(d[b]);
+        }
+        return k;
+      };
+      gp_boundaries.push_back(extract_key(fmd->smallest));
+      gp_boundaries.push_back(extract_key(fmd->largest));
+    }
+    std::sort(gp_boundaries.begin(), gp_boundaries.end());
+    gp_boundaries.erase(
+        std::unique(gp_boundaries.begin(), gp_boundaries.end()),
+        gp_boundaries.end());
+  }
+
   // Split into output VirtualSSTs.
   std::vector<VirtualSST> output_vssts = SplitIntoSSTs(
       merged, total_entries, target_sst_size, avg_entry_size,
-      global_min, global_max, output_level);
+      global_min, global_max, output_level, gp_boundaries);
 
   mutex_.Lock();
 

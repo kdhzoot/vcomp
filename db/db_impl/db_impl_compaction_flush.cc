@@ -4267,7 +4267,22 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     env_->Schedule(&DBImpl::BGWorkBottomCompaction, ca, Env::Priority::BOTTOM,
                    this, &DBImpl::UnscheduleCompactionCallback);
   } else if (immutable_db_options_.use_virtual_compaction &&
-             virtual_sst_registry_) {
+             virtual_sst_registry_ &&
+             [&]() {
+               // Dispatch to virtual compaction only if at least one input
+               // file is still a virtual SST. After Phase 2 materialization,
+               // subsequent compactions see only real files — those must go
+               // through the normal compaction path.
+               for (size_t lvl = 0; lvl < c->num_input_levels(); lvl++) {
+                 for (size_t i = 0; i < c->num_input_files(lvl); i++) {
+                   uint64_t fnum = c->input(lvl, i)->fd.GetNumber();
+                   if (virtual_sst_registry_->Lookup(fnum) != nullptr) {
+                     return true;
+                   }
+                 }
+               }
+               return false;
+             }()) {
     // ── Virtual compaction: PLR model merge instead of actual I/O ──
     status = RunVirtualCompaction(c.get(), job_context, log_buffer);
     if (status.ok()) {
@@ -4952,13 +4967,14 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   mutex_.Unlock();
 
   // N-way PLR merge with probabilistic dedup correction.
-  // To rollback to naive (no dedup): change dedup to false, use naive_entries.
-  // PLRModel merged = NWayMergePLR(models, num_entries_vec,
-  //                                 key_mins_vec, key_maxs_vec);
+  uint64_t input_segments_total = 0;
+  for (const auto* m : models) input_segments_total += m->NumSegments();
+  uint64_t merge_t0 = immutable_db_options_.clock->NowMicros();
   uint64_t adjusted_entries = 0;
   PLRModel merged = NWayMergePLR(models, num_entries_vec,
                                   key_mins_vec, key_maxs_vec,
                                   /*dedup=*/true, &adjusted_entries);
+  uint64_t merge_us = immutable_db_options_.clock->NowMicros() - merge_t0;
 
   // Compute naive total entries and global key range.
   uint64_t naive_entries = 0;
@@ -5069,11 +5085,13 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   if (s.ok()) {
     ROCKS_LOG_BUFFER(
         log_buffer,
-        "[%s] Virtual compaction L%d -> L%d: %zu inputs, %zu outputs, "
-        "%" PRIu64 " entries (naive %" PRIu64 ", dedup %" PRIu64 ")",
+        "[%s] Virtual compaction L%d -> L%d: %zu inputs (%" PRIu64 " segs), "
+        "%zu outputs, %" PRIu64 " entries (naive %" PRIu64 ", dedup %" PRIu64
+        "), merge=%" PRIu64 "us",
         cfd->GetName().c_str(), c->start_level(), output_level,
-        input_file_numbers.size(), output_vssts.size(), total_entries,
-        naive_entries, dedup_estimate);
+        input_file_numbers.size(), input_segments_total,
+        output_vssts.size(), total_entries,
+        naive_entries, dedup_estimate, merge_us);
 
   }
 

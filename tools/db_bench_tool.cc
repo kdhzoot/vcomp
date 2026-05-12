@@ -119,6 +119,7 @@ DEFINE_string(
     "fillseqdeterministic,"
     "fillsync,"
     "fillrandom,"
+    "twitterload,"
     "filluniquerandomdeterministic,"
     "overwrite,"
     "readrandom,"
@@ -177,6 +178,9 @@ DEFINE_string(
     " key order and keep the shape of the LSM tree\n"
     "\tfillrandom    -- write N values in random key order in async"
     " mode\n"
+    "\ttwitterload   -- replay a vcomp binary trace (see "
+    "--twitter_trace_file) via the same write path as fillrandom, using "
+    "keys and value sizes from the trace\n"
     "\tfilluniquerandomdeterministic       -- write N values in a random"
     " key order and keep the shape of the LSM tree\n"
     "\toverwrite     -- overwrite N values in random key order in "
@@ -896,6 +900,16 @@ DEFINE_string(compaction_trace_dir, "",
               "If not empty, write per-compaction trace log files to this "
               "directory with detailed key-level information.");
 
+DEFINE_string(twitter_trace_file, "",
+              "Path to a binary trace produced by "
+              "vcomp/tools/twitter_trace_convert.py. Required when running "
+              "--benchmarks=twitterload. Format spec: "
+              "vcomp/TWITTER_TRACE_REPLAY.md.");
+
+DEFINE_int64(twitter_trace_max_ops, 0,
+             "Stop twitterload after N records (0 = read whole trace file). "
+             "This is independent of --num.");
+
 // Virtual compaction flags
 DEFINE_bool(use_virtual_compaction, false,
             "Use PLR-based virtual compaction instead of real compaction. "
@@ -943,6 +957,11 @@ DEFINE_int32(level0_slowdown_writes_trigger,
 DEFINE_int32(level0_file_num_compaction_trigger,
              ROCKSDB_NAMESPACE::Options().level0_file_num_compaction_trigger,
              "Number of files in level-0 when compactions start.");
+
+DEFINE_int32(level0_file_num_register_batch, 0,
+             "fillvirtual: number of virtual L0 files to accumulate per "
+             "RegisterVirtualL0File call. 0 means use "
+             "level0_file_num_compaction_trigger.");
 
 DEFINE_uint64(periodic_compaction_seconds,
               ROCKSDB_NAMESPACE::Options().periodic_compaction_seconds,
@@ -1917,6 +1936,12 @@ DEFINE_uint32(openandcompact_cancel_after_millseconds, 1,
               "openandcompact_test_cancel_on_odd is true");
 
 namespace ROCKSDB_NAMESPACE {
+
+// Defined in db/compaction/compaction_picker_level.cc. Lets FillVirtual
+// disable the L0→L1 size gate at end-of-load to drain residual L0 via
+// virtual compaction.
+extern void SetVcompL0L1MinDataBytes(uint64_t bytes);
+
 namespace {
 static Status CreateMemTableRepFactory(
     const ConfigOptions& config_options,
@@ -3695,6 +3720,9 @@ class Benchmark {
       } else if (name == "fillrandom") {
         fresh_db = true;
         method = &Benchmark::WriteRandom;
+      } else if (name == "twitterload") {
+        fresh_db = true;
+        method = &Benchmark::WriteFromTwitterTrace;
       } else if (name == "filluniquerandom" ||
                  name == "fillanddeleteuniquerandom") {
         fresh_db = true;
@@ -3832,6 +3860,8 @@ class Benchmark {
         CompactLevel(1);
       } else if (name == "waitforcompaction") {
         WaitForCompaction();
+      } else if (name == "coverage") {
+        DumpLevelCoverage();
       } else if (name == "flush") {
         Flush();
       } else if (name == "crc32c") {
@@ -5281,6 +5311,7 @@ class Benchmark {
     auto phase1_start = FLAGS_env->NowMicros();
 
     uint64_t sort_us = 0, flush_us = 0, plr_fit_us = 0;
+    uint64_t mutex_us = 0, regbuild_us = 0, addfile_us = 0;
     uint64_t total_flushes = 0;
     uint64_t total_keys_before_dedup = 0, total_keys_after_dedup = 0;
     uint64_t total_segments = 0;
@@ -5291,13 +5322,16 @@ class Benchmark {
     memtable_buf.reserve(memtable_capacity);
 
     // Batch pending L0 files and register them in a single LogAndApply
-    // call per l0_compaction_trigger batch. This reduces MANIFEST writes
-    // from N to N/batch_size.
+    // call per register_batch. This reduces MANIFEST writes from N to
+    // N/batch_size. Decoupled from level0_file_num_compaction_trigger so
+    // fillvirtual's batching can be tuned independently of BG L0 trigger.
     VersionEdit pending_edit;
     int pending_count = 0;
-    int l0_trigger = FLAGS_level0_file_num_compaction_trigger > 0
-                         ? FLAGS_level0_file_num_compaction_trigger
-                         : 4;
+    int register_batch = FLAGS_level0_file_num_register_batch > 0
+                             ? FLAGS_level0_file_num_register_batch
+                             : (FLAGS_level0_file_num_compaction_trigger > 0
+                                    ? FLAGS_level0_file_num_compaction_trigger
+                                    : 4);
 
     auto flush_pending_edit = [&]() {
       if (pending_count == 0) return;
@@ -5372,15 +5406,26 @@ class Benchmark {
       vsst.size_bytes =
           VirtualSST::EstimateSize(memtable_buf.size(), avg_entry_size);
 
+      auto t3 = FLAGS_env->NowMicros();
+      // NOTE: NewFileNumber itself is atomic, but holding db_impl->mutex()
+      // here is intentional — it acts as an implicit throttle that paces
+      // fillvirtual to BG's compaction throughput. Removing the lock
+      // accelerates Phase 1 but causes L0 backlog runaway at scale (5+ TB):
+      // BG can't keep up, picker eventually fires monster L0->L1 compactions
+      // (e.g., 7775 inputs / 395 sec at 5 TB) and may wedge entirely.
+      // Until vcomp has explicit self-throttling or subcompactions, keep
+      // this lock.
       uint64_t fnum;
       {
         InstrumentedMutexLock l(db_impl->mutex());
         fnum = versions->NewFileNumber();
       }
+      auto t4 = FLAGS_env->NowMicros();
 
       std::string smallest_key = registry->EncodeUserKey(vsst.key_min);
       std::string largest_key = registry->EncodeUserKey(vsst.key_max);
       registry->Register(fnum, std::move(vsst));
+      auto t5 = FLAGS_env->NowMicros();
 
       InternalKey smallest(Slice(smallest_key), kMaxSequenceNumber, kTypeValue);
       InternalKey largest(Slice(largest_key), 0, kTypeValue);
@@ -5400,13 +5445,18 @@ class Benchmark {
                    /*compensated_range_deletion_size=*/0,
                    /*tail_size=*/0,
                    /*user_defined_timestamps_persisted=*/true);
+      auto t6 = FLAGS_env->NowMicros();
+
+      mutex_us    += (t4 - t3);   // mutex acquire + NewFileNumber
+      regbuild_us += (t5 - t4);   // EncodeUserKey x2 + registry->Register
+      addfile_us  += (t6 - t5);   // pending_edit.AddFile
 
       pending_count++;
       total_flushes++;
       memtable_buf.clear();
 
-      // Flush batch when we hit l0_compaction_trigger files.
-      if (pending_count >= l0_trigger) {
+      // Flush batch when we hit the register batch size.
+      if (pending_count >= register_batch) {
         flush_pending_edit();
       }
     };
@@ -5426,9 +5476,15 @@ class Benchmark {
 
     auto phase1_end = FLAGS_env->NowMicros();
     double phase1_secs = (phase1_end - phase1_start) / 1e6;
-    uint64_t keygen_us = (phase1_end - phase1_start) - sort_us - plr_fit_us - flush_us;
-    fprintf(stderr, "  Phase 1 breakdown: keygen=%.3fs sort=%.3fs plr_fit=%.3fs register=%.3fs\n",
-            keygen_us / 1e6, sort_us / 1e6, plr_fit_us / 1e6, flush_us / 1e6);
+    uint64_t accounted_us = sort_us + plr_fit_us + mutex_us + regbuild_us +
+                            addfile_us + flush_us;
+    uint64_t keygen_us = (phase1_end - phase1_start) - accounted_us;
+    fprintf(stderr,
+        "  Phase 1 breakdown: keygen=%.3fs sort=%.3fs plr_fit=%.3fs "
+        "mutex=%.3fs regbuild=%.3fs addfile=%.3fs register=%.3fs\n",
+        keygen_us / 1e6, sort_us / 1e6, plr_fit_us / 1e6,
+        mutex_us / 1e6, regbuild_us / 1e6, addfile_us / 1e6,
+        flush_us / 1e6);
     fprintf(stderr, "  Flushes: %" PRIu64 " (avg %.0f keys/batch, %" PRIu64 " segments total)\n",
             total_flushes,
             total_flushes > 0 ? (double)total_keys_after_dedup / total_flushes : 0,
@@ -5442,6 +5498,8 @@ class Benchmark {
             phase1_secs);
 
     // ── Wait for all background compactions to finish ──
+    // First do a normal wait under the size gate (BG drains whatever it
+    // already has scheduled).
     fprintf(stderr, "FillVirtual: waiting for background compactions...\n");
     auto wait_start = FLAGS_env->NowMicros();
     {
@@ -5453,6 +5511,56 @@ class Benchmark {
         fprintf(stderr, "WaitForCompact error: %s\n", s.ToString().c_str());
       }
     }
+
+    // ── Final L0 drain ──
+    // Foreground is done, so no more virtual L0 files will arrive. Drop the
+    // size gate to 0 and poke the picker; BG will fire one final L0→L1 (and
+    // any cascades) with whatever's left at L0, all as virtual compactions.
+    // After this drain, L0 should be empty (or nearly so), so Phase 2 has
+    // no L0 files to materialize as real SSTs and the subsequent compact0
+    // step finds 0 files to compact.
+    fprintf(stderr, "FillVirtual: draining residual L0 (size gate off)...\n");
+    auto drain_start = FLAGS_env->NowMicros();
+    SetVcompL0L1MinDataBytes(0);
+    // SetOptions on a no-op-effectively change forces MaybeScheduleFlushOrCompaction,
+    // which wakes the picker now that the size gate is off.
+    db_.db->SetOptions({{"level0_file_num_compaction_trigger", "3"}});
+    {
+      WaitForCompactOptions wopt;
+      wopt.abort_on_pause = false;
+      wopt.flush = false;
+      Status s = db_.db->WaitForCompact(wopt);
+      if (!s.ok()) {
+        fprintf(stderr, "Drain WaitForCompact error: %s\n", s.ToString().c_str());
+      }
+    }
+    // Restore for any later use of the DB in this process.
+    db_.db->SetOptions({{"level0_file_num_compaction_trigger", "4"}});
+    SetVcompL0L1MinDataBytes(4000ULL * 1024 * 1024);
+    fprintf(stderr, "  L0 drain done: %.3f sec\n",
+            (FLAGS_env->NowMicros() - drain_start) / 1e6);
+
+    // Freeze BG compaction so Phase 2 sees a stable registry/version snapshot.
+    // Without this, BG can re-fire virtual compactions during Phase 2's
+    // parallel SST write window (~3s), mutating the registry and the version
+    // while Phase 2b is building its VersionEdit from the snapshot taken at
+    // step 1 — the resulting DeleteFile/AddFile becomes inconsistent and the
+    // subsequent compact0 finds version entries with no on-disk SST.
+    // See 2026-05-12 in PLR_VIRTUAL_COMPACTION.md for the race trace.
+    {
+      Status pause_s = db_.db->PauseBackgroundWork();
+      if (!pause_s.ok()) {
+        fprintf(stderr, "PauseBackgroundWork error: %s\n",
+                pause_s.ToString().c_str());
+      }
+    }
+
+    // Intentionally leave any residual L0 virtual files alone. Matching
+    // baseline's natural end-of-load flow: the final memtable worth of data
+    // remains at L0, gets written to real L0 in Phase 2, and the subsequent
+    // load.sh `compact0,waitforcompaction` pushes it into L1. If that push
+    // takes L1 over `max_bytes_for_level_base`, a natural L1→L2 cascade
+    // creates the erosion gaps observed in baseline tree shapes.
     auto wait_end = FLAGS_env->NowMicros();
     fprintf(stderr, "  Background compactions done: %.3f sec\n",
             (wait_end - wait_start) / 1e6);
@@ -5641,11 +5749,24 @@ class Benchmark {
     }
     for (const auto& res : results) {
       if (!res.ok) continue;
-      InternalKey smallest(Slice(res.first_key), 0, kTypeValue);
+      // Match the seqno convention used by RegisterVirtualL0File: smallest
+      // InternalKey uses kMaxSequenceNumber (the smallest internal key for
+      // a given user_key), largest uses 0. Using 0 for smallest makes the
+      // file's claimed smallest internal key larger than its actual smallest
+      // content, leading to ordering/comparison inconsistencies that stall
+      // subsequent compactions.
+      InternalKey smallest(Slice(res.first_key), kMaxSequenceNumber,
+                           kTypeValue);
       InternalKey largest(Slice(res.last_key), 0, kTypeValue);
+      // Each output gets a unique epoch_number. Required for L0 because
+      // RocksDB's force_consistency_checks rejects multiple L0 files with
+      // the same epoch and overlapping key ranges — which is exactly what
+      // happens when Phase 1's tail leaves >1 raw virtual L0 file at L0
+      // (each spanning ~full key range from a memtable flush).
+      uint64_t epoch = cfd->NewEpochNumber();
       edit.AddFile(res.level, res.file_number, 0, res.file_size,
                    smallest, largest, 0, 0, false, Temperature::kUnknown,
-                   kInvalidBlobFileNumber, 0, 0, 1, "", "",
+                   kInvalidBlobFileNumber, 0, 0, epoch, "", "",
                    UniqueId64x2{}, 0, 0, true);
     }
     {
@@ -5657,6 +5778,15 @@ class Benchmark {
       if (!s.ok()) {
         fprintf(stderr, "Error applying VersionEdit: %s\n",
                 s.ToString().c_str());
+      }
+    }
+
+    // Resume BG compaction now that the version reflects only real SSTs.
+    {
+      Status resume_s = db_.db->ContinueBackgroundWork();
+      if (!resume_s.ok()) {
+        fprintf(stderr, "ContinueBackgroundWork error: %s\n",
+                resume_s.ToString().c_str());
       }
     }
 
@@ -6386,6 +6516,220 @@ class Benchmark {
                 << std::endl;
     }
     thread->stats.AddBytes(bytes);
+  }
+
+  // Replays a vcomp binary trace produced by
+  // vcomp/tools/twitter_trace_convert.py through the same write path as
+  // fillrandom. This is a stripped-down copy of DoWrite that keeps the
+  // fillrandom path only, with two hooks replaced:
+  //   - key bytes come from the trace (not KeyGenerator+GenerateKeyFromInt)
+  //   - value_size comes from the trace (not value_size_)
+  // RandomGenerator, WriteBatch construction, write_options_, byte accounting,
+  // and stats reporting are preserved verbatim from DoWrite so any LSM shape
+  // difference between fillrandom and twitterload is attributable only to the
+  // input distribution. Spec: vcomp/TWITTER_TRACE_REPLAY.md
+  void WriteFromTwitterTrace(ThreadState* thread) {
+    if (FLAGS_twitter_trace_file.empty()) {
+      fprintf(stderr,
+              "twitterload requires --twitter_trace_file=<path>\n");
+      ErrorExit();
+    }
+    if (FLAGS_num_column_families > 1) {
+      fprintf(stderr,
+              "twitterload does not support --num_column_families > 1 "
+              "(Phase 0).\n");
+      ErrorExit();
+    }
+    if (use_blob_db_) {
+      fprintf(stderr, "twitterload does not support stacked BlobDB.\n");
+      ErrorExit();
+    }
+
+    FILE* tf = fopen(FLAGS_twitter_trace_file.c_str(), "rb");
+    if (tf == nullptr) {
+      fprintf(stderr, "twitterload: failed to open %s: %s\n",
+              FLAGS_twitter_trace_file.c_str(), strerror(errno));
+      ErrorExit();
+    }
+    char magic[8];
+    uint32_t version = 0;
+    uint32_t header_reserved = 0;
+    if (fread(magic, 1, 8, tf) != 8 ||
+        memcmp(magic, "VCMPTRC1", 8) != 0) {
+      fprintf(stderr, "twitterload: bad trace magic in %s\n",
+              FLAGS_twitter_trace_file.c_str());
+      fclose(tf);
+      ErrorExit();
+    }
+    if (fread(&version, sizeof(version), 1, tf) != 1 || version != 1) {
+      fprintf(stderr,
+              "twitterload: unsupported trace version %u (expected 1)\n",
+              version);
+      fclose(tf);
+      ErrorExit();
+    }
+    if (fread(&header_reserved, sizeof(header_reserved), 1, tf) != 1) {
+      fprintf(stderr, "twitterload: short read on header reserved field\n");
+      fclose(tf);
+      ErrorExit();
+    }
+
+    // Mirror DoWrite setup, stripped to the fillrandom path.
+    const int64_t max_ops = FLAGS_twitter_trace_max_ops > 0
+                                ? FLAGS_twitter_trace_max_ops
+                                : std::numeric_limits<int64_t>::max();
+    Duration duration(/*max_seconds=*/0, max_ops, /*ops_per_stage=*/max_ops);
+
+    RandomGenerator gen;
+    WriteBatch batch(/*reserved_bytes=*/0, /*max_bytes=*/0,
+                     FLAGS_write_batch_protection_bytes_per_key,
+                     user_timestamp_size_);
+    Status s;
+    int64_t bytes = 0;
+
+    std::unique_ptr<char[]> ts_guard;
+    if (user_timestamp_size_ > 0) {
+      ts_guard.reset(new char[user_timestamp_size_]);
+    }
+
+    // Reusable key buffer sized to the largest key seen so far.
+    std::vector<char> key_buf;
+    int64_t num_written = 0;
+    int64_t num_malformed = 0;
+    bool eof = false;
+
+    while (!eof && !duration.Done(entries_per_batch_)) {
+      DBWithColumnFamilies* db_with_cfh =
+          SelectDBWithCfh(static_cast<uint64_t>(0));
+
+      batch.Clear();
+      int64_t batch_bytes = 0;
+      int64_t batch_ops = 0;
+
+      for (int64_t j = 0; j < entries_per_batch_; j++) {
+        uint8_t op_byte = 0;
+        uint32_t key_len = 0;
+        uint32_t value_size = 0;
+
+        size_t n = fread(&op_byte, 1, 1, tf);
+        if (n == 0) {
+          eof = true;
+          break;
+        }
+        if (fread(&key_len, sizeof(key_len), 1, tf) != 1) {
+          num_malformed++;
+          eof = true;
+          break;
+        }
+        if (key_buf.size() < key_len) {
+          key_buf.resize(key_len);
+        }
+        if (key_len > 0 &&
+            fread(key_buf.data(), 1, key_len, tf) != key_len) {
+          num_malformed++;
+          eof = true;
+          break;
+        }
+        if (fread(&value_size, sizeof(value_size), 1, tf) != 1) {
+          num_malformed++;
+          eof = true;
+          break;
+        }
+
+        if (op_byte != 1 /* Put */) {
+          fprintf(stderr,
+                  "twitterload: unsupported op byte %u at record %" PRId64
+                  " (Phase 0 accepts Put only)\n",
+                  static_cast<unsigned>(op_byte), num_written);
+          fclose(tf);
+          ErrorExit();
+        }
+        // RandomGenerator's internal data_ buffer is sized to
+        //   max(1 MiB, effective_max_size)
+        // where effective_max_size depends on distribution type:
+        //   - kFixed  (default) -> FLAGS_value_size
+        //   - kUniform/kNormal -> FLAGS_value_size_max
+        // Going beyond that bound would buffer-overrun gen.Generate(len)
+        // in release builds (the assert is compiled out). Enforce it.
+        const int effective_max_size =
+            (FLAGS_value_size_distribution_type_e == kFixed)
+                ? FLAGS_value_size
+                : FLAGS_value_size_max;
+        const uint32_t rg_bound = static_cast<uint32_t>(
+            std::max(1048576, effective_max_size));
+        if (value_size > rg_bound) {
+          fprintf(stderr,
+                  "twitterload: trace value_size=%u exceeds "
+                  "RandomGenerator bound %u. Pass --value_size=N (or "
+                  "--value_size_max=N with --value_size_distribution_type="
+                  "uniform) where N >= trace max value_size (see converter "
+                  "output).\n",
+                  value_size, rg_bound);
+          fclose(tf);
+          ErrorExit();
+        }
+
+        Slice key(key_buf.data(), key_len);
+        Slice val = gen.Generate(value_size);
+        batch.Put(key, val);
+
+        batch_bytes += val.size() + key_len + user_timestamp_size_;
+        bytes += val.size() + key_len + user_timestamp_size_;
+        batch_ops++;
+        num_written++;
+
+        if (num_written >= max_ops) {
+          eof = true;
+          break;
+        }
+      }
+
+      if (batch_ops == 0) {
+        break;
+      }
+
+      if (thread->shared->write_rate_limiter.get() != nullptr) {
+        thread->shared->write_rate_limiter->Request(
+            batch_bytes, Env::IO_HIGH, nullptr /* stats */,
+            RateLimiter::OpType::kWrite);
+        thread->stats.ResetLastOpTime();
+      }
+
+      if (user_timestamp_size_ > 0) {
+        Slice user_ts = mock_app_clock_->Allocate(ts_guard.get());
+        s = batch.UpdateTimestamps(
+            user_ts, [this](uint32_t) { return user_timestamp_size_; });
+        if (!s.ok()) {
+          fprintf(stderr, "twitterload: assign timestamp: %s\n",
+                  s.ToString().c_str());
+          fclose(tf);
+          ErrorExit();
+        }
+      }
+
+      s = db_with_cfh->db->Write(write_options_, &batch);
+      thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, batch_ops,
+                                kWrite);
+
+      if (!s.ok()) {
+        s = listener_->WaitForRecovery(600000000) ? Status::OK() : s;
+      }
+      if (!s.ok()) {
+        fprintf(stderr, "twitterload put error: %s\n",
+                s.ToString().c_str());
+        fclose(tf);
+        ErrorExit();
+      }
+    }
+
+    fclose(tf);
+    thread->stats.AddBytes(bytes);
+
+    char msg[128];
+    snprintf(msg, sizeof(msg),
+             "(twitterload: %" PRId64 " records, malformed=%" PRId64 ")",
+             num_written, num_malformed);
+    thread->stats.AddMessage(msg);
   }
 
   Status DoDeterministicCompact(ThreadState* thread,
@@ -9213,6 +9557,101 @@ class Benchmark {
     for (const auto& db_with_cfh : multi_dbs_) {
       db_with_cfh.db->CompactRange(cro, nullptr, nullptr);
     }
+  }
+
+  // Dump per-level coverage metrics. For each level, prints:
+  //  - file count
+  //  - total size
+  //  - union of file ranges in uint64-key space
+  //  - gap fraction: fraction of the level-wide span that is NOT in any file
+  void DumpLevelCoverage() {
+    auto dump = [](DB* db, const std::string& name) {
+      std::vector<LiveFileMetaData> files;
+      db->GetLiveFilesMetaData(&files);
+
+      auto to_u64 = [](const std::string& s) -> uint64_t {
+        uint64_t k = 0;
+        if (s.size() >= 8) {
+          for (int b = 0; b < 8; b++)
+            k = (k << 8) | static_cast<uint8_t>(s[b]);
+        }
+        return k;
+      };
+
+      // Group files by level.
+      std::map<int, std::vector<std::pair<uint64_t, uint64_t>>> by_level;
+      std::map<int, uint64_t> size_by_level;
+      std::map<int, size_t> count_by_level;
+      for (const auto& f : files) {
+        uint64_t lo = to_u64(f.smallestkey);
+        uint64_t hi = to_u64(f.largestkey);
+        by_level[f.level].emplace_back(lo, hi);
+        size_by_level[f.level] += f.size;
+        count_by_level[f.level]++;
+      }
+
+      fprintf(stdout,
+              "=== coverage(%s) ===\n"
+              "%5s %6s %10s %20s %20s %15s %15s %8s\n",
+              name.c_str(), "level", "files", "size_MB", "key_min", "key_max",
+              "union_span", "files_span", "cov_pct");
+      // Per-file dump for L1 only.
+      if (by_level.count(1)) {
+        fprintf(stdout, "  L1 files (sorted by smallest):\n");
+        auto ranges1 = by_level[1];
+        std::sort(ranges1.begin(), ranges1.end());
+        uint64_t prev_hi = 0;
+        for (size_t i = 0; i < ranges1.size(); i++) {
+          uint64_t lo = ranges1[i].first;
+          uint64_t hi = ranges1[i].second;
+          uint64_t width = hi - lo;
+          long long gap = i > 0 ? (long long)lo - (long long)prev_hi - 1 : 0;
+          fprintf(stdout, "    [%zu] %12lu .. %12lu width=%12lu gap=%+lld\n",
+                  i, (unsigned long)lo, (unsigned long)hi,
+                  (unsigned long)width, gap);
+          prev_hi = hi;
+        }
+      }
+      for (auto& kv : by_level) {
+        int lvl = kv.first;
+        auto& ranges = kv.second;
+        std::sort(ranges.begin(), ranges.end());
+        uint64_t level_min = ranges.front().first;
+        uint64_t level_max = ranges.back().second;
+        uint64_t level_span = level_max - level_min;
+
+        // Merge overlapping ranges (shouldn't be any at L1+ but just in case).
+        uint64_t files_span = 0;  // sum of individual file spans
+        uint64_t union_span = 0;  // union after merging
+        uint64_t cur_lo = ranges[0].first;
+        uint64_t cur_hi = ranges[0].second;
+        for (size_t i = 0; i < ranges.size(); i++) {
+          files_span += (ranges[i].second - ranges[i].first);
+          if (i == 0) continue;
+          if (ranges[i].first <= cur_hi) {
+            cur_hi = std::max(cur_hi, ranges[i].second);
+          } else {
+            union_span += (cur_hi - cur_lo);
+            cur_lo = ranges[i].first;
+            cur_hi = ranges[i].second;
+          }
+        }
+        union_span += (cur_hi - cur_lo);
+
+        double cov_pct = level_span > 0
+                             ? 100.0 * union_span / level_span
+                             : 0.0;
+
+        fprintf(stdout,
+                "%5d %6zu %10.1f %20lu %20lu %15lu %15lu %7.2f%%\n",
+                lvl, count_by_level[lvl], size_by_level[lvl] / 1048576.0,
+                (unsigned long)level_min, (unsigned long)level_max,
+                (unsigned long)union_span, (unsigned long)files_span,
+                cov_pct);
+      }
+    };
+    if (db_.db != nullptr) dump(db_.db, db_.db->GetName());
+    for (auto& d : multi_dbs_) dump(d.db, d.db->GetName());
   }
 
   void WaitForCompactionHelper(DBWithColumnFamilies& db) {

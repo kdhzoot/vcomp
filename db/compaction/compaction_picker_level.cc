@@ -9,6 +9,7 @@
 
 #include "db/compaction/compaction_picker_level.h"
 
+#include <atomic>
 #include <string>
 #include <utility>
 #include <vector>
@@ -18,6 +19,22 @@
 #include "test_util/sync_point.h"
 
 namespace ROCKSDB_NAMESPACE {
+
+// vcomp: minimum total L0 data (bytes) before the L0→L1 picker fires.
+// Defaults to 4 GB (~ baseline's measured per-event L0→L1 input size).
+// FillVirtual sets it to 0 at end-of-load to force final L0 drain via
+// virtual compaction, eliminating the leftover real-L0 files that would
+// otherwise force a slow real-I/O compact0.
+static std::atomic<uint64_t> g_vcomp_l0_l1_min_data_bytes{
+    4000ULL * 1024 * 1024};
+
+uint64_t VcompL0L1MinDataBytes() {
+  return g_vcomp_l0_l1_min_data_bytes.load(std::memory_order_relaxed);
+}
+
+void SetVcompL0L1MinDataBytes(uint64_t bytes) {
+  g_vcomp_l0_l1_min_data_bytes.store(bytes, std::memory_order_relaxed);
+}
 
 bool LevelCompactionPicker::NeedsCompaction(
     const VersionStorageInfo* vstorage) const {
@@ -239,7 +256,14 @@ void LevelCompactionBuilder::SetupInitialFiles() {
           // In these cases, to reduce L0 file count and thus reduce likelihood
           // of write stalls, we can attempt compacting a span of files within
           // L0.
-          if (PickIntraL0Compaction()) {
+          //
+          // vcomp: skip this fallback. The PickFileToCompact size gate is the
+          // only L0→? trigger we want. Without this skip, PickIntraL0Compaction
+          // fires whenever L0 ≥ trigger+2 and starts consolidating L0 files
+          // into a megafile — which is exactly the intra-L0 cascade the size
+          // gate is designed to bypass.
+          if (!ioptions_.use_virtual_compaction &&
+              PickIntraL0Compaction()) {
             output_level_ = 0;
             compaction_reason_ = CompactionReason::kLevelL0FilesNum;
             break;
@@ -786,6 +810,27 @@ bool LevelCompactionBuilder::TryExtendNonL0TrivialMove(int start_index,
 }
 
 bool LevelCompactionBuilder::PickFileToCompact() {
+  if (start_level_ == 0 && ioptions_.use_virtual_compaction) {
+    // vcomp: gate L0→L1 by total L0 data size, not by file count. baseline's
+    // L0→L1 input_data_size averages ~4876 MB (n=83 events, baseline_run1
+    // in 260415 batch). The structural variable that maps vcomp's tree to
+    // baseline's is per-event L0→L1 data volume — not file count, not
+    // intra-L0 cascade. `level0_file_num_compaction_trigger` stays at its
+    // (low) default so the picker keeps waking up; we just defer execution
+    // until the data threshold is met. The threshold is read from a global
+    // atomic so FillVirtual can lower it to 0 at end-of-load and force a
+    // final drain — see VcompL0L1MinDataBytes() in this file.
+    const uint64_t min_bytes = VcompL0L1MinDataBytes();
+    const auto& level_files = vstorage_->LevelFiles(0);
+    uint64_t total_l0_bytes = 0;
+    for (const auto* f : level_files) {
+      total_l0_bytes += f->fd.GetFileSize();
+    }
+    if (total_l0_bytes < min_bytes) {
+      return false;
+    }
+  }
+
   // level 0 files are overlapping. So we cannot pick more
   // than one concurrent compactions at this level. This
   // could be made better by looking at key-ranges that are

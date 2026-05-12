@@ -23,11 +23,47 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
 
   if (total_entries == 0 || plr.Empty()) return result;
 
-  uint64_t keys_per_sst = target_sst_size / avg_entry_size;
+  // Intra-L0 (target_level == 0): baseline RocksDB never splits L0 outputs.
+  // See CompactionOutputs::ShouldStopBefore in
+  // db/compaction/compaction_outputs.cc:
+  //     if (compaction_->output_level() == 0) return false;
+  // Without this, vcomp's intra-L0 would re-split N inputs back into ~N
+  // 64MB outputs (no consolidation), and downstream L0→L1 picks would be
+  // small. Matching baseline means emitting a single VirtualSST per
+  // intra-L0 compaction, regardless of total size.
+  if (target_level == 0) {
+    VirtualSST vsst;
+    vsst.plr_model = plr;
+    vsst.key_min = global_min;
+    vsst.key_max = global_max;
+    vsst.num_entries = total_entries;
+    vsst.level = 0;
+    vsst.size_bytes = VirtualSST::EstimateSize(total_entries, avg_entry_size);
+    result.push_back(std::move(vsst));
+    return result;
+  }
+
+  // Non-L0 output: match baseline's max_output_file_size policy. On
+  // non-bottom levels with grandparents, files may grow up to 2 * target
+  // before the size-based hard cut, while the dynamic threshold at GP
+  // boundaries still uses target_sst_size. See
+  // Compaction::max_output_file_size_ computation.
+  bool has_grandparents =
+      !grandparent_boundaries.empty() && target_level > 0;
+  uint64_t max_sst_size =
+      has_grandparents ? 2 * target_sst_size : target_sst_size;
+
+  uint64_t keys_per_sst = max_sst_size / avg_entry_size;
   if (keys_per_sst == 0) keys_per_sst = 1;
 
   // Build split positions.
   // Convert grandparent boundary keys to positions for split decisions.
+  // Do NOT dedup: two adjacent grandparent files contribute boundaries
+  // (largest of file i, smallest of file i+1) that often round to the same
+  // integer position but represent two distinct boundary transitions in
+  // baseline's state machine. Dropping one halves the `switched` counter
+  // and makes the dynamic threshold grow too slowly, producing files that
+  // are smaller than baseline.
   std::vector<uint64_t> gp_positions;
   if (!grandparent_boundaries.empty() && target_level > 0) {
     for (uint64_t bkey : grandparent_boundaries) {
@@ -38,19 +74,19 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
       }
     }
     std::sort(gp_positions.begin(), gp_positions.end());
-    gp_positions.erase(
-        std::unique(gp_positions.begin(), gp_positions.end()),
-        gp_positions.end());
   }
 
   // Build split positions by scanning size-based boundaries and grandparent
-  // boundaries together. At each grandparent boundary, split if current file
-  // is >= 50% of target size (matching RocksDB's ShouldStopBefore heuristic).
+  // boundaries together. Mirrors RocksDB's CompactionOutputs::ShouldStopBefore
+  // dynamic threshold: at each grandparent boundary, pre-cut when the current
+  // file's bytes are >= target_sst_size * (50 + 5*switched)%, capped at 90%,
+  // where `switched` counts GP boundaries crossed since the last cut and
+  // resets on every new output file.
   std::vector<uint64_t> split_positions;
   {
     uint64_t last_split = 0;
-    uint64_t half_sst = keys_per_sst / 2;
     uint64_t next_size_split = keys_per_sst;
+    uint64_t switched = 0;  // GP boundaries crossed since last cut
     size_t gp_idx = 0;
 
     while (next_size_split < total_entries || gp_idx < gp_positions.size()) {
@@ -60,21 +96,27 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
                              : total_entries;
 
       if (next_size_split <= next_gp && next_size_split < total_entries) {
-        // Size-based split comes first (or at same point).
+        // Size-based hard cut.
         split_positions.push_back(next_size_split);
         last_split = next_size_split;
         next_size_split = last_split + keys_per_sst;
+        switched = 0;
         // Skip grandparent boundaries we've passed.
         while (gp_idx < gp_positions.size() &&
                gp_positions[gp_idx] <= last_split) {
           gp_idx++;
         }
       } else if (next_gp < total_entries) {
-        // Grandparent boundary: split here if current file >= 50% of target.
-        if (next_gp - last_split >= half_sst) {
+        // GP boundary: count it, then evaluate dynamic threshold in BYTES.
+        switched++;
+        uint64_t cur_bytes = (next_gp - last_split) * avg_entry_size;
+        uint64_t pct = 50 + std::min<uint64_t>(switched * 5, 40);
+        uint64_t threshold_bytes = (target_sst_size * pct) / 100;
+        if (cur_bytes >= threshold_bytes) {
           split_positions.push_back(next_gp);
           last_split = next_gp;
           next_size_split = last_split + keys_per_sst;
+          switched = 0;
         }
         gp_idx++;
       } else {

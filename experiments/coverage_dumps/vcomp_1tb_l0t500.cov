@@ -1,0 +1,28 @@
+RocksDB:    version 10.10.1
+Date:       Mon May 11 13:25:35 2026
+CPU:        48 * Intel(R) Xeon(R) Gold 6336Y CPU @ 2.40GHz
+CPUCache:   36864 KB
+Set seed to 1778505934188058 because --seed was 0
+Initializing RocksDB Options from the specified file
+Initializing RocksDB Options from command-line flags
+Integrated BlobDB: blob cache disabled
+Keys:       24 bytes each (+ 0 bytes user-defined timestamp)
+Values:     1000 bytes each (500 bytes after compression)
+Entries:    0
+Prefix:    0 bytes
+Keys per prefix:    0
+RawSize:    0.0 MB (estimated)
+FileSize:   0.0 MB (estimated)
+Write rate: 0 bytes/second
+Read rate: 0 ops/second
+Compression: Snappy
+Compression sampling rate: 0
+Memtablerep: SkipListFactory
+Perf Level: 1
+------------------------------------------------
+=== coverage(/work/vcomp/vcomp_1tb_l0t500) ===
+level  files    size_MB              key_min              key_max      union_span      files_span  cov_pct
+    2     18     2263.8           1070124617           1073741686         3617044         3617044  100.00%
+    3    197    25616.4           1029347451           1070124615        40776849        40776849  100.00%
+    4   1996   259544.6            616169558           1029347449       413174767       413174767  100.00%
+    5   3348   387068.5                    0            616169556       616164125       616164125  100.00%

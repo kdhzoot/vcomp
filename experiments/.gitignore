@@ -1,0 +1,14 @@
+# Python/cache artifacts
+__pycache__/
+*.py[cod]
+
+# Raw experiment directories are large and regenerated from scripts.
+log_loads/*/
+log_batch/*/
+log_runs/*/
+coverage_dumps/*/
+compaction_logs/*/
+
+# Local/editor noise
+.DS_Store
+*.swp

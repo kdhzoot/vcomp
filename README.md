@@ -556,7 +556,7 @@ Out of scope (load phase):
 | Component | Path | Language | Role |
 |---|---|---|---|
 | Converter | `vcomp/tools/twitter_trace_convert.py` | Python 3 | Twitter CSV → compact binary |
-| Prefix analyzer | `vcomp/tools/analyze_trace_prefix.py` | Python 3 | Validate Option D applicability (§7.8) |
+| Prefix analyzer | `vcomp/tools/analyze_trace_prefix.py` | Python 3 | Validate Option D applicability (§7.9) |
 | Baseline benchmark | `vcomp/tools/db_bench_tool.cc::WriteFromTwitterTrace` | C++ | Replay binary trace through DB::Write |
 | vcomp benchmark | `vcomp/tools/db_bench_tool.cc::FillVirtual` (trace branch) | C++ | Replay binary trace through virtual L0 register |
 
@@ -699,12 +699,16 @@ trace file. The Phase-1 algorithm is otherwise identical:
 ```
 for each trace record (Put only):
     key_uint64 = BE_uint64(key_bytes[:8])         # PLR domain
+    value_offset = RandomGenerator.Generate(value_size)
+    append (seqno, key_uint64, value_size, value_offset, key_bytes)
+        to key-range shard log
+
     memtable_buf_uint64.push(key_uint64)
-    raw_keys.push(key_bytes)                      # parallel array
+    raw_keys.push(key_bytes)                      # for full-byte bounds
     accumulated_bytes += key_len + value_size
 
     when accumulated_bytes >= memtable_flush_size MB:
-        radix sort memtable_buf_uint64 (raw_keys ride along on permutation)
+        sort memtable_buf_uint64 by prefix8 (raw_keys ride along)
         std::unique on uint64 → drop matching raw_keys
         plr = GreedyPLRFit(memtable_buf_uint64, plr_error_bound)
         vsst.plr_model     = plr
@@ -718,14 +722,13 @@ for each trace record (Put only):
 The branching point: if `--twitter_trace_file` is non-empty,
 `FillVirtual` opens the trace and replaces the synthetic key loop with
 a trace read loop. Phase 1 and virtual compaction still operate on
-metadata, but the trace path also appends raw key/value records to
-per-flush source-run logs. Final materialization partitions those logs
-by final `VirtualSST` lineage and range, then writes real SSTs with the
-original raw keys.
+metadata, while raw keys needed for final SST construction are kept in
+temporary key-range shard logs. Exact KV materialization is separated
+in §7.8.
 
 The reason for keeping both `key_min/max` (uint64) and
 `key_min_bytes/max_bytes` (raw): PLR predict/inverse stays in uint64
-domain (no perf regression — §7.8), but RocksDB's
+domain (no perf regression — §7.9), but RocksDB's
 `VersionEdit::AddFile` requires full byte-string smallest/largest_key
 for SST overlap checks at L1+. The two representations are encoded
 from the same trace key.
@@ -735,7 +738,65 @@ MODE=vcomp to `fillvirtual --twitter_trace_file=...` — mirroring
 how `load.sh` dispatches to `fillrandom` vs `fillvirtual` for the
 synthetic-key path.
 
-### 7.8 Design decision: PLR key encoding (Option D)
+### 7.8 Exact KV materialization
+
+The original trace path only built the final LSM shape. That was not
+enough to reconstruct the original raw keys during Phase 2: the PLR
+model can approximate positions in a key domain, but it cannot recover
+full byte-string keys that were never retained. The current with-KV path
+therefore keeps virtual compaction metadata-only, but writes a compact
+append-only trace side log during Phase 1.
+
+**Phase 1 side log**
+
+Trace mode writes each Put into one of `--vcomp_trace_key_partitions`
+key-range shard files under `<db>.vcomp_kv/trace_shards/`. The default
+is 100 shards. Each shard record stores:
+
+```
+seqno, prefix8_key64, value_len, value_offset, key_len, raw_key_bytes
+```
+
+The value bytes are not copied into the shard. `db_bench` values are
+generated from `RandomGenerator`; storing `value_offset + value_len` is
+enough to regenerate the same value during SST writing. Shard writes are
+batched with `--vcomp_trace_shard_write_buffer_mb` and can use aligned
+direct I/O via `--vcomp_trace_shard_direct_io=true`.
+
+**Virtual compaction**
+
+Virtual L0 files still register only metadata: PLR model, entry count,
+size estimate, `prefix8` min/max, and full-byte smallest/largest bounds.
+Background compaction remains in-memory and propagates the virtual SST
+metadata. No real SST is written until Phase 2.
+
+**Phase 2 materialization**
+
+After background compaction finishes, Phase 2 pauses background work and
+takes a stable snapshot of the remaining virtual SSTs. It then:
+
+1. Sorts final VSSTs by bottom-up fill order: deeper level first, then
+   increasing prefix8 key range.
+2. Reads one key-range shard at a time.
+3. Sorts shard records by `(prefix8_key64, raw_key, seqno desc)` and
+   keeps only the newest record for each raw key.
+4. Assigns the unique keys to final VSST buffers in bottom-up order,
+   consuming each key once.
+5. Builds ready SSTs in parallel with `SstFileWriter`.
+6. Applies one `VersionEdit` that deletes virtual files and adds the
+   materialized real SSTs.
+
+This avoids a global full sort and avoids scanning the same KV log once
+per VSST. Peak memory is bounded by one key-range shard plus the VSST
+buffers that become ready from that shard. Records that cannot be
+assigned to any final VSST are written as a small L0 gap-patch SST
+before the same `VersionEdit`.
+
+The current 250 GB trace+KV run uses 100 shards with direct shard writes:
+baseline `twitterload` 568.985 s, vcomp `fillvirtual` 225.090 s,
+**2.53x faster**, with 237,241,526 unique trace keys materialized.
+
+### 7.9 Design decision: PLR key encoding (Option D)
 
 vcomp's PLR engine (§2) operates on `uint64`. fillrandom feeds it via
 `GenerateKeyFromInt`: 8 B big-endian uint64 + (`key_size`-8) B '0'
@@ -808,7 +869,7 @@ If validation fails (>1% prefix8 collision):
 2. **B** — byte-string PLR; heavy refactor with fillrandom regression.
 3. Reject the cluster.
 
-### 7.9 Cluster selection reference
+### 7.10 Cluster selection reference
 
 From `cache-trace/stat/2020Mar.md` (Twitter's published per-cluster
 characterization):
@@ -828,10 +889,10 @@ CMU PDL:
 `https://ftp.pdl.cmu.edu/pub/datasets/twemcacheWorkload/open_source/`.
 
 To switch clusters: convert with `twitter_trace_convert.py`, **then run
-prefix8 validation per §7.8**, then point `--twitter_trace_file` at
+prefix8 validation per §7.9**, then point `--twitter_trace_file` at
 the new output.
 
-### 7.10 Implementation checklist
+### 7.11 Implementation checklist
 
 **Phase 0 — Baseline path (write-only load) — DONE**:
 - [x] Converter `twitter_trace_convert.py` + binary format `VCMPTRC1` v1
@@ -842,7 +903,7 @@ the new output.
 
 **Phase 1 — vcomp path**:
 - [x] `analyze_trace_prefix.py` in `vcomp/tools/`
-- [x] cluster012 prefix8 uniqueness validated (2026-05-16, §7.8)
+- [x] cluster012 prefix8 uniqueness validated (2026-05-16, §7.9)
 - [x] Extend `FillVirtual` with `--twitter_trace_file` branch (§7.7)
 - [x] Extend `VirtualSST` to carry raw `key_min_bytes`/`key_max_bytes`
 - [x] Extend `load_twitter.sh` to dispatch MODE=vcomp to `fillvirtual`
@@ -851,10 +912,10 @@ the new output.
       [../eval-vcomp/RESULTS.md](../eval-vcomp/RESULTS.md))
 
 **Phase 2 — exact KV materialization + run phase**:
-- [x] Preserve raw key/value records in append-only per-flush source-run logs
-- [x] Propagate `source_run_ids` through virtual compaction
-- [x] Parallel materialization: partition source logs by final VSST lineage,
-      sort/dedup per partition, write raw-key SSTs
+- [x] Preserve raw keys and value offsets in append-only key-range shard logs
+- [x] Preserve full-byte key bounds for `VersionEdit::AddFile`
+- [x] Parallel materialization: read one shard at a time, sort/dedup by
+      raw key, assign keys bottom-up to final VSSTs, write raw-key SSTs
 - [x] Re-convert cluster012 with `--include-reads`
 - [x] `twitterrun` raw-key Get replay on loaded DBs
 - [x] Baseline ↔ vcomp found-key parity on 1M and 10M cluster012 tests
@@ -2067,7 +2128,7 @@ that bypasses memtable just like the synthetic-key path does.
 ### PLR key encoding: chose Option D
 
 vcomp's PLR engine is uint64-domain; trace keys are byte strings.
-Three candidate encodings were compared (§7.8):
+Three candidate encodings were compared (§7.9):
 
 - **B** (byte-string PLR refactor): ~3–5× sort/predict slowdown, ~9×
   memory traffic (memtable_buf no longer fits in L2), and regresses
@@ -2088,7 +2149,7 @@ so collisions are vanishingly rare.
 Risk: future clusters with common prefixes (`user_`, `session_`) or
 monotonic IDs will fail the prefix8 threshold. **Validation
 procedure is now mandatory before adding any new cluster** — see
-§7.8 and `vcomp/tools/analyze_trace_prefix.py`.
+§7.9 and `vcomp/tools/analyze_trace_prefix.py`.
 
 ### Doc consolidation
 Merged the standalone `vcomp/TWITTER_TRACE_REPLAY.md` (Phase 0 spec)
@@ -2122,22 +2183,22 @@ Branch: `vcomp-w/kv`.
 The original trace vcomp path only preserved metadata shape. That cannot
 reconstruct exact raw keys at materialization time without retaining a real
 source of the input key set. The current implementation keeps Phase 1 and
-background virtual compaction metadata-only, then materializes exact KV from
-the append-only trace source in Phase 2.
+background virtual compaction metadata-only, writes compact key-range shard
+logs as a sidecar, then materializes exact raw-key SSTs in Phase 2.
 
 ### Design
 
-- L0 virtual SSTs carry `source_run_ids`; virtual compaction unions lineage
-  into output virtual SSTs.
-- Phase 2 re-scans the trace source, routes each raw key plus value offset to
-  the final virtual range for its source run, deduplicates by newest sequence
-  number, and writes real SSTs once.
-- Routing partitions are in memory; no per-vSST log scan is repeated.
-- Records that fall outside final virtual ranges are written through a small
-  L0 patch path instead of expanding same-level SST bounds.
-- Output splitting uses conservative naive entry counts. This prevents PLR
-  dedup underestimation from creating oversized materialized SSTs that hurt
-  index/filter direct-read cost.
+- Phase 1 writes each Put to one of 100 default key-range shard logs:
+  `seqno`, prefix8 key, value length/offset, and full raw key bytes.
+- Values are regenerated from `RandomGenerator` by offset, so the shard log
+  does not copy large value payloads.
+- Phase 2 reads one shard at a time, sorts by `(prefix8, raw key, seqno)`,
+  deduplicates to the newest record per key, and assigns keys to final VSSTs
+  in bottom-up order.
+- Ready VSST partitions are materialized in parallel; final metadata is
+  installed with one `VersionEdit`.
+- Records that cannot be assigned to any final VSST are written through a
+  small L0 gap-patch SST.
 
 ### 10M cluster012 result
 
@@ -2151,8 +2212,20 @@ the append-only trace source in Phase 2.
 At 100M Put records, the same exact-KV path also passes:
 baseline `490 s` wrapper / `463.44 s` core, vcomp-w/kv `337 s` wrapper /
 `232.31 s` core, both final DBs `104 GB`.
-For 100M vcomp, the non-primary remainder is `104.69 s`
-(`337 - 232.31`), covering post-primary benchmarks plus DB teardown.
+
+The current optimized 250GB-class run uses `cluster012_500M.vcomptrace`,
+`MAX_OPS=240000000`, 100 key-range shards, batched shard writes, and
+`--vcomp_trace_shard_direct_io=true`:
+
+| Mode | full elapsed | core time | DB size |
+|------|--------------|-----------|---------|
+| baseline | 588 s | `twitterload` 568.985 s | 247 GB |
+| vcomp-w/kv | 230 s | `fillvirtual` 225.090 s | 247 GB |
+
+Core loading speedup: **2.53x**. Phase 2 assigned **237,241,526**
+unique trace keys across **4,183** final VSSTs. Main vcomp breakdown:
+Phase 1 72.898 s, shard read 49.340 s, KV sort/dedup 68.755 s,
+assign 11.806 s, materialize write 6.982 s, VersionEdit 1.060 s.
 
 Run-phase validation uses raw trace keys:
 `twitterrun_encode_for_vcomp=false`, `twitterrun_replay_writes=false`.

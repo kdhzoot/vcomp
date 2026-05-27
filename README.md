@@ -524,7 +524,345 @@ properties that follow directly from the design:
 
 ---
 
-## 7. Deferred TODOs
+## 7. Twitter trace replay
+
+vcomp's loading path was originally designed for fillrandom's synthetic
+uniform-random keys. To validate baseline ↔ vcomp parity on real-world
+workloads, we integrated Twitter cache traces (`cache-trace` repo,
+OSDI '20) as a second key source.
+
+### 7.1 Purpose and scope
+
+Fillrandom gives uniform keys and fixed value sizes; Twitter traces
+provide real-world key access patterns, variable value sizes, and
+skewed distributions that exercise LSM compaction in ways fillrandom
+cannot.
+
+In scope:
+- **Write-only replay** for loading experiments (Put path).
+- Preserve trace order and original key/value sizes.
+- Independent of any specific cluster — trace file is a CLI argument.
+- Both baseline (real compaction via `twitterload`) and vcomp
+  (`fillvirtual --twitter_trace_file=...`) paths.
+
+Out of scope (load phase):
+- Timing-accurate replay (no fast-forward, no inter-op sleeps).
+- Read/Delete replay during loading (the format reserves op bytes for
+  a future run-phase benchmark).
+- Multi-threaded replay.
+
+### 7.2 Component layout
+
+| Component | Path | Language | Role |
+|---|---|---|---|
+| Converter | `vcomp/tools/twitter_trace_convert.py` | Python 3 | Twitter CSV → compact binary |
+| Prefix analyzer | `vcomp/tools/analyze_trace_prefix.py` | Python 3 | Validate Option D applicability (§7.8) |
+| Baseline benchmark | `vcomp/tools/db_bench_tool.cc::WriteFromTwitterTrace` | C++ | Replay binary trace through DB::Write |
+| vcomp benchmark | `vcomp/tools/db_bench_tool.cc::FillVirtual` (trace branch) | C++ | Replay binary trace through virtual L0 register |
+
+### 7.3 Binary trace format
+
+All integers little-endian. No padding, no alignment.
+
+**File header (fixed 40 bytes)**
+
+| Offset | Size | Field | Value |
+|---|---|---|---|
+| 0 | 8 | magic | ASCII `"VCMPTRC1"` |
+| 8 | 4 | version | `u32` = 1 |
+| 12 | 4 | reserved | `u32` = 0 |
+| 16 | 8 | total_puts | `u64` (count of Put records in file) |
+| 24 | 8 | total_kv_bytes | `u64` (sum of key_len + value_size over Puts) |
+| 32 | 4 | key_len_fixed | `u32` (Put key length if all match; 0 = variable) |
+| 36 | 4 | padding | `u32` = 0 |
+
+`total_puts` / `total_kv_bytes` / `key_len_fixed` are computed by the
+converter in a single streaming pass and patched into the header before
+file close. They let the load-time reader skip the otherwise expensive
+pre-scan needed to set the registry's `avg_entry_size` and `key_size`.
+
+**Record (variable length)**
+
+| Size | Field |
+|---|---|
+| 1 byte | `op` — see table below |
+| 4 bytes | `key_len` (u32) |
+| `key_len` | `key` bytes (raw, as-anonymized in trace) |
+| 4 bytes | `value_size` (u32) |
+
+No trailing length, no per-record checksum. Reader detects EOF.
+
+**Op byte values**
+
+| Value | Name | Used in load phase? |
+|---|---|---|
+| 1 | Put | yes |
+| 2 | Get | reserved for run phase |
+| 3 | Delete | reserved |
+
+Reader rejects any other value.
+
+Design properties: compact (~10 bytes overhead + key length per
+record), streaming (single pass, no backpatching), extensible (op
+byte lets us add Get/Delete later without format break), simple
+parser (both Python and C++ in ~20 lines).
+
+### 7.4 CSV → binary mapping
+
+Input CSV schema (from `cache-trace/README.md`):
+```
+timestamp, anonymized_key, key_size, value_size, client_id, operation, TTL
+```
+
+| Twitter op | Action | Emitted op |
+|---|---|---|
+| `set`, `add`, `replace`, `cas` | write key with value_size | Put (1) |
+| `get`, `gets` | skip by default; emit op=2 with `--include-reads` | Get (2) for run phase |
+| `delete` | skip by default; emit op=3 with `--include-deletes` | Delete (3) |
+| `append`, `prepend`, `incr`, `decr` | skip | — |
+
+Key bytes = the anonymized key string from column 2, UTF-8 encoded,
+truncated/padded to match column 3 (`key_size`) if they differ.
+`value_size` is copied from column 4 verbatim, unless
+`--value-size-scale` or `--value-size-clip` is set. Timestamp and
+TTL are currently ignored.
+
+### 7.5 Converter CLI
+
+```
+vcomp/tools/twitter_trace_convert.py INPUT_CSV OUTPUT_BIN [flags]
+```
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--max-ops N` | 0 (unlimited) | Stop after N emitted records |
+| `--sample N` | 0 (off) | Keep 1 of every N qualifying ops |
+| `--include-reads` | off | Also emit Get records for `get`/`gets` |
+| `--include-deletes` | off | Also emit Delete for `delete` |
+| `--value-size-scale F` | 1.0 | Multiply every value_size by F |
+| `--value-size-clip N` | 0 (off) | Cap value_size at N bytes |
+| `--min-key-len N` | 0 | Drop records whose key is shorter than N |
+| `--progress` | off | Print progress every 1M input lines |
+
+Use `-` as INPUT_CSV for stdin streaming:
+```
+zstd -dc cluster12.sort.zst | twitter_trace_convert.py - out.vcomptrace
+```
+
+Writes a one-line summary to stderr at the end: emitted record count,
+op breakdown, key/value size stats (min/median/max).
+
+### 7.6 db_bench integration — baseline path (`twitterload`)
+
+Benchmark name: **`twitterload`**.
+
+**Design principle: mirror fillrandom exactly.**
+`Benchmark::WriteFromTwitterTrace` is a stripped-down copy of
+`Benchmark::DoWrite` (which backs fillrandom). All branches that
+fillrandom does not use are removed.
+
+Preserved verbatim from `DoWrite`:
+- `RandomGenerator gen` — same value pool, same dummy value
+  generation logic as fillrandom
+- `WriteBatch` construction
+- `write_options_`, `DB::Write` call path
+- `bytes` accounting, `thread->stats.FinishedOps`, progress reporting
+
+Replaced (the only two hooks):
+
+| `DoWrite` step | `WriteFromTwitterTrace` replacement |
+|---|---|
+| `key_gens[0]->Next()` + `GenerateKeyFromInt(...)` | Read next record from trace, set `Slice key` to raw key bytes |
+| `gen.Generate(value_size_)` | `gen.Generate(record.value_size)` |
+
+Consequence: any LSM tree-shape difference between `fillrandom` and
+`twitterload` is attributable only to input key/value distribution,
+never to benchmark machinery divergence.
+
+**Flags**:
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--twitter_trace_file=<path>` | (required) | Path to binary trace file |
+| `--twitter_trace_max_ops=N` | 0 (unlimited) | Stop after N records |
+
+**Out of scope** at this benchmark: multi-threaded replay
+(`-threads=1` only), Get/Delete replay (rejected at op-byte check),
+BlobDB (asserted off).
+
+### 7.7 db_bench integration — vcomp path (`fillvirtual --twitter_trace_file=...`)
+
+For vcomp, we **extend the existing `fillvirtual` benchmark** (which
+generates uint64 keys via Random64) to optionally read keys from a
+trace file. The Phase-1 algorithm is otherwise identical:
+
+```
+for each trace record (Put only):
+    key_uint64 = BE_uint64(key_bytes[:8])         # PLR domain
+    memtable_buf_uint64.push(key_uint64)
+    raw_keys.push(key_bytes)                      # parallel array
+    accumulated_bytes += key_len + value_size
+
+    when accumulated_bytes >= memtable_flush_size MB:
+        radix sort memtable_buf_uint64 (raw_keys ride along on permutation)
+        std::unique on uint64 → drop matching raw_keys
+        plr = GreedyPLRFit(memtable_buf_uint64, plr_error_bound)
+        vsst.plr_model     = plr
+        vsst.key_min       = memtable_buf_uint64.front()        # uint64
+        vsst.key_max       = memtable_buf_uint64.back()         # uint64
+        vsst.key_min_bytes = raw_keys.front()                   # 44 B raw
+        vsst.key_max_bytes = raw_keys.back()                    # 44 B raw
+        RegisterVirtualL0File(vsst)
+```
+
+The branching point: if `--twitter_trace_file` is non-empty,
+`FillVirtual` opens the trace and replaces the synthetic key loop with
+a trace read loop. Phase 1 and virtual compaction still operate on
+metadata, but the trace path also appends raw key/value records to
+per-flush source-run logs. Final materialization partitions those logs
+by final `VirtualSST` lineage and range, then writes real SSTs with the
+original raw keys.
+
+The reason for keeping both `key_min/max` (uint64) and
+`key_min_bytes/max_bytes` (raw): PLR predict/inverse stays in uint64
+domain (no perf regression — §7.8), but RocksDB's
+`VersionEdit::AddFile` requires full byte-string smallest/largest_key
+for SST overlap checks at L1+. The two representations are encoded
+from the same trace key.
+
+`load_twitter.sh` dispatches MODE=baseline to `twitterload` and
+MODE=vcomp to `fillvirtual --twitter_trace_file=...` — mirroring
+how `load.sh` dispatches to `fillrandom` vs `fillvirtual` for the
+synthetic-key path.
+
+### 7.8 Design decision: PLR key encoding (Option D)
+
+vcomp's PLR engine (§2) operates on `uint64`. fillrandom feeds it via
+`GenerateKeyFromInt`: 8 B big-endian uint64 + (`key_size`-8) B '0'
+padding. PLR predict order ↔ byte-comparator order match exactly
+because the encoding is monotonic in the uint64 domain.
+
+For Twitter trace keys (raw byte strings, 44 B in cluster012), we
+chose **Option D**: take the first 8 B of the trace key, interpret as
+big-endian uint64, feed to PLR. The full raw key bytes are stored
+separately in `VirtualSST` for `smallest_key`/`largest_key` bounds
+passed to RocksDB.
+
+#### Why this works
+
+Option D preserves byte-comparator order iff distinct keys differ in
+their first 8 bytes. RocksDB's default `BytewiseComparator` compares
+byte by byte; if all keys in a memtable batch have distinct prefix8,
+then `sort(prefix8 BE uint64)` produces the same order as
+`sort(full_bytes)`. PLR resolution is then identical to fillrandom's.
+
+#### Validation procedure
+
+Run before adding a new cluster:
+
+```
+python3 vcomp/tools/analyze_trace_prefix.py <trace.vcomptrace> <sample_n>
+```
+
+Reports unique full keys, unique prefix8, and number of prefix8
+buckets containing multiple distinct full keys.
+
+**Threshold**: prefix8-collision rate ≤ 1% relative to unique full
+keys. Above this, Option D loses PLR resolution → tree-shape parity
+breaks.
+
+cluster012 (1M sample, 2026-05-16):
+- Unique full keys: 985,854 / 1,000,000 (98.59%)
+- Unique prefix8:   985,854 / 1,000,000 (98.59%)
+- prefix8 buckets with >1 distinct full key: **0**
+
+Keys are 44 B base64-encoded hashes — first 8 B is effectively uniform
+random over the 64-symbol alphabet, so collisions are extremely rare
+in practice.
+
+#### Alternatives considered and rejected
+
+- **Option A** (first 8 B BE uint64, no raw-bytes storage in
+  VirtualSST): same PLR fidelity as D but breaks SST overlap checks at
+  L1+ because RocksDB needs full byte-key bounds.
+- **Option B** (byte-string PLR throughout `plr_model.h` /
+  `virtual_sst.h`): true generalization but ~3–5× slowdown in sort,
+  dedup, predict; ~9× memory traffic (memtable_buf no longer fits in
+  L2 cache); and regresses fillrandom because that path would also
+  have to convert uint64 → byte string before PLR fit. Quantitative
+  estimate at 250 GB load: vcomp could grow from ~500 s to ~1000 s,
+  eliminating vcomp's loading advantage.
+- **Option C** (hash → uint64): destroys sort order, violates RocksDB
+  SST overlap invariants. Rejected outright.
+
+#### When Option D will fail
+
+Patterns expected to break the prefix8 threshold:
+- Keys with short common prefixes (e.g., `user_12345`, `session_xyz`)
+- Monotonically increasing IDs (low entropy in first 8 B)
+- Schema-prefixed keys (`schema:tenant:row:...`)
+
+If validation fails (>1% prefix8 collision):
+1. **D′** — pick a different 8 B window (skip the common prefix).
+   Requires a configurable offset and verification on the new window.
+2. **B** — byte-string PLR; heavy refactor with fillrandom regression.
+3. Reject the cluster.
+
+### 7.9 Cluster selection reference
+
+From `cache-trace/stat/2020Mar.md` (Twitter's published per-cluster
+characterization):
+
+| Cluster | Operation mix | Key size | Zipf α | One-hit ratio | Verdict |
+|---|---|---|---|---|---|
+| **cluster12** | set:0.80 get:0.20 | 44 B | 0.30 | 81.4% | **primary** — write-heavy, near-uniform; Option D verified |
+| cluster17 | get:0.99 | 19 B | 2.11 | 38.9% | skip for write experiments |
+| cluster19 | get:0.75 set:0.25 | 42 B | 0.74 | 7.5% | future hot-key stress test |
+| cluster31, 32 | set:0.94 get:0.06 | 41 B | 0.00 | 94.1% | future write-heavy candidates |
+| cluster37 | set:0.37 get:0.63 | 72 B | 0.43 | 14.9% | future read-write candidate |
+
+Official write-heavy candidates: cluster12, 15, 31, 37, 38, 39.
+
+Full traces (`clusterN.0.zst`, `clusterN.sort.zst`) downloadable from
+CMU PDL:
+`https://ftp.pdl.cmu.edu/pub/datasets/twemcacheWorkload/open_source/`.
+
+To switch clusters: convert with `twitter_trace_convert.py`, **then run
+prefix8 validation per §7.8**, then point `--twitter_trace_file` at
+the new output.
+
+### 7.10 Implementation checklist
+
+**Phase 0 — Baseline path (write-only load) — DONE**:
+- [x] Converter `twitter_trace_convert.py` + binary format `VCMPTRC1` v1
+- [x] `twitterload` benchmark (DB::Write path)
+- [x] `eval-vcomp/load_twitter.sh` wrapper
+- [x] cluster012 baseline DBs: 10M (11 GB), 100M (104 GB), 500M (515 GB)
+      under `twitter_dbs/`
+
+**Phase 1 — vcomp path**:
+- [x] `analyze_trace_prefix.py` in `vcomp/tools/`
+- [x] cluster012 prefix8 uniqueness validated (2026-05-16, §7.8)
+- [x] Extend `FillVirtual` with `--twitter_trace_file` branch (§7.7)
+- [x] Extend `VirtualSST` to carry raw `key_min_bytes`/`key_max_bytes`
+- [x] Extend `load_twitter.sh` to dispatch MODE=vcomp to `fillvirtual`
+- [x] Baseline ↔ vcomp tree-shape sanity diff on cluster012
+      (10M/100M/500M single runs; see
+      [../eval-vcomp/RESULTS.md](../eval-vcomp/RESULTS.md))
+
+**Phase 2 — exact KV materialization + run phase**:
+- [x] Preserve raw key/value records in append-only per-flush source-run logs
+- [x] Propagate `source_run_ids` through virtual compaction
+- [x] Parallel materialization: partition source logs by final VSST lineage,
+      sort/dedup per partition, write raw-key SSTs
+- [x] Re-convert cluster012 with `--include-reads`
+- [x] `twitterrun` raw-key Get replay on loaded DBs
+- [x] Baseline ↔ vcomp found-key parity on 1M and 10M cluster012 tests
+      (see [../eval-vcomp/RESULTS.md](../eval-vcomp/RESULTS.md))
+
+---
+
+## 8. Deferred TODOs
 
 The split logic implements 2 of the 4 cut conditions in baseline
 RocksDB's `CompactionOutputs::ShouldStopBefore`. The remaining two are
@@ -1239,6 +1577,124 @@ clearly in the direction we suspected.
 - Fresh baseline 30×30 readrandom pending finish of the 4/15 reload
   batch.
 
+## 2026-04-15 — Twitter trace porting (Phase 0 done)
+
+Parallel track to the readrandom work above. The full design now
+lives in §7; this entry is the chronological narrative of how Phase 0
+came together.
+
+### Phase 0 spec drafted
+Initial spec written. Binary format defined (`VCMPTRC1` v1, op byte +
+key_len + key + value_size). Converter CLI and db_bench flags
+specified. cluster012 chosen as primary target based on sample
+analysis: 98.6% unique write keys, fixed 44B keys, high-variance
+value sizes. Decisions: op byte included in format despite Phase 0
+being Put-only, for forward compatibility; values generated C++-side
+via existing `RandomGenerator` (fillrandom-consistent), not pre-baked
+into the trace file; no timing replay, no multi-thread replay in
+Phase 0.
+
+### Converter implemented and verified
+`vcomp/tools/twitter_trace_convert.py` created per §7.3–§7.5.
+Dry-run on `cache-trace/samples/2020Mar/cluster012` (1M input lines):
+emitted 801,203 Put records, key_size fixed 44B, value_size min=6 /
+median=6 / mean=1051.2 / max=312480. Binary output validated:
+`VCMPTRC1` header + 801,203 records, file size 42,463,775 bytes =
+`16 + 801203*53` exactly as predicted.
+
+### Benchmark renamed to `twitterload`, design locked to fillrandom parity
+Originally drafted as `twittertrace`; renamed to `twitterload` (aligns
+with "loading-specialized DB" framing). §7.6 specifies the design
+principle: `WriteFromTwitterTrace` is a copy of `DoWrite` with all
+non-fillrandom branches stripped, and exactly two hooks replaced (key
+source, value_size source). `RandomGenerator` preserved verbatim.
+Rationale: guarantees that any baseline-vs-vcomp tree shape
+difference under twitterload is attributable only to input
+distribution, not benchmark machinery.
+
+### `twitterload` benchmark implemented and smoke-tested
+Added `DEFINE_string(twitter_trace_file, ...)` and
+`DEFINE_int64(twitter_trace_max_ops, ...)`. Registered
+`"twitterload"` in the dispatch switch with `fresh_db = true`.
+Implemented `Benchmark::WriteFromTwitterTrace`: header verification,
+single-DB / single-CF / no-blob-db guards, reusable key buffer,
+batch-by-`entries_per_batch_` loop, `gen.Generate(value_size)` from
+trace, standard `DB::Write` + `FinishedOps` path. Rejects non-Put ops
+and out-of-bound value sizes with actionable errors. Build: `make
+static_lib db_bench -j` (gcc-11). Smoke test on 10K records: 229.5
+MB/s, 0 malformed.
+
+### load_twitter.sh + stdin support + RG bound fix + sample E2E
+Added `eval-vcomp/load_twitter.sh` mirroring every db_bench flag of
+`load.sh`. Differences: benchmarks chain uses `twitterload`,
+`--num`=`MAX_OPS`, `--value_size`=`RG_VALUE_SIZE` (RandomGenerator
+data_ buffer bound, not per-record), `--key_size` cosmetic.
+Converter: accept `-` as stdin (`zstd -dc file.zst | convert.py -
+out.vcomptrace`). **Bugfix** in `WriteFromTwitterTrace` value-size
+bound check: the original check compared against
+`FLAGS_value_size_max`, but `RandomGenerator` sizes its internal
+`data_` to `max(1 MiB, effective_max_size)` (where
+`effective_max_size` follows the kFixed/kUniform/kNormal rule). The
+original check was too permissive and would buffer-overrun in release
+builds (the `assert` inside `Generate` is compiled out under NDEBUG).
+Fix: compute the actual bound correctly, error out early with a
+message telling the user to pass `--value_size=N`. End-to-end on
+801K-record sample: 558.9 MB/s, 11s wall, DB 845 MB, tree L0=0 /
+L1=4@183 MB / L2=8@662 MB / L3+ empty.
+
+### Full cluster12 download + Stage 1 (10M) + Stage 2 (100M) baselines
+Downloaded `cache-trace/open_source/cluster12.sort.zst` from CMU PDL
+(79 GiB compressed, ~90 min @ 14 MB/s). Confirmed: the `.sort` suffix
+means timestamp-sorted (not key-sorted) — first record matches the
+sample file exactly. Keys are 44 B base64-like anonymized strings.
+
+Stage 1 (10M records): 506 MB binary trace, 34s conversion. Run
+`baseline_tl_cluster012_10M_260415_1516_stage1`: 445K ops/s / 454
+MB/s / 22.5s, full chain 40s. DB 11 GB, tree L0=0 / L1=4@235 MB /
+L2=24@2546 MB / L3=130@7506 MB.
+
+Stage 2 (100M records): 5m53s conversion, 5.0 GB binary trace. Run
+`baseline_tl_cluster012_100M_260415_1523_stage2`: 216K ops/s / 228
+MB/s (compaction backpressure halved throughput vs stage 1), full
+chain 490s. DB 104 GB, tree extends to L4.
+
+Input ratios: Twitter CSV ≈ 12.6 input lines per emitted Put (≈79.7%
+write fraction). Binary trace ≈ 53 B per 44 B-key record.
+
+### Stage 3 scoped to 500M records (disk constraint)
+Initial plan had Stage 3 = full cluster12 trace. After Stage 2 showed
+1.04 GB-per-1M-records DB growth, projected full-trace DB was ~3 TB
+against 1.3 TB free on `/`. Converting the full trace to binary would
+also produce ~200 GB. Killed the in-progress full conversion (which
+had disowned itself twice — bash `&` vs harness `run_in_background`
+race — leaving two concurrent writers on the same output, also
+fixed). Scoped Stage 3 = **500M records**; expected ~26.5 GB binary
+trace, ~520 GB DB.
+
+### Stage 3 (500M baseline) completed
+Conversion ~22 min (5.0 GB → 25 GB binary trace). 500M Put records
+from 621.8M CSV lines (80.4% write fraction). Run
+`baseline_tl_cluster012_500M_260415_1602_stage3`: 133,533 ops/s /
+139.9 MB/s / 3744s, full chain 3776s (63 min). DB 515 GB.
+
+Tree shape: L0=0 / L1=3@189 MB / L2=47@2502 MB / L3=447@25600 MB /
+L4=4397@255951 MB / L5=4066@242470 MB / L6=0. First stage to reach
+L5. Total 8960 files / 515 GB live.
+
+Throughput trend: 454 → 228 → 140 MB/s. Drop dominated by compaction
+backpressure as tree deepens; Stage 2 final W-Amp 5.6.
+
+Value-size cap: max observed 316,612 B, under 1 MiB RandomGenerator
+bound → `RG_VALUE_SIZE=2097152` default safe. Disk after Stage 3:
+2.1 TB of 3.5 TB used.
+
+### Open at the end of this round
+- Tree-shape comparison `twitterload` vs `fillrandom` at equivalent
+  size.
+- Baseline vs vcomp tree-shape diff on cluster012 (project goal).
+- vcomp path for trace input (the only Phase 0 path is the
+  baseline/twitterload one going through `DB::Write`).
+
 ## 2026-05-11 — Tree-shape root cause: intra-L0 absence in vcomp
 
 ### Goal
@@ -1597,3 +2053,126 @@ Predicts vcomp_new will degrade to ~141 µs/block if remeasured in a
 month (matching aged-baseline today). Untested; would confirm
 "fresh-write" effect is purely a function of time-on-disk, not a
 vcomp property.
+
+## 2026-05-16 — Twitter Phase 1 design + Option D selection
+
+Reopened the Twitter trace work after closing the fillrandom
+tree-shape parity gap (2026-05-12). Realised the existing Phase 0
+hybrid path is not equivalent to vcomp's `fillvirtual` fast path: it
+goes through `DB::Write` → memtable → flush hook, paying the memtable
+insertion cost even in vcomp mode. Designed the proper vcomp path
+(§7.7): extend `fillvirtual` with a `--twitter_trace_file` branch
+that bypasses memtable just like the synthetic-key path does.
+
+### PLR key encoding: chose Option D
+
+vcomp's PLR engine is uint64-domain; trace keys are byte strings.
+Three candidate encodings were compared (§7.8):
+
+- **B** (byte-string PLR refactor): ~3–5× sort/predict slowdown, ~9×
+  memory traffic (memtable_buf no longer fits in L2), and regresses
+  fillrandom. Quantitative estimate at 250 GB: vcomp ~500 s → ~1000 s,
+  eliminating vcomp's loading advantage.
+- **C** (hash → uint64): destroys sort order, violates RocksDB SST
+  invariants.
+- **D** (first 8 B BE uint64 + raw bytes parallel): preserves
+  byte-comparator order iff distinct keys differ in their first 8
+  bytes. PLR resolution same as fillrandom's when that holds.
+
+Chose D. Verified on cluster012 (1M sample from
+`cluster012_10M.vcomptrace`): 985,854 unique full keys, 985,854
+unique prefix8, **0 buckets with prefix8 collision**. Keys are 44 B
+base64-encoded hashes — first 8 B is effectively uniform random,
+so collisions are vanishingly rare.
+
+Risk: future clusters with common prefixes (`user_`, `session_`) or
+monotonic IDs will fail the prefix8 threshold. **Validation
+procedure is now mandatory before adding any new cluster** — see
+§7.8 and `vcomp/tools/analyze_trace_prefix.py`.
+
+### Doc consolidation
+Merged the standalone `vcomp/TWITTER_TRACE_REPLAY.md` (Phase 0 spec)
+into `vcomp/README.md` §7. The standalone file is removed. Going
+forward, all vcomp design (PLR + Twitter integration) lives in one
+document.
+
+### Completed next (Phase 1 implementation)
+Implemented the real vcomp trace path after the 2026-05-16 design:
+`FillVirtual` now treats `--twitter_trace_file` as an alternate key
+source, reads the 40 B `VCMPTRC1` header for `total_puts`,
+`total_kv_bytes`, and fixed key length, then feeds prefix8 BE uint64
+keys through the existing PLR pipeline. `VirtualSST` carries
+`key_min_bytes` / `key_max_bytes` for trace L0 `AddFile` bounds while
+keeping uint64 PLR internals unchanged.
+
+`eval-vcomp/load_twitter.sh` now dispatches `MODE=baseline` to
+`twitterload` and `MODE=vcomp` to
+`fillvirtual --twitter_trace_file=... --use_virtual_compaction=true`.
+
+Single-run cluster012 sanity measurements were collected for 10M, 100M,
+and 500M Put records. Load speedups were 5.0x, 14.8x, and 24.2x
+respectively; final tree sizes matched within 0.4%, and 500M file count
+matched within 4.0%. The detailed table is in
+[../eval-vcomp/RESULTS.md](../eval-vcomp/RESULTS.md).
+
+## 2026-05-25 — Exact KV materialization for Twitter traces
+
+Branch: `vcomp-w/kv`.
+
+The original trace vcomp path only preserved metadata shape. That cannot
+reconstruct exact raw keys at materialization time without retaining a real
+source of the input key set. The current implementation keeps Phase 1 and
+background virtual compaction metadata-only, then materializes exact KV from
+the append-only trace source in Phase 2.
+
+### Design
+
+- L0 virtual SSTs carry `source_run_ids`; virtual compaction unions lineage
+  into output virtual SSTs.
+- Phase 2 re-scans the trace source, routes each raw key plus value offset to
+  the final virtual range for its source run, deduplicates by newest sequence
+  number, and writes real SSTs once.
+- Routing partitions are in memory; no per-vSST log scan is repeated.
+- Records that fall outside final virtual ranges are written through a small
+  L0 patch path instead of expanding same-level SST bounds.
+- Output splitting uses conservative naive entry counts. This prevents PLR
+  dedup underestimation from creating oversized materialized SSTs that hurt
+  index/filter direct-read cost.
+
+### 10M cluster012 result
+
+`cluster012_100M.vcomptrace`, first 10M Put records:
+
+| Mode | load elapsed | core time | final files | DB size |
+|------|--------------|-----------|-------------|---------|
+| baseline | 40 s | `twitterload` 22.45 s | 158 | 11 GB |
+| vcomp-w/kv | 28 s | `fillvirtual` 18.16 s | 167 | 11 GB |
+
+At 100M Put records, the same exact-KV path also passes:
+baseline `490 s` wrapper / `463.44 s` core, vcomp-w/kv `337 s` wrapper /
+`232.31 s` core, both final DBs `104 GB`.
+For 100M vcomp, the non-primary remainder is `104.69 s`
+(`337 - 232.31`), covering post-primary benchmarks plus DB teardown.
+
+Run-phase validation uses raw trace keys:
+`twitterrun_encode_for_vcomp=false`, `twitterrun_replay_writes=false`.
+For the first 5M records of `cluster012_100M.vcomptrace.with_reads`,
+baseline and vcomp both produce `15,045 / 1,006,713` misses. The binary
+miss-key logs compare equal with `cmp`.
+
+The 100M DB validates the same way: both baseline and vcomp produce
+`15,040 / 1,006,713` misses, and the miss-key logs compare equal.
+
+`run.sh`-style read settings (`cache_size=1`,
+`cache_index_and_filter_blocks=true`, direct reads):
+
+| Mode | read ops/s | elapsed | filter miss/hit | index miss/hit |
+|------|------------|---------|-----------------|----------------|
+| baseline | 2,402 | 418.98 s | 1,553,663 / 355 | 996,013 / 1,133 |
+| vcomp-w/kv | 3,524 | 285.67 s | 1,011,590 / 105 | 991,801 / 38 |
+
+100M read under the same settings: baseline `1,793 ops/s`, vcomp-w/kv
+`2,621 ops/s`.
+
+Detailed logs and counters are in
+[../eval-vcomp/RESULTS.md §5.3](../eval-vcomp/RESULTS.md#53-exact-kv-materialization-sanity-2026-05-25).

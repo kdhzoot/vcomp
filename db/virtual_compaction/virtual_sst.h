@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "db/virtual_compaction/plr_model.h"
@@ -20,6 +21,19 @@ struct VirtualSST {
   uint64_t num_entries;
   int level;
   uint64_t size_bytes;
+
+  // Full byte bounds for byte-string sources (Twitter trace). L0 virtual
+  // SSTs keep exact raw key bounds. BG-compaction outputs keep byte-range
+  // envelopes derived from their prefix8 PLR bounds, so Phase 2 can route
+  // original keys by byte comparator while PLR shape remains uint64-based.
+  // When empty (fillrandom path), callers derive bounds with EncodeUserKey.
+  std::string key_min_bytes;
+  std::string key_max_bytes;
+
+  // Debug/materialization lineage. Phase 2 routes by final full-byte ranges;
+  // source_run_ids are retained to describe which input runs contributed to
+  // a virtual SST, not as the primary routing key.
+  std::vector<uint64_t> source_run_ids;
 
   // Estimate size from entry count and average entry size.
   static uint64_t EstimateSize(uint64_t entries, uint64_t avg_entry_size) {

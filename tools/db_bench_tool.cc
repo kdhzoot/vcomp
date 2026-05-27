@@ -32,12 +32,15 @@
 #include <condition_variable>
 #include <cstddef>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <queue>
+#include <set>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 #include "db/column_family.h"
 #include "db/db_impl/db_impl.h"
@@ -120,6 +123,7 @@ DEFINE_string(
     "fillsync,"
     "fillrandom,"
     "twitterload,"
+    "twitterrun,"
     "filluniquerandomdeterministic,"
     "overwrite,"
     "readrandom,"
@@ -181,6 +185,10 @@ DEFINE_string(
     "\ttwitterload   -- replay a vcomp binary trace (see "
     "--twitter_trace_file) via the same write path as fillrandom, using "
     "keys and value sizes from the trace\n"
+    "\ttwitterrun    -- run-phase replay of a vcomp binary trace against "
+    "an already-loaded DB; executes Gets (and optionally Puts with "
+    "--twitterrun_replay_writes). Use raw keys by default; "
+    "--twitterrun_encode_for_vcomp is only for legacy encoded-key DBs\n"
     "\tfilluniquerandomdeterministic       -- write N values in a random"
     " key order and keep the shape of the LSM tree\n"
     "\toverwrite     -- overwrite N values in random key order in "
@@ -904,11 +912,27 @@ DEFINE_string(twitter_trace_file, "",
               "Path to a binary trace produced by "
               "vcomp/tools/twitter_trace_convert.py. Required when running "
               "--benchmarks=twitterload. Format spec: "
-              "vcomp/TWITTER_TRACE_REPLAY.md.");
+              "vcomp/README.md §7 (Twitter trace replay).");
 
 DEFINE_int64(twitter_trace_max_ops, 0,
              "Stop twitterload after N records (0 = read whole trace file). "
              "This is independent of --num.");
+
+DEFINE_bool(twitterrun_encode_for_vcomp, false,
+            "When true, twitterrun encodes each trace key as "
+            "[first 8 bytes (Option D prefix8) + '0' padding to key_len] "
+            "before calling Get. This is a legacy mode for old vcomp DBs "
+            "that materialized encoded keys. Current vcomp-w/kv materializes "
+            "raw trace keys, so leave this false for both baseline and vcomp "
+            "DBs.");
+DEFINE_bool(twitterrun_replay_writes, false,
+            "When true, twitterrun applies Puts from the trace alongside "
+            "Gets (HotRAP-style replay). When false (default), Puts are "
+            "skipped — pure read workload against the loaded DB state.");
+DEFINE_string(twitterrun_miss_log_file, "",
+              "Optional path where twitterrun writes missing lookup keys as "
+              "[u32 key_len][key bytes] records. Intended for baseline/vcomp "
+              "found-key parity debugging.");
 
 // Virtual compaction flags
 DEFINE_bool(use_virtual_compaction, false,
@@ -918,6 +942,16 @@ DEFINE_double(plr_error_bound, 8.0,
               "PLR error bound (delta) for virtual compaction.");
 DEFINE_int32(memtable_flush_size, 64,
              "Memtable size in MB for virtual compaction flush trigger.");
+DEFINE_int32(vcomp_trace_key_partitions, 100,
+             "fillvirtual trace mode: number of prefix8 key-range shard logs "
+             "used for with-KV materialization. This bounds Phase 2 sort size.");
+DEFINE_int32(vcomp_trace_shard_write_buffer_mb, 4,
+             "fillvirtual trace mode: per-shard user-space write buffer size "
+             "in MB. Records are batched into sequential shard writes.");
+DEFINE_bool(vcomp_trace_shard_direct_io, false,
+            "fillvirtual trace mode: write full aligned trace shard buffer "
+            "chunks with O_DIRECT. The final unaligned tail is appended with "
+            "normal pwrite to avoid padding records.");
 
 DEFINE_string(truth_db, "/dev/shm/truth_db/dbbench",
               "Truth key/values used when using verify");
@@ -2104,6 +2138,17 @@ class RandomGenerator {
       pos_ += len;
       return Slice(data_.data() + pos_ - len, len);
     }
+  }
+
+  Slice Generate(unsigned int len, uint32_t* offset) {
+    Slice s = Generate(len);
+    *offset = static_cast<uint32_t>(s.data() - data_.data());
+    return s;
+  }
+
+  Slice SliceAt(uint32_t offset, unsigned int len) const {
+    assert(static_cast<uint64_t>(offset) + len <= data_.size());
+    return Slice(data_.data() + offset, len);
   }
 
   Slice Generate() {
@@ -3723,6 +3768,8 @@ class Benchmark {
       } else if (name == "twitterload") {
         fresh_db = true;
         method = &Benchmark::WriteFromTwitterTrace;
+      } else if (name == "twitterrun") {
+        method = &Benchmark::ReadFromTwitterTrace;
       } else if (name == "filluniquerandom" ||
                  name == "fillanddeleteuniquerandom") {
         fresh_db = true;
@@ -5289,25 +5336,113 @@ class Benchmark {
       return;
     }
 
+    // Detect trace mode: --twitter_trace_file overrides Random64 as the
+    // key source. Same Phase 1/2 pipeline; key SOURCE differs.
+    // Spec: vcomp/README.md §7.7 (vcomp twitter integration),
+    //       §7.8 (Option D PLR key encoding).
+    const bool trace_mode = !FLAGS_twitter_trace_file.empty();
+
+    // Open trace + parse 40-byte header. The header carries
+    //   total_puts, total_kv_bytes, key_len_fixed
+    // emitted by twitter_trace_convert.py so we don't need a load-time
+    // pre-scan to compute avg_entry_size. Format spec: vcomp/README.md §7.3.
+    FILE* tf = nullptr;
+    uint64_t trace_total_kv_bytes = 0;
+    int64_t  trace_total_puts = 0;
+    uint32_t trace_key_len_first = 0;  // 0 means variable
+    if (trace_mode) {
+      tf = fopen(FLAGS_twitter_trace_file.c_str(), "rb");
+      if (!tf) {
+        fprintf(stderr, "FillVirtual: failed to open trace %s: %s\n",
+                FLAGS_twitter_trace_file.c_str(), strerror(errno));
+        ErrorExit();
+      }
+      char magic[8];
+      uint32_t version = 0, reserved = 0;
+      uint64_t hdr_total_puts = 0, hdr_total_kv_bytes = 0;
+      uint32_t hdr_key_len_fixed = 0, hdr_padding = 0;
+      if (fread(magic, 1, 8, tf) != 8 ||
+          memcmp(magic, "VCMPTRC1", 8) != 0) {
+        fprintf(stderr, "FillVirtual: bad trace magic in %s\n",
+                FLAGS_twitter_trace_file.c_str());
+        fclose(tf); ErrorExit();
+      }
+      if (fread(&version, sizeof(version), 1, tf) != 1 || version != 1) {
+        fprintf(stderr, "FillVirtual: unsupported trace version %u\n",
+                version);
+        fclose(tf); ErrorExit();
+      }
+      if (fread(&reserved, sizeof(reserved), 1, tf) != 1 ||
+          fread(&hdr_total_puts, sizeof(hdr_total_puts), 1, tf) != 1 ||
+          fread(&hdr_total_kv_bytes, sizeof(hdr_total_kv_bytes), 1, tf) != 1 ||
+          fread(&hdr_key_len_fixed, sizeof(hdr_key_len_fixed), 1, tf) != 1 ||
+          fread(&hdr_padding, sizeof(hdr_padding), 1, tf) != 1) {
+        fprintf(stderr, "FillVirtual: short read on trace header\n");
+        fclose(tf); ErrorExit();
+      }
+      trace_total_puts    = static_cast<int64_t>(hdr_total_puts);
+      trace_total_kv_bytes = hdr_total_kv_bytes;
+      trace_key_len_first  = hdr_key_len_fixed;
+
+      if (trace_total_puts == 0) {
+        fprintf(stderr, "FillVirtual: trace has no Put records\n");
+        fclose(tf); ErrorExit();
+      }
+      if (trace_key_len_first == 0) {
+        fprintf(stderr,
+                "FillVirtual: trace has variable key lengths "
+                "(key_len_fixed=0). Option D currently assumes fixed-length "
+                "keys. See vcomp/README.md §7.8.\n");
+        fclose(tf); ErrorExit();
+      }
+      if (trace_key_len_first < 8) {
+        fprintf(stderr,
+                "FillVirtual: trace key_len=%u < 8; Option D requires "
+                ">=8 byte keys. See vcomp/README.md §7.8.\n",
+                trace_key_len_first);
+        fclose(tf); ErrorExit();
+      }
+      fprintf(stderr,
+              "FillVirtual: trace stats from header — "
+              "%" PRId64 " Puts, avg KV bytes = %.1f, key_len = %u\n",
+              trace_total_puts,
+              static_cast<double>(trace_total_kv_bytes) / trace_total_puts,
+              trace_key_len_first);
+    }
+
     // Configure registry parameters.
-    uint64_t avg_entry_size =
-        static_cast<uint64_t>(key_size_) + static_cast<uint64_t>(value_size);
+    uint32_t reg_key_size = trace_mode
+        ? trace_key_len_first
+        : static_cast<uint32_t>(key_size_);
+    uint64_t avg_entry_size = trace_mode
+        ? (trace_total_kv_bytes / trace_total_puts)
+        : (static_cast<uint64_t>(key_size_) +
+           static_cast<uint64_t>(value_size));
     uint64_t target_sst_size = FLAGS_target_file_size_base > 0
                                    ? FLAGS_target_file_size_base
                                    : 64ULL * 1024 * 1024;
-    registry->SetKeySize(static_cast<uint32_t>(key_size_));
+    registry->SetKeySize(reg_key_size);
     registry->SetAvgEntrySize(avg_entry_size);
     registry->SetTargetSSTSize(target_sst_size);
 
     double plr_error_bound = FLAGS_plr_error_bound;
-    const int64_t num_ops = num_;
-    const uint64_t memtable_capacity =
-        static_cast<uint64_t>(FLAGS_memtable_flush_size) * 1024 * 1024 /
-        avg_entry_size;
+    int64_t num_ops;
+    if (trace_mode) {
+      int64_t cap = FLAGS_twitter_trace_max_ops > 0
+                        ? FLAGS_twitter_trace_max_ops
+                        : trace_total_puts;
+      num_ops = std::min(cap, trace_total_puts);
+    } else {
+      num_ops = num_;
+    }
+    const uint64_t memtable_flush_bytes =
+        static_cast<uint64_t>(FLAGS_memtable_flush_size) * 1024 * 1024;
+    const uint64_t memtable_capacity = memtable_flush_bytes / avg_entry_size;
 
     // ── Phase 1: Generate keys → sort → PLR fit → register as virtual L0 ──
     // Compaction is handled asynchronously by RocksDB's background threads.
-    fprintf(stderr, "FillVirtual: generating %" PRId64 " keys...\n", num_ops);
+    fprintf(stderr, "FillVirtual: generating %" PRId64 " keys%s...\n",
+            num_ops, trace_mode ? " (from trace)" : "");
     auto phase1_start = FLAGS_env->NowMicros();
 
     uint64_t sort_us = 0, flush_us = 0, plr_fit_us = 0;
@@ -5318,8 +5453,278 @@ class Benchmark {
     uint64_t next_epoch = 1;
 
     Random64& rng = thread->rand;
-    std::vector<uint64_t> memtable_buf;
+    std::vector<uint64_t> memtable_buf;       // PLR domain (uint64)
+    std::vector<std::string> memtable_raw;    // trace mode only (raw bytes)
     memtable_buf.reserve(memtable_capacity);
+    if (trace_mode) memtable_raw.reserve(memtable_capacity);
+    uint64_t batch_bytes = 0;  // trace mode: actual bytes in current batch
+
+    // Exact KV preservation for vcomp-w/kv. Each virtual L0 flush owns one
+    // append-only source run log. Virtual compaction stays metadata-only and
+    // propagates source_run_ids; Phase 2 later partitions these logs into the
+    // final virtual SST ranges.
+    const std::string kvlog_dir = FLAGS_db + ".vcomp_kv";
+    const std::string runlog_dir = kvlog_dir + "/runs";
+    const std::string trace_shard_dir = kvlog_dir + "/trace_shards";
+    const size_t trace_partition_count = trace_mode
+        ? static_cast<size_t>(std::max(1, FLAGS_vcomp_trace_key_partitions))
+        : 0;
+    Status dir_s = FLAGS_env->CreateDirIfMissing(kvlog_dir);
+    if (dir_s.ok()) dir_s = FLAGS_env->CreateDirIfMissing(runlog_dir);
+    if (trace_mode && dir_s.ok()) {
+      dir_s = FLAGS_env->CreateDirIfMissing(trace_shard_dir);
+    }
+    if (!dir_s.ok()) {
+      fprintf(stderr, "FillVirtual: failed to create KV log dir: %s\n",
+              dir_s.ToString().c_str());
+      ErrorExit();
+    }
+    auto run_log_path = [&](uint64_t run_id) {
+      return runlog_dir + "/run_" + std::to_string(run_id) + ".kvlog";
+    };
+    auto trace_shard_path = [&](size_t shard_id) {
+      return trace_shard_dir + "/shard_" + std::to_string(shard_id) + ".kvpart";
+    };
+    auto trace_partition_for_key64 = [&](uint64_t key64) {
+      return static_cast<size_t>(
+          (static_cast<__uint128_t>(key64) * trace_partition_count) >> 64);
+    };
+    struct TraceShardRecordHeader {
+      uint64_t seqno;
+      uint64_t key64;
+      uint32_t value_len;
+      uint32_t value_offset;
+      uint32_t key_len;
+    };
+    FILE* current_run_log = nullptr;
+    uint64_t current_source_run_id = 1;
+    uint64_t next_seqno = 1;
+    std::vector<uint64_t> source_run_put_counts;
+    RandomGenerator kv_value_gen;
+    std::vector<FILE*> trace_shard_files(trace_partition_count, nullptr);
+    std::vector<int> trace_shard_fds(trace_partition_count, -1);
+    std::vector<uint64_t> trace_shard_offsets(trace_partition_count, 0);
+    std::vector<void*> trace_shard_aligned_buffers(trace_partition_count,
+                                                   nullptr);
+    std::vector<size_t> trace_shard_aligned_sizes(trace_partition_count, 0);
+    const size_t trace_shard_buffer_bytes = trace_mode
+        ? static_cast<size_t>(
+              std::max(1, FLAGS_vcomp_trace_shard_write_buffer_mb)) *
+              1024 * 1024
+        : 0;
+    constexpr size_t kTraceShardDirectAlign = 4096;
+    const bool trace_shard_direct_io =
+        trace_mode && FLAGS_vcomp_trace_shard_direct_io;
+    std::vector<std::string> trace_shard_buffers(trace_partition_count);
+    if (trace_mode) {
+      for (size_t shard = 0; shard < trace_partition_count; shard++) {
+        std::string path = trace_shard_path(shard);
+#ifdef O_DIRECT
+        if (trace_shard_direct_io) {
+          trace_shard_fds[shard] =
+              open(path.c_str(),
+                   O_CREAT | O_WRONLY | O_TRUNC | O_CLOEXEC | O_DIRECT, 0644);
+          if (trace_shard_fds[shard] < 0) {
+            fprintf(stderr,
+                    "FillVirtual: failed to open direct trace shard %s: %s\n",
+                    path.c_str(), strerror(errno));
+            ErrorExit();
+          }
+          if (posix_memalign(&trace_shard_aligned_buffers[shard],
+                             kTraceShardDirectAlign,
+                             trace_shard_buffer_bytes) != 0) {
+            fprintf(stderr, "FillVirtual: trace shard aligned alloc failed\n");
+            ErrorExit();
+          }
+        } else
+#endif
+        {
+          if (trace_shard_direct_io) {
+            fprintf(stderr, "FillVirtual: O_DIRECT is unavailable\n");
+            ErrorExit();
+          }
+          trace_shard_files[shard] = fopen(path.c_str(), "wb");
+          if (trace_shard_files[shard] == nullptr) {
+            fprintf(stderr, "FillVirtual: failed to open trace shard %s: %s\n",
+                    path.c_str(), strerror(errno));
+            ErrorExit();
+          }
+          setvbuf(trace_shard_files[shard], nullptr, _IONBF, 0);
+        }
+      }
+      fprintf(stderr, "FillVirtual: writing trace KV shards: %zu ranges\n",
+              trace_partition_count);
+      fprintf(stderr, "FillVirtual: trace shard write buffer: %zu MB/shard\n",
+              trace_shard_buffer_bytes / (1024 * 1024));
+      fprintf(stderr, "FillVirtual: trace shard direct I/O: %s\n",
+              trace_shard_direct_io ? "on" : "off");
+    }
+
+    auto open_current_run_log = [&]() {
+      if (current_run_log != nullptr) return;
+      std::string path = run_log_path(current_source_run_id);
+      current_run_log = fopen(path.c_str(), "wb");
+      if (current_run_log == nullptr) {
+        fprintf(stderr, "FillVirtual: failed to open %s: %s\n",
+                path.c_str(), strerror(errno));
+        ErrorExit();
+      }
+    };
+    auto close_current_run_log = [&]() {
+      if (current_run_log != nullptr) {
+        fclose(current_run_log);
+        current_run_log = nullptr;
+      }
+    };
+    auto append_kv_record = [&](const Slice& key, const Slice& value) {
+      open_current_run_log();
+      uint64_t seqno = next_seqno++;
+      uint32_t key_len = static_cast<uint32_t>(key.size());
+      uint32_t value_len = static_cast<uint32_t>(value.size());
+      if (fwrite(&seqno, sizeof(seqno), 1, current_run_log) != 1 ||
+          fwrite(&key_len, sizeof(key_len), 1, current_run_log) != 1 ||
+          fwrite(&value_len, sizeof(value_len), 1, current_run_log) != 1 ||
+          (key_len > 0 &&
+           fwrite(key.data(), 1, key_len, current_run_log) != key_len) ||
+          (value_len > 0 &&
+           fwrite(value.data(), 1, value_len, current_run_log) != value_len)) {
+        fprintf(stderr, "FillVirtual: KV log write failed: %s\n",
+                strerror(errno));
+        ErrorExit();
+      }
+    };
+    auto pwrite_all = [&](int fd, const char* data, size_t len,
+                          uint64_t offset) {
+      size_t written = 0;
+      while (written < len) {
+        ssize_t n = pwrite(fd, data + written, len - written,
+                           static_cast<off_t>(offset + written));
+        if (n < 0) {
+          if (errno == EINTR) continue;
+          return false;
+        }
+        if (n == 0) return false;
+        written += static_cast<size_t>(n);
+      }
+      return true;
+    };
+    auto flush_trace_shard_direct_aligned = [&](size_t shard) {
+      size_t& size = trace_shard_aligned_sizes[shard];
+      size_t write_len =
+          (size / kTraceShardDirectAlign) * kTraceShardDirectAlign;
+      if (write_len == 0) return;
+      int fd = trace_shard_fds[shard];
+      char* buf = static_cast<char*>(trace_shard_aligned_buffers[shard]);
+      if (!pwrite_all(fd, buf, write_len, trace_shard_offsets[shard])) {
+        fprintf(stderr, "FillVirtual: direct trace shard write failed: %s\n",
+                strerror(errno));
+        ErrorExit();
+      }
+      trace_shard_offsets[shard] += write_len;
+      size -= write_len;
+      if (size > 0) {
+        memmove(buf, buf + write_len, size);
+      }
+    };
+    auto flush_trace_shard_buffer = [&](size_t shard) {
+      if (trace_shard_direct_io) {
+        flush_trace_shard_direct_aligned(shard);
+        return;
+      }
+      std::string& buf = trace_shard_buffers[shard];
+      if (buf.empty()) return;
+      FILE* sf = trace_shard_files[shard];
+      if (fwrite(buf.data(), 1, buf.size(), sf) != buf.size()) {
+        fprintf(stderr, "FillVirtual: trace shard batch write failed: %s\n",
+                strerror(errno));
+        ErrorExit();
+      }
+      buf.clear();
+    };
+    auto append_trace_shard_record = [&](uint64_t key64, const char* key_data,
+                                         uint32_t key_len,
+                                         uint32_t value_len,
+                                         uint32_t value_offset) {
+      size_t shard = trace_partition_for_key64(key64);
+      if (shard >= trace_partition_count) shard = trace_partition_count - 1;
+      TraceShardRecordHeader hdr{next_seqno++, key64, value_len,
+                                  value_offset, key_len};
+      if (trace_shard_direct_io) {
+        const size_t record_size = sizeof(hdr) + key_len;
+        if (record_size > trace_shard_buffer_bytes) {
+          fprintf(stderr, "FillVirtual: trace shard record exceeds buffer\n");
+          ErrorExit();
+        }
+        if (trace_shard_aligned_sizes[shard] + record_size >
+            trace_shard_buffer_bytes) {
+          flush_trace_shard_direct_aligned(shard);
+        }
+        char* buf = static_cast<char*>(trace_shard_aligned_buffers[shard]);
+        size_t& size = trace_shard_aligned_sizes[shard];
+        memcpy(buf + size, &hdr, sizeof(hdr));
+        size += sizeof(hdr);
+        if (key_len > 0) {
+          memcpy(buf + size, key_data, key_len);
+          size += key_len;
+        }
+        if (size == trace_shard_buffer_bytes) {
+          flush_trace_shard_direct_aligned(shard);
+        }
+        return;
+      }
+      std::string& buf = trace_shard_buffers[shard];
+      if (buf.capacity() < trace_shard_buffer_bytes) {
+        buf.reserve(trace_shard_buffer_bytes);
+      }
+      buf.append(reinterpret_cast<const char*>(&hdr), sizeof(hdr));
+      if (key_len > 0) {
+        buf.append(key_data, key_len);
+      }
+      if (buf.size() >= trace_shard_buffer_bytes) {
+        flush_trace_shard_buffer(shard);
+      }
+    };
+    auto close_trace_shards = [&]() {
+      for (size_t shard = 0; shard < trace_shard_files.size(); shard++) {
+        if (trace_shard_direct_io) {
+          flush_trace_shard_direct_aligned(shard);
+          int& fd = trace_shard_fds[shard];
+          if (fd >= 0) {
+            close(fd);
+            fd = -1;
+          }
+          size_t tail_size = trace_shard_aligned_sizes[shard];
+          if (tail_size > 0) {
+            std::string path = trace_shard_path(shard);
+            int tail_fd = open(path.c_str(), O_WRONLY | O_CLOEXEC);
+            if (tail_fd < 0 ||
+                !pwrite_all(
+                    tail_fd,
+                    static_cast<const char*>(
+                        trace_shard_aligned_buffers[shard]),
+                    tail_size, trace_shard_offsets[shard])) {
+              fprintf(stderr,
+                      "FillVirtual: trace shard tail write failed: %s\n",
+                      strerror(errno));
+              ErrorExit();
+            }
+            close(tail_fd);
+            trace_shard_offsets[shard] += tail_size;
+            trace_shard_aligned_sizes[shard] = 0;
+          }
+          free(trace_shard_aligned_buffers[shard]);
+          trace_shard_aligned_buffers[shard] = nullptr;
+        } else {
+          flush_trace_shard_buffer(shard);
+          FILE*& sf = trace_shard_files[shard];
+          if (sf != nullptr) {
+            fclose(sf);
+            sf = nullptr;
+          }
+          std::string().swap(trace_shard_buffers[shard]);
+        }
+      }
+    };
 
     // Batch pending L0 files and register them in a single LogAndApply
     // call per register_batch. This reduces MANIFEST writes from N to
@@ -5346,11 +5751,12 @@ class Benchmark {
       pending_count = 0;
     };
 
-    // Radix sort buffer and pass count, computed once based on key range.
+    // Radix sort buffer and pass count for synthetic mode only. Trace mode
+    // uses std::sort with raw_keys carrying along on index permutation.
     std::vector<uint64_t> radix_tmp;
-    radix_tmp.reserve(memtable_capacity);
     int radix_passes = 0;
-    {
+    if (!trace_mode) {
+      radix_tmp.reserve(memtable_capacity);
       uint64_t max_val = static_cast<uint64_t>(FLAGS_num);
       while (max_val > 0) { radix_passes++; max_val >>= 8; }
       if (radix_passes == 0) radix_passes = 1;
@@ -5358,33 +5764,66 @@ class Benchmark {
 
     auto do_flush = [&]() {
       auto t0 = FLAGS_env->NowMicros();
-
-      // Radix sort: 8-bit radix, only the bytes needed to cover [0, FLAGS_num).
       const size_t n = memtable_buf.size();
-      radix_tmp.resize(n);
-      uint64_t* src = memtable_buf.data();
-      uint64_t* dst = radix_tmp.data();
+      if (trace_mode) {
+        source_run_put_counts.push_back(static_cast<uint64_t>(n));
+      }
 
-      for (int pass = 0; pass < radix_passes; pass++) {
-        const int shift = pass * 8;
-        size_t count[256] = {};
-        for (size_t i = 0; i < n; i++)
-          count[(src[i] >> shift) & 0xFF]++;
-        size_t offset[256];
-        offset[0] = 0;
-        for (int b = 1; b < 256; b++)
-          offset[b] = offset[b - 1] + count[b - 1];
-        for (size_t i = 0; i < n; i++)
-          dst[offset[(src[i] >> shift) & 0xFF]++] = src[i];
-        std::swap(src, dst);
+      if (trace_mode) {
+        // Sort by prefix8 uint64 (Option D); permute raw_keys via index.
+        std::vector<uint32_t> idx(n);
+        for (size_t i = 0; i < n; i++) idx[i] = static_cast<uint32_t>(i);
+        std::sort(idx.begin(), idx.end(),
+                  [&](uint32_t a, uint32_t b) {
+                    return memtable_buf[a] < memtable_buf[b];
+                  });
+        std::vector<uint64_t> sorted_buf(n);
+        std::vector<std::string> sorted_raw(n);
+        for (size_t i = 0; i < n; i++) {
+          sorted_buf[i] = memtable_buf[idx[i]];
+          sorted_raw[i] = std::move(memtable_raw[idx[i]]);
+        }
+        memtable_buf.swap(sorted_buf);
+        memtable_raw.swap(sorted_raw);
+        // Dedup: same prefix8 ⇒ same full key (per Option D validation).
+        size_t w = 1;
+        for (size_t r = 1; r < memtable_buf.size(); r++) {
+          if (memtable_buf[r] != memtable_buf[w - 1]) {
+            if (w != r) {
+              memtable_buf[w] = memtable_buf[r];
+              memtable_raw[w] = std::move(memtable_raw[r]);
+            }
+            w++;
+          }
+        }
+        memtable_buf.resize(w);
+        memtable_raw.resize(w);
+      } else {
+        // Synthetic: 8-bit radix sort over the bytes covering [0, FLAGS_num).
+        radix_tmp.resize(n);
+        uint64_t* src = memtable_buf.data();
+        uint64_t* dst = radix_tmp.data();
+        for (int pass = 0; pass < radix_passes; pass++) {
+          const int shift = pass * 8;
+          size_t count[256] = {};
+          for (size_t i = 0; i < n; i++)
+            count[(src[i] >> shift) & 0xFF]++;
+          size_t offset[256];
+          offset[0] = 0;
+          for (int b = 1; b < 256; b++)
+            offset[b] = offset[b - 1] + count[b - 1];
+          for (size_t i = 0; i < n; i++)
+            dst[offset[(src[i] >> shift) & 0xFF]++] = src[i];
+          std::swap(src, dst);
+        }
+        if (src != memtable_buf.data()) {
+          memcpy(memtable_buf.data(), src, n * sizeof(uint64_t));
+        }
+        // Remove intra-batch duplicates (sorted, so duplicates are adjacent).
+        memtable_buf.erase(
+            std::unique(memtable_buf.begin(), memtable_buf.end()),
+            memtable_buf.end());
       }
-      if (src != memtable_buf.data()) {
-        memcpy(memtable_buf.data(), src, n * sizeof(uint64_t));
-      }
-      // Remove intra-batch duplicates (sorted, so duplicates are adjacent).
-      memtable_buf.erase(
-          std::unique(memtable_buf.begin(), memtable_buf.end()),
-          memtable_buf.end());
       auto t1 = FLAGS_env->NowMicros();
 
       PLRModel plr = GreedyPLRFit(memtable_buf, plr_error_bound);
@@ -5396,15 +5835,25 @@ class Benchmark {
       total_keys_after_dedup += memtable_buf.size();
       total_segments += plr.NumSegments();
 
-      // Build VirtualSST.
+      // Build VirtualSST. Trace mode: size_bytes uses actual batch bytes
+      // (scaled by dedup ratio); raw key bounds populated for AddFile.
       VirtualSST vsst;
       vsst.plr_model = std::move(plr);
       vsst.key_min = memtable_buf.front();
       vsst.key_max = memtable_buf.back();
       vsst.num_entries = memtable_buf.size();
       vsst.level = 0;
-      vsst.size_bytes =
-          VirtualSST::EstimateSize(memtable_buf.size(), avg_entry_size);
+      vsst.source_run_ids.push_back(current_source_run_id);
+      if (trace_mode) {
+        vsst.size_bytes = (n > 0)
+            ? batch_bytes * memtable_buf.size() / n
+            : 0;
+        vsst.key_min_bytes = memtable_raw.front();
+        vsst.key_max_bytes = memtable_raw.back();
+      } else {
+        vsst.size_bytes =
+            VirtualSST::EstimateSize(memtable_buf.size(), avg_entry_size);
+      }
 
       auto t3 = FLAGS_env->NowMicros();
       // NOTE: NewFileNumber itself is atomic, but holding db_impl->mutex()
@@ -5422,15 +5871,22 @@ class Benchmark {
       }
       auto t4 = FLAGS_env->NowMicros();
 
-      std::string smallest_key = registry->EncodeUserKey(vsst.key_min);
-      std::string largest_key = registry->EncodeUserKey(vsst.key_max);
+      // Use raw bytes when present (trace mode); fall back to EncodeUserKey
+      // for synthetic mode. See vcomp/README.md §7.8.
+      std::string smallest_key = vsst.key_min_bytes.empty()
+          ? registry->EncodeUserKey(vsst.key_min)
+          : vsst.key_min_bytes;
+      std::string largest_key = vsst.key_max_bytes.empty()
+          ? registry->EncodeUserKey(vsst.key_max)
+          : vsst.key_max_bytes;
+      uint64_t file_size_for_edit = vsst.size_bytes;
       registry->Register(fnum, std::move(vsst));
       auto t5 = FLAGS_env->NowMicros();
 
       InternalKey smallest(Slice(smallest_key), kMaxSequenceNumber, kTypeValue);
       InternalKey largest(Slice(largest_key), 0, kTypeValue);
       pending_edit.AddFile(0 /*level*/, fnum, /*path_id=*/0,
-                   VirtualSST::EstimateSize(memtable_buf.size(), avg_entry_size),
+                   file_size_for_edit,
                    smallest, largest,
                    /*smallest_seqno=*/0, /*largest_seqno=*/0,
                    /*marked_for_compaction=*/false,
@@ -5454,6 +5910,10 @@ class Benchmark {
       pending_count++;
       total_flushes++;
       memtable_buf.clear();
+      if (trace_mode) memtable_raw.clear();
+      batch_bytes = 0;
+      close_current_run_log();
+      current_source_run_id++;
 
       // Flush batch when we hit the register batch size.
       if (pending_count >= register_batch) {
@@ -5461,17 +5921,69 @@ class Benchmark {
       }
     };
 
-    for (int64_t i = 0; i < num_ops; i++) {
-      uint64_t rand_num = rng.Next() % FLAGS_num;
-      memtable_buf.push_back(rand_num);
+    if (trace_mode) {
+      std::vector<char> tkey_buf;
+      int64_t records_read = 0, malformed = 0;
+      while (records_read < num_ops) {
+        uint8_t op_byte = 0;
+        uint32_t key_len = 0, value_size = 0;
+        if (fread(&op_byte, 1, 1, tf) != 1) break;
+        if (fread(&key_len, sizeof(key_len), 1, tf) != 1) {
+          malformed++; break;
+        }
+        if (tkey_buf.size() < key_len) tkey_buf.resize(key_len);
+        if (key_len > 0 &&
+            fread(tkey_buf.data(), 1, key_len, tf) != key_len) {
+          malformed++; break;
+        }
+        if (fread(&value_size, sizeof(value_size), 1, tf) != 1) {
+          malformed++; break;
+        }
+        if (op_byte != 1 /*Put*/) continue;  // skip Get/Delete (run-phase)
+        // Extract prefix8 BE uint64 (Option D).
+        uint64_t prefix8 = 0;
+        for (int i = 0; i < 8; i++) {
+          prefix8 = (prefix8 << 8) |
+                    static_cast<uint8_t>(tkey_buf[i]);
+        }
+        uint32_t value_offset = 0;
+        kv_value_gen.Generate(value_size, &value_offset);
+        append_trace_shard_record(prefix8, tkey_buf.data(), key_len,
+                                  value_size, value_offset);
+        memtable_buf.push_back(prefix8);
+        memtable_raw.emplace_back(tkey_buf.data(), key_len);
+        batch_bytes += static_cast<uint64_t>(key_len) + value_size;
+        records_read++;
 
-      if (memtable_buf.size() >= memtable_capacity) {
-        do_flush();
+        if (batch_bytes >= memtable_flush_bytes) {
+          do_flush();
+        }
       }
+      if (!memtable_buf.empty()) do_flush();
+      close_trace_shards();
+      fclose(tf);
+      if (malformed > 0) {
+        fprintf(stderr, "FillVirtual trace: %" PRId64 " malformed records\n",
+                malformed);
+      }
+    } else {
+      std::unique_ptr<const char[]> local_key_guard;
+      Slice local_key(new char[key_size_], key_size_);
+      local_key_guard.reset(local_key.data());
+      for (int64_t i = 0; i < num_ops; i++) {
+        uint64_t rand_num = rng.Next() % FLAGS_num;
+        GenerateKeyFromInt(rand_num, FLAGS_num, &local_key);
+        Slice value = kv_value_gen.Generate(static_cast<unsigned int>(value_size));
+        append_kv_record(local_key, value);
+        memtable_buf.push_back(rand_num);
+        if (memtable_buf.size() >= memtable_capacity) {
+          do_flush();
+        }
+      }
+      if (!memtable_buf.empty()) do_flush();
     }
-    if (!memtable_buf.empty()) {
-      do_flush();
-    }
+    close_current_run_log();
+    close_trace_shards();
     flush_pending_edit();  // Register remaining files.
 
     auto phase1_end = FLAGS_env->NowMicros();
@@ -5577,8 +6089,14 @@ class Benchmark {
     // VersionSet (files may have been compacted to different levels).
     auto all_vssts = registry->GetAll();
 
-    // Build file_number → actual_level map from current Version.
-    std::unordered_map<uint64_t, int> file_level_map;
+    // Build file_number → current Version metadata. For trace-backed VSSTs,
+    // smallest/largest are full byte bounds, not just prefix8 uint64 bounds.
+    struct VirtualFileMeta {
+      int level;
+      std::string smallest_key;
+      std::string largest_key;
+    };
+    std::unordered_map<uint64_t, VirtualFileMeta> file_meta_map;
     {
       ColumnFamilyMetaData cf_meta;
       db_.db->GetColumnFamilyMetaData(&cf_meta);
@@ -5589,7 +6107,9 @@ class Benchmark {
           if (slash != std::string::npos) name = name.substr(slash + 1);
           size_t dot = name.find('.');
           if (dot != std::string::npos) name = name.substr(0, dot);
-          file_level_map[std::stoull(name)] = level_meta.level;
+          file_meta_map[std::stoull(name)] =
+              VirtualFileMeta{level_meta.level, file_meta.smallestkey,
+                              file_meta.largestkey};
         }
       }
     }
@@ -5597,8 +6117,8 @@ class Benchmark {
     // Collect level distribution for reporting.
     std::map<int, size_t> level_dist;
     for (const auto& [fnum, vsst_ptr] : all_vssts) {
-      auto it = file_level_map.find(fnum);
-      int lvl = (it != file_level_map.end()) ? it->second : vsst_ptr->level;
+      auto it = file_meta_map.find(fnum);
+      int lvl = (it != file_meta_map.end()) ? it->second.level : vsst_ptr->level;
       level_dist[lvl]++;
     }
     fprintf(stderr, "  Virtual SSTs: %zu (", all_vssts.size());
@@ -5616,6 +6136,8 @@ class Benchmark {
       uint64_t real_fnum;
       int level;
       const VirtualSST* vsst;
+      std::string smallest_key;
+      std::string largest_key;
     };
     std::vector<SSTTask> tasks(all_vssts.size());
     {
@@ -5624,14 +6146,25 @@ class Benchmark {
         tasks[i].virtual_fnum = all_vssts[i].first;
         tasks[i].vsst = all_vssts[i].second;
         tasks[i].real_fnum = versions->NewFileNumber();
-        auto it = file_level_map.find(all_vssts[i].first);
-        tasks[i].level = (it != file_level_map.end())
-                             ? it->second
+        auto it = file_meta_map.find(all_vssts[i].first);
+        tasks[i].level = (it != file_meta_map.end())
+                             ? it->second.level
                              : all_vssts[i].second->level;
+        if (it != file_meta_map.end()) {
+          tasks[i].smallest_key = it->second.smallest_key;
+          tasks[i].largest_key = it->second.largest_key;
+        } else if (!all_vssts[i].second->key_min_bytes.empty() &&
+                   !all_vssts[i].second->key_max_bytes.empty()) {
+          tasks[i].smallest_key = all_vssts[i].second->key_min_bytes;
+          tasks[i].largest_key = all_vssts[i].second->key_max_bytes;
+        } else {
+          tasks[i].smallest_key = registry->EncodeUserKey(all_vssts[i].second->key_min);
+          tasks[i].largest_key = registry->EncodeUserKey(all_vssts[i].second->key_max);
+        }
       }
     }
 
-    // Parallel: materialize keys + write SST, one per VirtualSST.
+    // Parallel exact materialization from preserved KV run logs.
     struct SSTResult {
       uint64_t file_number;
       int level;
@@ -5645,98 +6178,605 @@ class Benchmark {
     std::atomic<int64_t> total_written{0};
 
     auto phase2a_start = FLAGS_env->NowMicros();
+    uint64_t trace_read_us = 0;
+    uint64_t trace_sort_dedup_us = 0;
+    uint64_t trace_assign_us = 0;
+    uint64_t sst_build_us = 0;
     {
+      struct RouteEntry {
+        uint64_t key_min;
+        uint64_t key_max;
+        size_t task_idx;
+      };
+      auto key_to_u64 = [](const char* data, size_t len) {
+        uint64_t k = 0;
+        size_t n = std::min<size_t>(len, 8);
+        for (size_t i = 0; i < n; i++) {
+          k = (k << 8) | static_cast<uint8_t>(data[i]);
+        }
+        return k;
+      };
+      std::vector<RouteEntry> route_index;
+      route_index.reserve(tasks.size());
+      std::map<int, std::vector<RouteEntry>> route_by_level;
+      for (size_t i = 0; i < tasks.size(); i++) {
+        RouteEntry entry{tasks[i].vsst->key_min, tasks[i].vsst->key_max, i};
+        route_index.push_back(entry);
+        route_by_level[tasks[i].level].push_back(std::move(entry));
+      }
+      auto route_cmp = [](const RouteEntry& a, const RouteEntry& b) {
+                  if (a.key_min != b.key_min) return a.key_min < b.key_min;
+                  return a.key_max < b.key_max;
+                };
+      std::sort(route_index.begin(), route_index.end(), route_cmp);
+      for (auto& level_routes : route_by_level) {
+        std::sort(level_routes.second.begin(), level_routes.second.end(),
+                  route_cmp);
+      }
+      size_t overlapping_ranges = 0;
+      for (size_t i = 1; i < route_index.size(); i++) {
+        if (route_index[i].key_min <= route_index[i - 1].key_max) {
+          overlapping_ranges++;
+        }
+      }
+      fprintf(stderr,
+              "FillVirtual: prefix8 route index %zu ranges, overlaps=%zu\n",
+              route_index.size(), overlapping_ranges);
+
+      struct PartRecord {
+        std::string key;
+        std::string value;
+        uint64_t seqno;
+        uint64_t key64 = 0;
+        uint32_t value_len = 0;
+        uint32_t value_offset = 0;
+        bool value_from_generator = false;
+      };
+
+      std::vector<std::vector<PartRecord>> partitions(tasks.size());
+      std::vector<std::unique_ptr<std::mutex>> part_mu(tasks.size());
+      for (size_t i = 0; i < tasks.size(); i++) {
+        part_mu[i].reset(new std::mutex());
+      }
+      bool partitions_presorted_unique = false;
+      std::vector<PartRecord> gap_records;
+      std::mutex gap_mu;
+      size_t trace_assigned_unique = 0;
+      size_t trace_nonempty_partitions = 0;
+      std::vector<std::pair<size_t, size_t>> trace_partition_sizes;
+
+      std::vector<uint64_t> run_ids;
+      run_ids.reserve(current_source_run_id > 0 ? current_source_run_id - 1 : 0);
+      for (uint64_t id = 1; id < current_source_run_id; id++) {
+        run_ids.push_back(id);
+      }
+
+      std::atomic<bool> partition_failed{false};
+      std::atomic<bool> build_failed{false};
+      std::atomic<uint64_t> out_of_range_routed{0};
       std::vector<std::thread> threads;
-      const size_t num_workers = std::min(
-          static_cast<size_t>(std::thread::hardware_concurrency()),
-          tasks.size());
-      std::atomic<size_t> next_task{0};
 
-      for (size_t w = 0; w < num_workers; w++) {
-        threads.emplace_back([&]() {
-          std::unique_ptr<const char[]> local_key_guard;
-          Slice local_key(new char[key_size_], key_size_);
-          local_key_guard.reset(local_key.data());
-          RandomGenerator local_gen;
+      auto route_record = [&](uint64_t run_id, uint64_t seqno,
+                              std::string&& key, std::string&& value,
+                              uint32_t value_len, uint32_t value_offset,
+                              bool value_from_generator) {
+        (void)run_id;
+        uint64_t key64 = key_to_u64(key.data(), key.size());
+        size_t task_idx = 0;
+        bool route_to_gap = true;
+        for (auto level_it = route_by_level.rbegin();
+             level_it != route_by_level.rend(); ++level_it) {
+          const auto& level_index = level_it->second;
+          auto route_it = std::upper_bound(
+              level_index.begin(), level_index.end(), key64,
+              [](uint64_t k, const RouteEntry& entry) {
+                return k < entry.key_min;
+              });
+          if (route_it == level_index.begin()) {
+            continue;
+          }
+          --route_it;
+          if (key64 <= route_it->key_max) {
+            task_idx = route_it->task_idx;
+            route_to_gap = false;
+            break;
+          }
+        }
 
-          while (true) {
-            size_t idx = next_task.fetch_add(1);
-            if (idx >= tasks.size()) break;
+        PartRecord rec;
+        rec.seqno = seqno;
+        rec.key64 = key_to_u64(key.data(), key.size());
+        rec.key = std::move(key);
+        rec.value = std::move(value);
+        rec.value_len = value_len;
+        rec.value_offset = value_offset;
+        rec.value_from_generator = value_from_generator;
+        if (route_to_gap) {
+          out_of_range_routed.fetch_add(1, std::memory_order_relaxed);
+          std::lock_guard<std::mutex> lk(gap_mu);
+          gap_records.push_back(std::move(rec));
+          return;
+        }
+        std::lock_guard<std::mutex> lk(*part_mu[task_idx]);
+        partitions[task_idx].push_back(std::move(rec));
+      };
 
-            const auto& task = tasks[idx];
-            auto& res = results[idx];
-            res.file_number = task.real_fnum;
-            res.level = task.level;
-            res.ok = false;
+      auto build_partition_sst = [&](size_t idx, bool presorted_unique) {
+        const auto& task = tasks[idx];
+        auto& res = results[idx];
+        auto& records = partitions[idx];
+        res.file_number = task.real_fnum;
+        res.level = task.level;
+        res.ok = false;
+        res.first_key.clear();
+        res.last_key.clear();
 
-            // Materialize keys from PLR model.
-            std::vector<uint64_t> keys = MaterializeKeys(*task.vsst);
-            if (keys.empty()) continue;
+        if (records.empty()) {
+          return;
+        }
 
-            // Write SST file.
-            std::string sst_path = TableFileName(
-                cfd->ioptions().cf_paths, res.file_number, 0u);
+        if (!presorted_unique) {
+          std::sort(records.begin(), records.end(),
+                    [](const PartRecord& a, const PartRecord& b) {
+                      int c = a.key.compare(b.key);
+                      if (c != 0) return c < 0;
+                      return a.seqno > b.seqno;
+                    });
+        }
 
-            Options sst_opts = open_options_;
-            if (FLAGS_compression_type_e != kNoCompression) {
-              sst_opts.compression = FLAGS_compression_type_e;
+        std::string sst_path = TableFileName(
+            cfd->ioptions().cf_paths, res.file_number, 0u);
+
+        Options sst_opts = open_options_;
+        if (FLAGS_compression_type_e != kNoCompression) {
+          sst_opts.compression = FLAGS_compression_type_e;
+        }
+        EnvOptions env_opts;
+        if (FLAGS_use_direct_io_for_flush_and_compaction) {
+          env_opts.use_direct_writes = true;
+          env_opts.use_mmap_writes = false;
+        }
+        SstFileWriter sst_writer(env_opts, sst_opts);
+        Status s = sst_writer.Open(sst_path);
+        if (!s.ok()) {
+          fprintf(stderr, "SST Open failed: %s path=%s\n",
+                  s.ToString().c_str(), sst_path.c_str());
+          build_failed.store(true);
+          return;
+        }
+
+        std::string prev_key;
+        bool have_prev_key = false;
+        uint64_t keys_in_file = 0;
+        RandomGenerator writer_value_gen;
+        for (const auto& rec : records) {
+          if (!presorted_unique && have_prev_key && rec.key == prev_key) {
+            continue;
+          }
+          Slice key(rec.key);
+          Slice value = rec.value_from_generator
+                            ? writer_value_gen.SliceAt(rec.value_offset,
+                                                       rec.value_len)
+                            : Slice(rec.value);
+          s = sst_writer.Put(key, value);
+          if (!s.ok()) {
+            static std::atomic<int> put_err_count{0};
+            if (put_err_count.fetch_add(1) < 3) {
+              fprintf(stderr, "SST Put failed: %s\n", s.ToString().c_str());
             }
-            EnvOptions env_opts;
-            if (FLAGS_use_direct_io_for_flush_and_compaction) {
-              env_opts.use_direct_writes = true;
-              env_opts.use_mmap_writes = false;
-            }
-            SstFileWriter sst_writer(env_opts, sst_opts);
-            Status s = sst_writer.Open(sst_path);
-            if (!s.ok()) {
-              fprintf(stderr, "SST Open failed: %s path=%s\n",
-                      s.ToString().c_str(), sst_path.c_str());
-              continue;
-            }
+            build_failed.store(true);
+            break;
+          }
+          if (res.first_key.empty()) res.first_key = rec.key;
+          res.last_key = rec.key;
+          prev_key = rec.key;
+          have_prev_key = true;
+          keys_in_file++;
+        }
 
-            std::string prev_key_str;
-            uint64_t keys_in_file = 0;
-
-            for (const auto& k : keys) {
-              GenerateKeyFromInt(k, FLAGS_num, &local_key);
-              std::string cur(local_key.data(), local_key.size());
-              if (cur <= prev_key_str) continue;
-              s = sst_writer.Put(local_key, local_gen.Generate());
-              if (!s.ok()) {
-                static std::atomic<int> put_err_count{0};
-                if (put_err_count.fetch_add(1) < 3) {
-                  fprintf(stderr, "SST Put failed: %s\n", s.ToString().c_str());
-                }
-                break;
-              }
-              if (res.first_key.empty()) res.first_key = cur;
-              res.last_key = cur;
-              prev_key_str = cur;
-              keys_in_file++;
-            }
-
-            if (keys_in_file == 0) continue;
+        if (!build_failed.load()) {
+          if (keys_in_file == 0) {
+            build_failed.store(true);
+          } else {
             s = sst_writer.Finish();
             if (!s.ok()) {
               static std::atomic<int> fin_err_count{0};
               if (fin_err_count.fetch_add(1) < 3) {
-                fprintf(stderr, "SST Finish failed: %s\n", s.ToString().c_str());
+                fprintf(stderr, "SST Finish failed: %s\n",
+                        s.ToString().c_str());
               }
+              build_failed.store(true);
+            } else {
+              uint64_t fsize = 0;
+              FLAGS_env->GetFileSize(sst_path, &fsize);
+              res.file_size = fsize;
+              res.keys_written = keys_in_file;
+              res.ok = true;
+              total_written.fetch_add(keys_in_file);
+            }
+          }
+        }
+      };
+
+      auto build_ready_partitions = [&](const std::vector<size_t>& ready,
+                                        bool presorted_unique) {
+        if (ready.empty()) return;
+        auto sst_build_start = FLAGS_env->NowMicros();
+        threads.clear();
+        std::atomic<size_t> next_ready{0};
+        const size_t build_workers = std::min(
+            static_cast<size_t>(std::thread::hardware_concurrency()),
+            ready.size());
+        for (size_t w = 0; w < build_workers; w++) {
+          threads.emplace_back([&]() {
+            while (true) {
+              size_t ready_idx = next_ready.fetch_add(1);
+              if (ready_idx >= ready.size()) break;
+              build_partition_sst(ready[ready_idx], presorted_unique);
+            }
+          });
+        }
+        for (auto& t : threads) t.join();
+        if (trace_mode) {
+          sst_build_us += FLAGS_env->NowMicros() - sst_build_start;
+        }
+      };
+
+      if (trace_mode) {
+        partitions_presorted_unique = true;
+        std::vector<size_t> fill_order(tasks.size());
+        for (size_t i = 0; i < tasks.size(); i++) fill_order[i] = i;
+        std::sort(fill_order.begin(), fill_order.end(),
+                  [&](size_t a, size_t b) {
+                    if (tasks[a].level != tasks[b].level) {
+                      return tasks[a].level > tasks[b].level;
+                    }
+                    if (tasks[a].vsst->key_min != tasks[b].vsst->key_min) {
+                      return tasks[a].vsst->key_min < tasks[b].vsst->key_min;
+                    }
+                    return tasks[a].vsst->key_max < tasks[b].vsst->key_max;
+                  });
+        std::vector<uint64_t> remaining(tasks.size(), 0);
+        for (size_t i = 0; i < tasks.size(); i++) {
+          remaining[i] = tasks[i].vsst->num_entries;
+        }
+        size_t fill_pos = 0;
+
+        fprintf(stderr,
+                "FillVirtual: materializing from %zu key-range shards\n",
+                trace_partition_count);
+        for (size_t shard = 0; shard < trace_partition_count; shard++) {
+          auto trace_read_start = FLAGS_env->NowMicros();
+          std::string path = trace_shard_path(shard);
+          FILE* sf = fopen(path.c_str(), "rb");
+          if (sf == nullptr) {
+            fprintf(stderr, "FillVirtual: failed to open trace shard %s: %s\n",
+                    path.c_str(), strerror(errno));
+            ErrorExit();
+          }
+
+          std::vector<PartRecord> shard_records;
+          while (true) {
+            TraceShardRecordHeader hdr;
+            if (fread(&hdr, sizeof(hdr), 1, sf) != 1) break;
+            PartRecord rec;
+            rec.seqno = hdr.seqno;
+            rec.key64 = hdr.key64;
+            rec.value_len = hdr.value_len;
+            rec.value_offset = hdr.value_offset;
+            rec.value_from_generator = true;
+            rec.key.resize(hdr.key_len);
+            if (hdr.key_len > 0 &&
+                fread(&rec.key[0], 1, hdr.key_len, sf) != hdr.key_len) {
+              partition_failed.store(true);
+              break;
+            }
+            shard_records.push_back(std::move(rec));
+          }
+          fclose(sf);
+          trace_read_us += FLAGS_env->NowMicros() - trace_read_start;
+          if (partition_failed.load()) break;
+
+          auto sort_dedup_start = FLAGS_env->NowMicros();
+          std::sort(shard_records.begin(), shard_records.end(),
+                    [](const PartRecord& a, const PartRecord& b) {
+                      if (a.key64 != b.key64) return a.key64 < b.key64;
+                      int c = a.key.compare(b.key);
+                      if (c != 0) return c < 0;
+                      return a.seqno > b.seqno;
+                    });
+          size_t unique_count = 0;
+          for (size_t i = 0; i < shard_records.size(); i++) {
+            if (unique_count > 0 &&
+                shard_records[i].key64 ==
+                    shard_records[unique_count - 1].key64 &&
+                shard_records[i].key ==
+                    shard_records[unique_count - 1].key) {
               continue;
             }
-
-            uint64_t fsize = 0;
-            FLAGS_env->GetFileSize(sst_path, &fsize);
-            res.file_size = fsize;
-            res.keys_written = keys_in_file;
-            res.ok = true;
-            total_written.fetch_add(keys_in_file);
+            if (unique_count != i) {
+              shard_records[unique_count] = std::move(shard_records[i]);
+            }
+            unique_count++;
           }
-        });
+          shard_records.resize(unique_count);
+          trace_sort_dedup_us += FLAGS_env->NowMicros() - sort_dedup_start;
+
+          auto assign_start = FLAGS_env->NowMicros();
+          std::vector<size_t> ready_to_build;
+          for (auto& rec : shard_records) {
+            while (fill_pos < fill_order.size() &&
+                   remaining[fill_order[fill_pos]] == 0) {
+              fill_pos++;
+            }
+            if (fill_pos >= fill_order.size()) {
+              out_of_range_routed.fetch_add(1, std::memory_order_relaxed);
+              gap_records.push_back(std::move(rec));
+              continue;
+            }
+            size_t idx = fill_order[fill_pos];
+            partitions[idx].push_back(std::move(rec));
+            remaining[idx]--;
+            trace_assigned_unique++;
+            if (remaining[idx] == 0) {
+              ready_to_build.push_back(idx);
+              fill_pos++;
+            }
+          }
+          trace_assign_us += FLAGS_env->NowMicros() - assign_start;
+
+          for (size_t idx : ready_to_build) {
+            if (!partitions[idx].empty()) {
+              trace_nonempty_partitions++;
+              trace_partition_sizes.push_back({idx, partitions[idx].size()});
+            }
+          }
+          build_ready_partitions(ready_to_build, true);
+          for (size_t idx : ready_to_build) {
+            std::vector<PartRecord>().swap(partitions[idx]);
+          }
+          FLAGS_env->DeleteFile(path).PermitUncheckedError();
+          if (build_failed.load()) break;
+        }
+
+        std::vector<size_t> final_ready;
+        for (size_t i = 0; i < tasks.size(); i++) {
+          if (!partitions[i].empty() && !results[i].ok) {
+            trace_nonempty_partitions++;
+            trace_partition_sizes.push_back({i, partitions[i].size()});
+            final_ready.push_back(i);
+          }
+        }
+        build_ready_partitions(final_ready, true);
+        for (size_t idx : final_ready) {
+          std::vector<PartRecord>().swap(partitions[idx]);
+        }
+
+        fprintf(stderr,
+                "FillVirtual: bottom-up assigned %zu unique trace keys "
+                "across %zu VSSTs\n",
+                trace_assigned_unique, tasks.size());
+      } else {
+        std::atomic<size_t> next_run{0};
+        const size_t num_workers = std::min(
+            static_cast<size_t>(std::thread::hardware_concurrency()),
+            std::max<size_t>(size_t{1}, run_ids.size()));
+
+        for (size_t w = 0; w < num_workers; w++) {
+          threads.emplace_back([&]() {
+            while (true) {
+              size_t run_idx = next_run.fetch_add(1);
+              if (run_idx >= run_ids.size()) break;
+              uint64_t run_id = run_ids[run_idx];
+
+              std::string path = run_log_path(run_id);
+              FILE* rf = fopen(path.c_str(), "rb");
+              if (rf == nullptr) {
+                fprintf(stderr, "Run log open failed: %s path=%s\n",
+                        strerror(errno), path.c_str());
+                partition_failed.store(true);
+                continue;
+              }
+              while (true) {
+                uint64_t seqno = 0;
+                uint32_t key_len = 0, value_len = 0;
+                if (fread(&seqno, sizeof(seqno), 1, rf) != 1) break;
+                if (fread(&key_len, sizeof(key_len), 1, rf) != 1 ||
+                    fread(&value_len, sizeof(value_len), 1, rf) != 1) {
+                  partition_failed.store(true);
+                  break;
+                }
+                std::string key(key_len, '\0');
+                std::string value(value_len, '\0');
+                if ((key_len > 0 &&
+                     fread(&key[0], 1, key_len, rf) != key_len) ||
+                    (value_len > 0 &&
+                     fread(&value[0], 1, value_len, rf) != value_len)) {
+                  partition_failed.store(true);
+                  break;
+                }
+                route_record(run_id, seqno, std::move(key), std::move(value),
+                             value_len, 0, false);
+              }
+              fclose(rf);
+            }
+          });
+	        }
+	        for (auto& t : threads) t.join();
       }
-      for (auto& t : threads) t.join();
+      if (partition_failed.load()) {
+        fprintf(stderr, "FillVirtual: KV partition failed\n");
+        ErrorExit();
+      }
+      uint64_t routed_outside = out_of_range_routed.load();
+      if (routed_outside > 0) {
+        fprintf(stderr,
+                "FillVirtual: routed %" PRIu64
+                " keys outside virtual range gaps\n",
+                routed_outside);
+      }
+      if (!trace_mode) {
+        for (uint64_t run_id : run_ids) {
+          Status del_s = FLAGS_env->DeleteFile(run_log_path(run_id));
+          if (!del_s.ok() && !del_s.IsNotFound()) {
+            fprintf(stderr, "FillVirtual: failed to delete run log %s: %s\n",
+                    run_log_path(run_id).c_str(), del_s.ToString().c_str());
+          }
+        }
+      }
+
+      if (!trace_mode) {
+        std::vector<size_t> build_order(tasks.size());
+        for (size_t i = 0; i < tasks.size(); i++) build_order[i] = i;
+        std::sort(build_order.begin(), build_order.end(),
+                  [&](size_t a, size_t b) {
+                    return partitions[a].size() > partitions[b].size();
+                  });
+        size_t nonempty_partitions = 0;
+        for (const auto& records : partitions) {
+          if (!records.empty()) nonempty_partitions++;
+        }
+        fprintf(stderr, "FillVirtual: nonempty partitions %zu / %zu\n",
+                nonempty_partitions, partitions.size());
+        for (size_t rank = 0; rank < std::min<size_t>(5, build_order.size());
+             rank++) {
+          size_t idx = build_order[rank];
+          if (partitions[idx].empty()) break;
+          fprintf(stderr,
+                  "  partition rank %zu: task=%zu level=%d records=%zu\n",
+                  rank + 1, idx, tasks[idx].level, partitions[idx].size());
+        }
+
+        auto sst_build_start = FLAGS_env->NowMicros();
+        threads.clear();
+        std::atomic<size_t> next_task{0};
+        const size_t build_workers = std::min(
+            static_cast<size_t>(std::thread::hardware_concurrency()),
+            std::max<size_t>(size_t{1}, tasks.size()));
+        for (size_t w = 0; w < build_workers; w++) {
+          threads.emplace_back([&]() {
+            while (true) {
+              size_t order_idx = next_task.fetch_add(1);
+              if (order_idx >= build_order.size()) break;
+              build_partition_sst(build_order[order_idx],
+                                  partitions_presorted_unique);
+            }
+          });
+        }
+        for (auto& t : threads) t.join();
+        sst_build_us = FLAGS_env->NowMicros() - sst_build_start;
+      } else {
+        std::sort(trace_partition_sizes.begin(), trace_partition_sizes.end(),
+                  [](const auto& a, const auto& b) {
+                    return a.second > b.second;
+                  });
+        fprintf(stderr, "FillVirtual: nonempty partitions %zu / %zu\n",
+                trace_nonempty_partitions, partitions.size());
+        for (size_t rank = 0;
+             rank < std::min<size_t>(5, trace_partition_sizes.size());
+             rank++) {
+          size_t idx = trace_partition_sizes[rank].first;
+          fprintf(stderr,
+                  "  partition rank %zu: task=%zu level=%d records=%zu\n",
+                  rank + 1, idx, tasks[idx].level,
+                  trace_partition_sizes[rank].second);
+        }
+      }
+      if (build_failed.load()) {
+        fprintf(stderr, "FillVirtual: KV materialization build failed\n");
+        ErrorExit();
+      }
+      if (!gap_records.empty()) {
+        SSTResult gap_res;
+        gap_res.level = 0;
+        gap_res.ok = false;
+        {
+          InstrumentedMutexLock l(db_impl->mutex());
+          gap_res.file_number = versions->NewFileNumber();
+        }
+
+        std::sort(gap_records.begin(), gap_records.end(),
+                  [](const PartRecord& a, const PartRecord& b) {
+                    int c = a.key.compare(b.key);
+                    if (c != 0) return c < 0;
+                    return a.seqno > b.seqno;
+                  });
+
+        std::string sst_path = TableFileName(
+            cfd->ioptions().cf_paths, gap_res.file_number, 0u);
+
+        Options sst_opts = open_options_;
+        if (FLAGS_compression_type_e != kNoCompression) {
+          sst_opts.compression = FLAGS_compression_type_e;
+        }
+        EnvOptions env_opts;
+        if (FLAGS_use_direct_io_for_flush_and_compaction) {
+          env_opts.use_direct_writes = true;
+          env_opts.use_mmap_writes = false;
+        }
+        SstFileWriter sst_writer(env_opts, sst_opts);
+        Status s = sst_writer.Open(sst_path);
+        if (!s.ok()) {
+          fprintf(stderr, "Gap SST Open failed: %s path=%s\n",
+                  s.ToString().c_str(), sst_path.c_str());
+          ErrorExit();
+        }
+
+        std::string prev_key;
+        bool have_prev = false;
+        uint64_t keys_in_file = 0;
+        RandomGenerator gap_value_gen;
+        for (const auto& rec : gap_records) {
+          if (have_prev && rec.key == prev_key) continue;
+          Slice key(rec.key);
+          Slice value = rec.value_from_generator
+                            ? gap_value_gen.SliceAt(rec.value_offset,
+                                                    rec.value_len)
+                            : Slice(rec.value);
+          s = sst_writer.Put(key, value);
+          if (!s.ok()) {
+            fprintf(stderr, "Gap SST Put failed: %s\n", s.ToString().c_str());
+            ErrorExit();
+          }
+          if (gap_res.first_key.empty()) gap_res.first_key = rec.key;
+          gap_res.last_key = rec.key;
+          prev_key = rec.key;
+          have_prev = true;
+          keys_in_file++;
+        }
+        if (keys_in_file == 0) {
+          fprintf(stderr, "Gap SST had no materialized keys\n");
+          ErrorExit();
+        }
+        s = sst_writer.Finish();
+        if (!s.ok()) {
+          fprintf(stderr, "Gap SST Finish failed: %s\n", s.ToString().c_str());
+          ErrorExit();
+        }
+
+        uint64_t fsize = 0;
+        FLAGS_env->GetFileSize(sst_path, &fsize);
+        gap_res.file_size = fsize;
+        gap_res.keys_written = keys_in_file;
+        gap_res.ok = true;
+        total_written.fetch_add(keys_in_file);
+        fprintf(stderr, "FillVirtual: wrote L0 gap patch with %" PRIu64
+                        " keys\n",
+                keys_in_file);
+        results.push_back(std::move(gap_res));
+      }
+      FLAGS_env->DeleteDir(runlog_dir).PermitUncheckedError();
+      if (trace_mode) {
+        FLAGS_env->DeleteDir(trace_shard_dir).PermitUncheckedError();
+      }
+      FLAGS_env->DeleteDir(kvlog_dir).PermitUncheckedError();
     }
     auto phase2a_end = FLAGS_env->NowMicros();
+    fprintf(stderr,
+            "  Phase 2a breakdown: trace_read=%.3fs sort_dedup=%.3fs "
+            "assign=%.3fs sst_build=%.3fs\n",
+            trace_read_us / 1e6, trace_sort_dedup_us / 1e6,
+            trace_assign_us / 1e6, sst_build_us / 1e6);
     fprintf(stderr, "  Phase 2a (materialize + SST write): %.3f sec\n",
             (phase2a_end - phase2a_start) / 1e6);
 
@@ -5769,16 +6809,18 @@ class Benchmark {
                    kInvalidBlobFileNumber, 0, 0, epoch, "", "",
                    UniqueId64x2{}, 0, 0, true);
     }
+    Status apply_s;
     {
       ReadOptions ro;
       WriteOptions wo;
       InstrumentedMutexLock l(db_impl->mutex());
-      Status s = versions->LogAndApply(cfd, ro, wo, &edit,
-                                       db_impl->mutex(), nullptr);
-      if (!s.ok()) {
-        fprintf(stderr, "Error applying VersionEdit: %s\n",
-                s.ToString().c_str());
-      }
+      apply_s = versions->LogAndApply(cfd, ro, wo, &edit,
+                                      db_impl->mutex(), nullptr);
+    }
+    if (!apply_s.ok()) {
+      fprintf(stderr, "Error applying VersionEdit: %s\n",
+              apply_s.ToString().c_str());
+      ErrorExit();
     }
 
     // Resume BG compaction now that the version reflects only real SSTs.
@@ -6527,7 +7569,7 @@ class Benchmark {
   // RandomGenerator, WriteBatch construction, write_options_, byte accounting,
   // and stats reporting are preserved verbatim from DoWrite so any LSM shape
   // difference between fillrandom and twitterload is attributable only to the
-  // input distribution. Spec: vcomp/TWITTER_TRACE_REPLAY.md
+  // input distribution. Spec: vcomp/README.md §7 (Twitter trace replay).
   void WriteFromTwitterTrace(ThreadState* thread) {
     if (FLAGS_twitter_trace_file.empty()) {
       fprintf(stderr,
@@ -6570,6 +7612,15 @@ class Benchmark {
     }
     if (fread(&header_reserved, sizeof(header_reserved), 1, tf) != 1) {
       fprintf(stderr, "twitterload: short read on header reserved field\n");
+      fclose(tf);
+      ErrorExit();
+    }
+    // Skip the 24-byte stats block at the end of the 40-byte header
+    // (total_puts u64, total_kv_bytes u64, key_len_fixed u32, padding u32).
+    // twitterload doesn't use these but must advance past them.
+    // Format: vcomp/README.md §7.3.
+    if (fseek(tf, 24, SEEK_CUR) != 0) {
+      fprintf(stderr, "twitterload: short read on header stats block\n");
       fclose(tf);
       ErrorExit();
     }
@@ -6637,12 +7688,10 @@ class Benchmark {
         }
 
         if (op_byte != 1 /* Put */) {
-          fprintf(stderr,
-                  "twitterload: unsupported op byte %u at record %" PRId64
-                  " (Phase 0 accepts Put only)\n",
-                  static_cast<unsigned>(op_byte), num_written);
-          fclose(tf);
-          ErrorExit();
+          // Skip Get (op=2) and Delete (op=3) silently. Twitter traces
+          // converted with --include-reads carry these; load phase only
+          // applies Puts. Run phase uses the `twitterrun` benchmark.
+          continue;
         }
         // RandomGenerator's internal data_ buffer is sized to
         //   max(1 MiB, effective_max_size)
@@ -6729,6 +7778,176 @@ class Benchmark {
     snprintf(msg, sizeof(msg),
              "(twitterload: %" PRId64 " records, malformed=%" PRId64 ")",
              num_written, num_malformed);
+    thread->stats.AddMessage(msg);
+  }
+
+  // Run-phase counterpart of twitterload. Walks the same .vcomptrace file
+  // and replays operations against a previously loaded DB:
+  //   - Put  (op=1): skipped by default; replayed if --twitterrun_replay_writes
+  //   - Get  (op=2): always replayed (requires --include-reads at convert)
+  //   - Delete (op=3): skipped (Phase 0/1 scope)
+  //
+  // Key encoding for Get is governed by --twitterrun_encode_for_vcomp.
+  // Current vcomp-w/kv materializes raw trace keys, so the default false path
+  // is correct for both baseline and vcomp DBs. The true path is retained only
+  // to read old encoded-key vcomp DBs.
+  //
+  // Spec: vcomp/README.md §7 (Twitter trace replay).
+  void ReadFromTwitterTrace(ThreadState* thread) {
+    if (FLAGS_twitter_trace_file.empty()) {
+      fprintf(stderr,
+              "twitterrun requires --twitter_trace_file=<path>\n");
+      ErrorExit();
+    }
+    if (FLAGS_num_column_families > 1) {
+      fprintf(stderr,
+              "twitterrun does not support --num_column_families > 1\n");
+      ErrorExit();
+    }
+
+    FILE* tf = fopen(FLAGS_twitter_trace_file.c_str(), "rb");
+    if (tf == nullptr) {
+      fprintf(stderr, "twitterrun: failed to open %s: %s\n",
+              FLAGS_twitter_trace_file.c_str(), strerror(errno));
+      ErrorExit();
+    }
+    char magic[8];
+    uint32_t version = 0, reserved = 0;
+    uint64_t hdr_total_puts = 0, hdr_total_kv_bytes = 0;
+    uint32_t hdr_key_len_fixed = 0, hdr_padding = 0;
+    if (fread(magic, 1, 8, tf) != 8 ||
+        memcmp(magic, "VCMPTRC1", 8) != 0) {
+      fprintf(stderr, "twitterrun: bad trace magic in %s\n",
+              FLAGS_twitter_trace_file.c_str());
+      fclose(tf); ErrorExit();
+    }
+    if (fread(&version, sizeof(version), 1, tf) != 1 || version != 1) {
+      fprintf(stderr, "twitterrun: unsupported trace version %u\n", version);
+      fclose(tf); ErrorExit();
+    }
+    if (fread(&reserved, sizeof(reserved), 1, tf) != 1 ||
+        fread(&hdr_total_puts, sizeof(hdr_total_puts), 1, tf) != 1 ||
+        fread(&hdr_total_kv_bytes, sizeof(hdr_total_kv_bytes), 1, tf) != 1 ||
+        fread(&hdr_key_len_fixed, sizeof(hdr_key_len_fixed), 1, tf) != 1 ||
+        fread(&hdr_padding, sizeof(hdr_padding), 1, tf) != 1) {
+      fprintf(stderr, "twitterrun: short read on trace header\n");
+      fclose(tf); ErrorExit();
+    }
+
+    DBWithColumnFamilies* db_with_cfh =
+        SelectDBWithCfh(static_cast<uint64_t>(0));
+    if (db_with_cfh == nullptr || db_with_cfh->db == nullptr) {
+      fprintf(stderr, "twitterrun: no DB available\n");
+      fclose(tf); ErrorExit();
+    }
+    DB* db = db_with_cfh->db;
+
+    const int64_t max_ops = FLAGS_twitter_trace_max_ops > 0
+                                ? FLAGS_twitter_trace_max_ops
+                                : std::numeric_limits<int64_t>::max();
+
+    std::vector<char> key_buf;
+    std::vector<char> enc_buf;
+    std::string value_buf;
+    RandomGenerator gen;
+
+    int64_t num_gets = 0, num_misses = 0;
+    int64_t num_puts = 0, num_deletes = 0, num_records = 0;
+    int64_t bytes = 0;
+
+    ReadOptions ro;
+    ro.verify_checksums = !FLAGS_disable_seek_compaction;  // mirror readrandom
+    // Default cache behavior — load_twitter.sh / run.sh control via flags.
+
+    FILE* miss_log = nullptr;
+    if (!FLAGS_twitterrun_miss_log_file.empty()) {
+      miss_log = fopen(FLAGS_twitterrun_miss_log_file.c_str(), "wb");
+      if (miss_log == nullptr) {
+        fprintf(stderr, "twitterrun: failed to open miss log %s: %s\n",
+                FLAGS_twitterrun_miss_log_file.c_str(), strerror(errno));
+        fclose(tf); ErrorExit();
+      }
+    }
+
+    while (num_records < max_ops) {
+      uint8_t op_byte = 0;
+      uint32_t key_len = 0, value_size = 0;
+      if (fread(&op_byte, 1, 1, tf) != 1) break;
+      if (fread(&key_len, sizeof(key_len), 1, tf) != 1) break;
+      if (key_buf.size() < key_len) key_buf.resize(key_len);
+      if (key_len > 0 &&
+          fread(key_buf.data(), 1, key_len, tf) != key_len) break;
+      if (fread(&value_size, sizeof(value_size), 1, tf) != 1) break;
+      num_records++;
+
+      // Build the lookup/write key Slice. Current vcomp-w/kv uses raw trace
+      // keys; encoded lookup is retained only for old encoded-key DBs.
+      Slice key;
+      if (FLAGS_twitterrun_encode_for_vcomp && key_len > 8) {
+        if (enc_buf.size() < key_len) enc_buf.resize(key_len);
+        memcpy(enc_buf.data(), key_buf.data(), 8);
+        memset(enc_buf.data() + 8, '0', key_len - 8);
+        key = Slice(enc_buf.data(), key_len);
+      } else {
+        key = Slice(key_buf.data(), key_len);
+      }
+
+      if (op_byte == 1 /*Put*/) {
+        if (!FLAGS_twitterrun_replay_writes) continue;
+        Slice val = gen.Generate(value_size);
+        Status s = db->Put(write_options_, key, val);
+        if (!s.ok()) {
+          fprintf(stderr, "twitterrun Put error: %s\n",
+                  s.ToString().c_str());
+          if (miss_log != nullptr) fclose(miss_log);
+          fclose(tf); ErrorExit();
+        }
+        num_puts++;
+        bytes += key_len + val.size();
+        thread->stats.FinishedOps(db_with_cfh, db, 1, kWrite);
+      } else if (op_byte == 2 /*Get*/) {
+        Status s = db->Get(ro, key, &value_buf);
+        if (s.IsNotFound()) {
+          num_misses++;
+          if (miss_log != nullptr &&
+              (fwrite(&key_len, sizeof(key_len), 1, miss_log) != 1 ||
+               (key_len > 0 &&
+                fwrite(key.data(), 1, key_len, miss_log) != key_len))) {
+            fprintf(stderr, "twitterrun miss log write failed: %s\n",
+                    strerror(errno));
+            fclose(miss_log);
+            fclose(tf); ErrorExit();
+          }
+        } else if (!s.ok()) {
+          fprintf(stderr, "twitterrun Get error: %s\n",
+                  s.ToString().c_str());
+          if (miss_log != nullptr) fclose(miss_log);
+          fclose(tf); ErrorExit();
+        }
+        num_gets++;
+        bytes += key_len;
+        thread->stats.FinishedOps(db_with_cfh, db, 1, kRead);
+      } else if (op_byte == 3 /*Delete*/) {
+        num_deletes++;
+        continue;  // Phase 1+ feature; skip in run.
+      } else {
+        // Tolerate unknown ops (forward compat) — silently skip.
+        continue;
+      }
+    }
+
+    fclose(tf);
+    if (miss_log != nullptr) fclose(miss_log);
+    thread->stats.AddBytes(bytes);
+
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "(twitterrun: records=%" PRId64 " gets=%" PRId64
+             " puts=%" PRId64 " deletes_skipped=%" PRId64
+             " misses=%" PRId64 " miss_rate=%.4f encode_vcomp=%d)",
+             num_records, num_gets, num_puts, num_deletes, num_misses,
+             num_gets > 0 ? (double)num_misses / num_gets : 0.0,
+             FLAGS_twitterrun_encode_for_vcomp ? 1 : 0);
     thread->stats.AddMessage(msg);
   }
 

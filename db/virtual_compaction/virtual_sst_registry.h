@@ -31,15 +31,27 @@ class VirtualSSTRegistry {
   void SetTargetSSTSize(uint64_t s) { target_sst_size_ = s; }
   uint64_t GetTargetSSTSize() const { return target_sst_size_; }
 
-  // Encode uint64_t to user key string matching db_bench GenerateKeyFromInt
-  // format (big-endian 8 bytes + '0' padding).
-  std::string EncodeUserKey(uint64_t v) const {
-    std::string key(key_size_, '0');
+  std::string EncodeUserKeyWithPad(uint64_t v, char pad) const {
+    std::string key(key_size_, pad);
     int bytes_to_fill = std::min(static_cast<int>(key_size_), 8);
     for (int i = 0; i < bytes_to_fill; i++) {
       key[i] = static_cast<char>((v >> ((bytes_to_fill - i - 1) << 3)) & 0xFF);
     }
     return key;
+  }
+
+  // Encode uint64_t to user key string matching db_bench GenerateKeyFromInt
+  // format (big-endian 8 bytes + '0' padding).
+  std::string EncodeUserKey(uint64_t v) const {
+    return EncodeUserKeyWithPad(v, '0');
+  }
+
+  // Full-byte routing envelopes for trace keys whose PLR domain is prefix8.
+  std::string EncodeUserKeyLowerBound(uint64_t v) const {
+    return EncodeUserKeyWithPad(v, '\0');
+  }
+  std::string EncodeUserKeyUpperBound(uint64_t v) const {
+    return EncodeUserKeyWithPad(v, static_cast<char>(0xff));
   }
 
   // Register a VirtualSST with the given file number.

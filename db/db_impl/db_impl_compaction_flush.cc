@@ -4941,6 +4941,8 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   std::vector<uint64_t> key_mins_vec;
   std::vector<uint64_t> key_maxs_vec;
   std::vector<uint64_t> input_file_numbers;
+  std::vector<uint64_t> source_run_ids;
+  bool has_byte_bounds = false;
 
   for (size_t lvl = 0; lvl < c->num_input_levels(); lvl++) {
     for (size_t i = 0; i < c->num_input_files(lvl); i++) {
@@ -4955,6 +4957,11 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
       key_mins_vec.push_back(vsst->key_min);
       key_maxs_vec.push_back(vsst->key_max);
       input_file_numbers.push_back(fnum);
+      source_run_ids.insert(source_run_ids.end(), vsst->source_run_ids.begin(),
+                            vsst->source_run_ids.end());
+      if (!vsst->key_min_bytes.empty() && !vsst->key_max_bytes.empty()) {
+        has_byte_bounds = true;
+      }
     }
   }
 
@@ -4985,14 +4992,15 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
     global_min = std::min(global_min, key_mins_vec[i]);
     global_max = std::max(global_max, key_maxs_vec[i]);
   }
-  // Dedup path: use adjusted_entries from inclusion-exclusion estimate.
-  // When density is very low, PLR integration error can exceed the dedup
-  // signal, causing adjusted > naive. Cap to avoid underflow.
-  // Naive path: uint64_t total_entries = naive_entries;
-  uint64_t total_entries = (adjusted_entries > 0 && adjusted_entries <= naive_entries)
-                               ? adjusted_entries
-                               : naive_entries;
-  uint64_t dedup_estimate = naive_entries - total_entries;
+  // Use the conservative input count for output splitting. The exact KV
+  // materializer deduplicates real records later; if the PLR dedup estimate
+  // undershoots here, final virtual ranges become too wide and materialize
+  // into oversized SSTs with expensive index/filter reads.
+  uint64_t total_entries = naive_entries;
+  uint64_t dedup_estimate =
+      (adjusted_entries > 0 && adjusted_entries <= naive_entries)
+          ? naive_entries - adjusted_entries
+          : 0;
 
   uint64_t target_sst_size = virtual_sst_registry_->GetTargetSSTSize();
   uint64_t avg_entry_size = virtual_sst_registry_->GetAvgEntrySize();
@@ -5028,6 +5036,18 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   std::vector<VirtualSST> output_vssts = SplitIntoSSTs(
       merged, total_entries, target_sst_size, avg_entry_size,
       global_min, global_max, output_level, gp_boundaries);
+  std::sort(source_run_ids.begin(), source_run_ids.end());
+  source_run_ids.erase(std::unique(source_run_ids.begin(), source_run_ids.end()),
+                       source_run_ids.end());
+  for (auto& vsst : output_vssts) {
+    vsst.source_run_ids = source_run_ids;
+    if (has_byte_bounds) {
+      vsst.key_min_bytes =
+          virtual_sst_registry_->EncodeUserKeyLowerBound(vsst.key_min);
+      vsst.key_max_bytes =
+          virtual_sst_registry_->EncodeUserKeyUpperBound(vsst.key_max);
+    }
+  }
 
   mutex_.Lock();
 
@@ -5042,8 +5062,12 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
     uint64_t fnum = versions_->NewFileNumber();
     virtual_sst_registry_->Register(fnum, vsst);
 
-    std::string smallest_key = virtual_sst_registry_->EncodeUserKey(vsst.key_min);
-    std::string largest_key = virtual_sst_registry_->EncodeUserKey(vsst.key_max);
+    std::string smallest_key = vsst.key_min_bytes.empty()
+                                   ? virtual_sst_registry_->EncodeUserKey(vsst.key_min)
+                                   : vsst.key_min_bytes;
+    std::string largest_key = vsst.key_max_bytes.empty()
+                                  ? virtual_sst_registry_->EncodeUserKey(vsst.key_max)
+                                  : vsst.key_max_bytes;
     InternalKey smallest(Slice(smallest_key), kMaxSequenceNumber, kTypeValue);
     InternalKey largest(Slice(largest_key), 0, kTypeValue);
 

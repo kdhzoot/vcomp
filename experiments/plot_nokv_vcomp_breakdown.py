@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot 250GB no-KV vcomp breakdown."""
+"""Plot no-KV vcomp breakdowns from existing load logs."""
 
 import os
 import re
@@ -9,8 +9,36 @@ import matplotlib.pyplot as plt
 
 ROOT = os.path.dirname(__file__)
 LOG_LOADS = os.path.join(ROOT, "log_loads")
-BASELINE_DIR = "baseline_260414_1305_250gb"
-VCOMP_DIR = "vcomp_260414_1648_250gb"
+RUNS = [
+    {
+        "label": "250GB",
+        "slug": "250gb",
+        "baseline_dir": "baseline_260414_1305_250gb",
+        "vcomp_dir": "vcomp_260414_1648_250gb",
+    },
+    {
+        "label": "1TB",
+        "slug": "1tb",
+        "baseline_dir": "baseline_260408_0639_1000gb",
+        "vcomp_dir": "vcomp_260414_1152_1000gb",
+    },
+    {
+        "label": "10TB",
+        "slug": "10tb",
+        "baseline_dir": "baseline_260430_2232_10240gb",
+        "vcomp_dir": "vcomp_260501_1239_10240gb",
+    },
+]
+
+COMPONENTS = [
+    ("keygen", "Key generation", "#254e70"),
+    ("sort", "Sort", "#679436"),
+    ("plr_fit", "PLR fit", "#f2c14e"),
+    ("register", "VSST registration", "#d95d39"),
+    ("wait", "BG wait", "#b8b8b8"),
+    ("sst_write", "Materialize", "#5f4b8b"),
+    ("version_edit", "VersionEdit", "#9a8c98"),
+]
 
 
 def read_log(dirname):
@@ -63,32 +91,24 @@ def parse_vcomp(text):
 
 def fmt_seconds(seconds):
     if seconds < 60:
-        return f"{seconds:.0f}s"
+        return f"{seconds:.1f}s"
     if seconds < 3600:
-        return f"{seconds / 60:.0f}m"
+        return f"{seconds / 60:.1f}m"
     return f"{seconds / 3600:.1f}h"
 
 
-def main():
-    baseline = parse_baseline_seconds(read_log(BASELINE_DIR))
-    vcomp = parse_vcomp(read_log(VCOMP_DIR))
-    speedup = baseline / vcomp["total"]
+def load_run(run):
+    baseline = parse_baseline_seconds(read_log(run["baseline_dir"]))
+    vcomp = parse_vcomp(read_log(run["vcomp_dir"]))
+    return {
+        **run,
+        "baseline": baseline,
+        "vcomp": vcomp,
+        "speedup": baseline / vcomp["total"],
+    }
 
-    print(
-        f"250 GB baseline={baseline:.3f}s "
-        f"vcomp={vcomp['total']:.3f}s speedup={speedup:.1f}x"
-    )
 
-    components = [
-        ("keygen", "Key generation", "#254e70"),
-        ("sort", "Sort", "#679436"),
-        ("plr_fit", "PLR fit", "#f2c14e"),
-        ("register", "VSST registration", "#d95d39"),
-        ("wait", "BG wait", "#b8b8b8"),
-        ("sst_write", "Materialize", "#5f4b8b"),
-        ("version_edit", "VersionEdit", "#9a8c98"),
-    ]
-
+def configure_style():
     plt.rcParams.update({
         "font.size": 17,
         "axes.titlesize": 22,
@@ -98,44 +118,62 @@ def main():
         "legend.fontsize": 14,
         "legend.title_fontsize": 15,
     })
-    fig, ax = plt.subplots(figsize=(15.5, 3.6))
 
+
+def draw_bar(ax, row, show_legend):
     y = 0
     left = 0.0
-    for name, label, color in components:
+    vcomp = row["vcomp"]
+    for name, label, color in COMPONENTS:
         seconds = vcomp[name]
         ax.barh(
             y,
             seconds,
             height=0.34,
             left=left,
-            label=f"{label}  {seconds:.1f}s",
+            label=f"{label}" if show_legend else None,
             color=color,
             edgecolor="white",
             linewidth=1.0,
         )
+        if seconds >= vcomp["total"] * 0.08:
+            ax.text(
+                left + seconds / 2,
+                y,
+                fmt_seconds(seconds),
+                ha="center",
+                va="center",
+                fontsize=11,
+                color="white",
+                fontweight="bold",
+            )
         left += seconds
 
     ax.text(
-        vcomp["total"] + 0.2,
+        vcomp["total"] * 1.01,
         y,
-        f"{vcomp['total']:.2f}s",
+        f"{fmt_seconds(vcomp['total'])}\n{row['speedup']:.1f}x faster",
         ha="left",
         va="center",
-        fontsize=17,
+        fontsize=14,
         fontweight="bold",
     )
 
-    ax.set_title("250GB No-KV VComp Breakdown")
-    ax.set_xlabel("Elapsed time (seconds)")
     ax.set_yticks([y])
-    ax.set_yticklabels(["fillvirtual"])
-    ax.set_xlim(0, vcomp["total"] * 1.15)
+    ax.set_yticklabels([row["label"]])
+    ax.set_xlim(0, vcomp["total"] * 1.22)
     ax.set_ylim(-0.5, 0.5)
     ax.grid(axis="x", alpha=0.22)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_visible(False)
+
+
+def plot_single(row):
+    fig, ax = plt.subplots(figsize=(15.5, 3.6))
+    draw_bar(ax, row, show_legend=True)
+    ax.set_title(f"{row['label']} No-KV VComp Breakdown")
+    ax.set_xlabel("Elapsed time (seconds)")
     ax.legend(
         title="Component",
         loc="center left",
@@ -145,9 +183,46 @@ def main():
     )
     fig.tight_layout(rect=[0.0, 0.0, 0.78, 1.0])
 
-    out = os.path.join(LOG_LOADS, "nokv_vcomp_250gb_breakdown.png")
+    out = os.path.join(LOG_LOADS, f"nokv_vcomp_{row['slug']}_breakdown.png")
     fig.savefig(out, dpi=150)
+    plt.close(fig)
     print(f"Saved: {out}")
+
+
+def plot_multi(rows):
+    fig, axes = plt.subplots(len(rows), 1, figsize=(15.5, 7.5))
+    for i, (ax, row) in enumerate(zip(axes, rows)):
+        draw_bar(ax, row, show_legend=(i == 0))
+        ax.set_xlabel("Elapsed time (seconds)")
+    fig.suptitle("No-KV VComp Breakdown Across Scales", y=0.98)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        title="Component",
+        loc="lower center",
+        ncol=4,
+        frameon=False,
+        bbox_to_anchor=(0.5, 0.0),
+    )
+    fig.tight_layout(rect=[0.0, 0.1, 1.0, 0.94])
+    out = os.path.join(LOG_LOADS, "nokv_vcomp_breakdown_250gb_1tb_10tb.png")
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    print(f"Saved: {out}")
+
+
+def main():
+    configure_style()
+    rows = [load_run(run) for run in RUNS]
+    for row in rows:
+        print(
+            f"{row['label']} baseline={row['baseline']:.3f}s "
+            f"vcomp={row['vcomp']['total']:.3f}s "
+            f"speedup={row['speedup']:.1f}x"
+        )
+        plot_single(row)
+    plot_multi(rows)
 
 
 if __name__ == "__main__":

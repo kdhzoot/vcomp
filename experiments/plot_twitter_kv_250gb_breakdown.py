@@ -93,17 +93,17 @@ def main():
     )
 
     components = [
-        ("keygen", "Key replay + shard write", "#264653"),
-        ("shape_sort", "Shape sort", "#2a9d8f"),
-        ("plr_fit", "PLR fit", "#e9c46a"),
-        ("vsst_register", "VSST registration", "#f4a261"),
-        ("bg_wait", "BG wait", "#b8b8b8"),
-        ("trace_read", "Shard read", "#457b9d"),
-        ("kv_sort_dedup", "KV sort/dedup", "#e76f51"),
-        ("assign", "Partition assign", "#8ab17d"),
-        ("materialize", "Materialize write", "#6d597a"),
-        ("materialize_overhead", "Materialize overhead", "#9a8c98"),
-        ("version_edit", "VersionEdit", "#6c757d"),
+        ("keygen", "P1 trace scan + shard-log write", "#264653"),
+        ("shape_sort", "P1 sort + collapse duplicate keys", "#2a9d8f"),
+        ("plr_fit", "P1 fit PLR models", "#e9c46a"),
+        ("vsst_register", "P1 register virtual SSTs", "#f4a261"),
+        ("bg_wait", "Virtual compaction wait", "#b8b8b8"),
+        ("trace_read", "P2 read shard logs", "#457b9d"),
+        ("kv_sort_dedup", "P2 sort + keep latest value", "#e76f51"),
+        ("assign", "P2 assign keys to final SSTs", "#8ab17d"),
+        ("materialize", "P2 write real SSTs", "#6d597a"),
+        ("materialize_overhead", "P2 overhead", "#9a8c98"),
+        ("version_edit", "P2 apply VersionEdit", "#6c757d"),
     ]
 
     plt.rcParams.update({
@@ -112,10 +112,10 @@ def main():
         "axes.labelsize": 18,
         "xtick.labelsize": 16,
         "ytick.labelsize": 17,
-        "legend.fontsize": 13,
+        "legend.fontsize": 12,
         "legend.title_fontsize": 14,
     })
-    fig, ax = plt.subplots(figsize=(22.0, 3.7))
+    fig, ax = plt.subplots(figsize=(18.0, 5.4))
 
     y = 0
     left = 0.0
@@ -147,8 +147,8 @@ def main():
 
     fig.suptitle("250GB Twitter Trace with KV: Range-Sharded VComp Breakdown", y=0.96)
     fig.text(
-        0.39,
-        0.84,
+        0.5,
+        0.87,
         f"Baseline {baseline:.1f}s -> VComp {vcomp['total']:.1f}s "
         f"({speedup:.2f}x faster)",
         ha="center",
@@ -166,15 +166,15 @@ def main():
     ax.spines["left"].set_visible(False)
     ax.legend(
         title="Component",
-        loc="center left",
-        bbox_to_anchor=(1.02, 0.5),
-        ncol=2,
-        columnspacing=1.5,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.42),
+        ncol=4,
+        columnspacing=1.2,
         handletextpad=0.6,
         frameon=False,
         borderaxespad=0.0,
     )
-    fig.tight_layout(rect=[0.03, 0.0, 0.66, 0.84])
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.75, bottom=0.38)
 
     out = os.path.join(LOG_LOADS, "twitter_kv_vcomp_250gb_breakdown.png")
     fig.savefig(out, dpi=150)

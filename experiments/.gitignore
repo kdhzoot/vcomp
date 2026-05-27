@@ -6,6 +6,7 @@ __pycache__/
 log_loads/*/
 log_batch/*/
 log_runs/*/
+log_runs/.last_*
 coverage_dumps/*/
 compaction_logs/*/
 

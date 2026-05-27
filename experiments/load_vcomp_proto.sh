@@ -6,8 +6,6 @@ bash load_vcomp_proto.sh
 # Smoke test
 TARGET_DB_GB=10 bash load_vcomp_proto.sh
 
-# Reuse an existing vcomp/db_bench without rebuilding
-SKIP_BUILD=1 TARGET_DB_GB=250 bash load_vcomp_proto.sh
 EXAMPLE
 
 set -euo pipefail
@@ -26,13 +24,10 @@ DB_ROOT="${DB_ROOT:-/work/vcomp}"
 RUN_TS="$(date '+%y%m%d_%H%M')"
 RUN_NAME="${RUN_NAME:-vcomp_proto_${TARGET_DB_GB}gb_${RUN_TS}}"
 
-if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
-  (
-    cd "${VCOMP_DIR}"
-    DEBUG_LEVEL=0 LIB_MODE=static CXX="${CXX:-g++-11}" CC="${CC:-gcc-11}" \
-      make -j"${BUILD_JOBS:-$(nproc)}" db_bench
-  )
-fi
+[[ -x "${VCOMP_DIR}/db_bench" ]] || {
+  echo "[ERROR] missing executable: ${VCOMP_DIR}/db_bench" >&2
+  exit 1
+}
 
 MODE=vcomp \
 TARGET_DB_GB="${TARGET_DB_GB}" \

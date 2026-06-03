@@ -10,6 +10,14 @@ log_runs/.last_*
 coverage_dumps/*/
 compaction_logs/*/
 
+# Generated figures and tabular summaries.
+*.csv
+*.tsv
+*.png
+*.jpg
+*.jpeg
+*.log
+
 # Local/editor noise
 .DS_Store
 *.swp

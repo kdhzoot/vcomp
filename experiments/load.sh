@@ -5,12 +5,18 @@ MODE=baseline TARGET_DB_GB=10 DB_ROOT=/work/vcomp bash load.sh
 
 # Virtual compaction (fillvirtual + PLR-based compaction + materialization)
 MODE=vcomp TARGET_DB_GB=10 DB_ROOT=/work/vcomp bash load.sh
+
+# Explicit size-gated visible L0 release
+MODE=vcomp TARGET_DB_GB=10 DB_ROOT=/work/vcomp \
+  VCOMP_RELEASE_BATCH_MAX=256 \
+  VCOMP_VISIBLE_L0_BATCH_MB=4096 \
+  bash load.sh
 EXAMPLE
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DB_BENCH="${SCRIPT_DIR}/../vcomp/db_bench"
+DB_BENCH="${DB_BENCH:-${SCRIPT_DIR}/../vcomp/db_bench}"
 
 require_env() {
   local name="$1"
@@ -45,6 +51,10 @@ NKEYS=$((TARGET_DB_GB * 1024 * 1024 * 1024 / KV_SIZE))
 # ── PLR / vcomp parameters (only used in vcomp mode) ──
 PLR_ERROR_BOUND="${PLR_ERROR_BOUND:-8}"
 MEMTABLE_FLUSH_MB="${MEMTABLE_FLUSH_MB:-64}"
+BG_JOBS="${BG_JOBS:-$(nproc)}"
+VCOMP_RELEASE_BATCH_MAX="${VCOMP_RELEASE_BATCH_MAX:-256}"
+VCOMP_VISIBLE_L0_BATCH_MB="${VCOMP_VISIBLE_L0_BATCH_MB:-4096}"
+VCOMP_LOG_APPLY_TIMING="${VCOMP_LOG_APPLY_TIMING:-true}"
 
 [[ ! -d "${DB_DIR}" ]] || { echo "[ERROR] DB already exists: ${DB_DIR}" >&2; exit 1; }
 mkdir -p "${DB_DIR}" "${RAW_DIR}"
@@ -62,7 +72,7 @@ cmd=(
   --enable_index_compression=false
   --bloom_bits=10
   --disable_wal=true
-  --max_background_jobs=$(nproc)
+  --max_background_jobs="${BG_JOBS}"
   --num="${NKEYS}"
   --key_size="${KEY_SIZE}"
   --value_size="${VALUE_SIZE}"
@@ -86,11 +96,11 @@ else
     --plr_error_bound="${PLR_ERROR_BOUND}"
     --memtable_flush_size="${MEMTABLE_FLUSH_MB}"
   )
-  # Optional override: fillvirtual's batch size for RegisterVirtualL0File.
-  # Batches MANIFEST writes during virtual L0 registration.
-  if [[ -n "${REGISTER_BATCH:-}" ]]; then
-    cmd+=(--level0_file_num_register_batch="${REGISTER_BATCH}")
-  fi
+  [[ -z "${VCOMP_RELEASE_BATCH_MAX}" ]] || \
+    cmd+=(--vcomp_release_batch_max="${VCOMP_RELEASE_BATCH_MAX}")
+  [[ -z "${VCOMP_VISIBLE_L0_BATCH_MB}" ]] || \
+    cmd+=(--vcomp_visible_l0_batch_mb="${VCOMP_VISIBLE_L0_BATCH_MB}")
+  cmd+=(--vcomp_log_apply_timing="${VCOMP_LOG_APPLY_TIMING}")
 fi
 
 # ── Save run info ──

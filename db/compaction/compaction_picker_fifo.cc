@@ -184,10 +184,10 @@ Compaction* FIFOCompactionPicker::PickSizeCompaction(
       if (FindIntraL0Compaction(
               level0_files,
               mutable_cf_options
-                  .level0_file_num_compaction_trigger /* min_files_to_compact */
-              ,
+                  .level0_file_num_compaction_trigger /* min_files_to_compact */,
               max_compact_bytes_per_del_file,
-              mutable_cf_options.max_compaction_bytes, &comp_inputs)) {
+              mutable_cf_options.max_compaction_bytes, level0_files.size(),
+              &comp_inputs)) {
         Compaction* c = new Compaction(
             vstorage, ioptions_, mutable_cf_options, mutable_db_options,
             {comp_inputs}, 0, 16 * 1024 * 1024 /* output file size limit */,

@@ -15,8 +15,35 @@ namespace ROCKSDB_NAMESPACE {
 
 double PLRModel::Predict(uint64_t key) const {
   if (segments_.empty()) return 0.0;
-  const auto& seg = GetSegmentAt(key);
-  return seg.slope * static_cast<double>(key) + seg.intercept;
+
+  auto eval = [](const PLRSegment& seg, uint64_t k) {
+    return seg.slope * static_cast<double>(k) + seg.intercept;
+  };
+
+  // CDF semantics: gaps between sparse PLR segments contain no keys, so the
+  // predicted rank must stay flat instead of extrapolating the next segment.
+  size_t lo = 0, hi = segments_.size();
+  while (lo < hi) {
+    size_t mid = lo + (hi - lo) / 2;
+    if (segments_[mid].key_end < key) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+
+  if (lo >= segments_.size()) {
+    return eval(segments_.back(), segments_.back().key_end);
+  }
+
+  const auto& seg = segments_[lo];
+  if (key < seg.key_start) {
+    if (lo == 0) return 0.0;
+    const auto& prev = segments_[lo - 1];
+    return eval(prev, prev.key_end);
+  }
+
+  return eval(seg, key);
 }
 
 uint64_t PLRModel::Inverse(double position) const {
@@ -255,7 +282,11 @@ PLRModel NWayMergePLR(const std::vector<const PLRModel*>& models,
     }
     active.resize(write);
 
-    // Sum slope/intercept from active models only.
+    // Sum slope/intercept from active segments only. A model can be active by
+    // min/max while the current key interval falls into a sparse gap between
+    // two PLR segments. That gap must contribute zero density; otherwise rank
+    // mass is smeared into empty key space and output SST ranges become too
+    // wide.
     double slope_sum = 0.0;
     double intercept_sum = finished_intercept;
     double dedup_prod = 1.0;
@@ -267,6 +298,17 @@ PLRModel NWayMergePLR(const std::vector<const PLRModel*>& models,
         seg_idx[j]++;
       }
       const auto& seg = segs[seg_idx[j]];
+      if (k_mid < seg.key_start || k_mid > seg.key_end) {
+        if (!dedup && k_mid > seg.key_end) {
+          intercept_sum +=
+              seg.slope * static_cast<double>(seg.key_end) + seg.intercept;
+        } else if (!dedup && seg_idx[j] > 0) {
+          const auto& prev = segs[seg_idx[j] - 1];
+          intercept_sum += prev.slope * static_cast<double>(prev.key_end) +
+                           prev.intercept;
+        }
+        continue;
+      }
       slope_sum += seg.slope;
       intercept_sum += seg.intercept;
       if (dedup) {

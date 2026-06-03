@@ -7,7 +7,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #include <cinttypes>
+#include <cmath>
+#include <cstdlib>
 #include <deque>
+#include <string>
+#include <unordered_set>
+#include <utility>
 
 #include "db/builder.h"
 #include "db/virtual_compaction/plr_model.h"
@@ -34,6 +39,23 @@
 #include "util/udt_util.h"
 
 namespace ROCKSDB_NAMESPACE {
+
+namespace {
+
+uint64_t GetVcompEnvUInt64(const char* name, uint64_t default_value) {
+  const char* value = std::getenv(name);
+  if (value == nullptr || *value == '\0') {
+    return default_value;
+  }
+  char* end = nullptr;
+  unsigned long long parsed = std::strtoull(value, &end, 10);
+  if (end == value) {
+    return default_value;
+  }
+  return static_cast<uint64_t>(parsed);
+}
+
+}  // namespace
 
 bool DBImpl::EnoughRoomForCompaction(
     ColumnFamilyData* cfd, const std::vector<CompactionInputFiles>& inputs,
@@ -1434,6 +1456,137 @@ Status DBImpl::PerformTrivialMove(Compaction& c, LogBuffer* log_buffer,
   ROCKS_LOG_BUFFER(log_buffer, "[%s] Moving %d files to level-%d\n",
                    c.column_family_data()->GetName().c_str(),
                    static_cast<int>(c.num_input_files(0)), c.output_level());
+
+  if (immutable_db_options_.use_virtual_compaction && virtual_sst_registry_) {
+    bool has_virtual_input = false;
+    bool has_physical_input = false;
+    std::vector<std::pair<uint64_t, VirtualSST>> moved_virtuals;
+    moved_virtuals.reserve(c.num_input_files(0));
+
+    for (unsigned int l = 0; l < c.num_input_levels(); l++) {
+      if (c.level(l) == c.output_level()) {
+        continue;
+      }
+      for (size_t i = 0; i < c.num_input_files(l); i++) {
+        FileMetaData* f = c.input(l, i);
+        const uint64_t fnum = f->fd.GetNumber();
+        VirtualSST vsst;
+        if (virtual_sst_registry_->LookupCopy(fnum, &vsst)) {
+          has_virtual_input = true;
+          vsst.level = c.output_level();
+          moved_virtuals.emplace_back(fnum, std::move(vsst));
+          continue;
+        }
+
+        std::string fname = TableFileName(c.immutable_options().cf_paths,
+                                          fnum, f->fd.GetPathId());
+        if (!env_->FileExists(fname).ok()) {
+          auto location = c.column_family_data()
+                              ->current()
+                              ->storage_info()
+                              ->GetFileLocation(fnum);
+          Status s = location.IsValid()
+                         ? Status::Corruption(
+                               "current virtual trivial-move input missing "
+                               "from registry",
+                               fname)
+                         : Status::OK();
+          c.ReleaseCompactionFiles(s);
+          compaction_released = true;
+          return s;
+        }
+        has_physical_input = true;
+      }
+    }
+
+    if (has_virtual_input) {
+      if (has_physical_input) {
+        Status s = Status::NotSupported("mixed physical/virtual trivial move");
+        c.ReleaseCompactionFiles(s);
+        compaction_released = true;
+        return s;
+      }
+      const uint64_t trivial_t0 = immutable_db_options_.clock->NowMicros();
+
+      for (unsigned int l = 0; l < c.num_input_levels(); l++) {
+        if (c.level(l) == c.output_level()) {
+          continue;
+        }
+        for (size_t i = 0; i < c.num_input_files(l); i++) {
+          FileMetaData* f = c.input(l, i);
+          c.edit()->DeleteFile(c.level(l), f->fd.GetNumber());
+          c.edit()->AddFile(c.output_level(), f->fd.GetNumber(),
+                            f->fd.GetPathId(), f->fd.GetFileSize(),
+                            f->smallest, f->largest, f->fd.smallest_seqno,
+                            f->fd.largest_seqno, f->marked_for_compaction,
+                            f->temperature, f->oldest_blob_file_number,
+                            f->oldest_ancester_time, f->file_creation_time,
+                            f->epoch_number, f->file_checksum,
+                            f->file_checksum_func_name, f->unique_id,
+                            f->compensated_range_deletion_size, f->tail_size,
+                            f->user_defined_timestamps_persisted);
+          moved_bytes += static_cast<size_t>(f->fd.GetFileSize());
+          ROCKS_LOG_BUFFER(log_buffer,
+                           "[%s] Virtually moved #%" PRIu64
+                           " to level-%d %" PRIu64 " bytes\n",
+                           c.column_family_data()->GetName().c_str(),
+                           f->fd.GetNumber(), c.output_level(),
+                           f->fd.GetFileSize());
+        }
+        moved_files += c.num_input_files(l);
+      }
+
+      std::vector<VirtualCompactionPendingOutput> pending_outputs;
+      std::vector<uint64_t> input_file_numbers;
+      input_file_numbers.reserve(moved_virtuals.size());
+      for (const auto& moved : moved_virtuals) {
+        input_file_numbers.push_back(moved.first);
+      }
+
+      uint64_t log_apply_us = 0;
+      uint64_t commit_queue_wait_us = 0;
+      uint64_t commit_batch_size = 0;
+      uint64_t l0_input_files = 0;
+      uint64_t l0_input_bytes = 0;
+      uint64_t l0_output_files = 0;
+      uint64_t l0_output_bytes = 0;
+      if (c.output_level() == 0) {
+        l0_output_files = moved_virtuals.size();
+        l0_output_bytes = moved_bytes;
+      }
+      for (unsigned int l = 0; l < c.num_input_levels(); l++) {
+        if (c.level(l) != 0 || c.level(l) == c.output_level()) {
+          continue;
+        }
+        l0_input_files += c.num_input_files(l);
+        for (size_t i = 0; i < c.num_input_files(l); i++) {
+          l0_input_bytes += c.input(l, i)->fd.GetFileSize();
+        }
+      }
+      Status status = CommitVirtualCompactionEdit(
+          &c, c.column_family_data(), c.edit(), pending_outputs,
+          input_file_numbers, &moved_virtuals, &compaction_released,
+          &log_apply_us, &commit_queue_wait_us, &commit_batch_size,
+          l0_input_files, l0_input_bytes, l0_output_files, l0_output_bytes);
+      if (!compaction_released) {
+        c.ReleaseCompactionFiles(status);
+        compaction_released = true;
+      } else if (!status.ok()) {
+        status.PermitUncheckedError();
+      }
+      virtual_trivial_move_jobs_.fetch_add(1, std::memory_order_relaxed);
+      virtual_trivial_move_files_.fetch_add(moved_files,
+                                           std::memory_order_relaxed);
+      virtual_trivial_move_bytes_.fetch_add(moved_bytes,
+                                           std::memory_order_relaxed);
+      virtual_trivial_move_log_apply_us_.fetch_add(log_apply_us,
+                                                  std::memory_order_relaxed);
+      virtual_trivial_move_total_us_.fetch_add(
+          immutable_db_options_.clock->NowMicros() - trivial_t0,
+          std::memory_order_relaxed);
+      return status;
+    }
+  }
 
   // Move files to the output level by editing the manifest
   for (unsigned int l = 0; l < c.num_input_levels(); l++) {
@@ -3569,11 +3722,15 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
     // If compaction failed, we want to delete all temporary files that we
     // might have created (they might not be all recorded in job_context in
     // case of a failure). Thus, we force full scan in FindObsoleteFiles()
-    FindObsoleteFiles(&job_context, !s.ok() && !s.IsShutdownInProgress() &&
-                                        !s.IsManualCompactionPaused() &&
-                                        !s.IsColumnFamilyDropped() &&
-                                        !s.IsBusy());
-    TEST_SYNC_POINT("DBImpl::BackgroundCallCompaction:FoundObsoleteFiles");
+    const bool defer_virtual_obsolete_cleanup =
+        immutable_db_options_.use_virtual_compaction && s.ok();
+    if (!defer_virtual_obsolete_cleanup) {
+      FindObsoleteFiles(&job_context, !s.ok() && !s.IsShutdownInProgress() &&
+                                          !s.IsManualCompactionPaused() &&
+                                          !s.IsColumnFamilyDropped() &&
+                                          !s.IsBusy());
+      TEST_SYNC_POINT("DBImpl::BackgroundCallCompaction:FoundObsoleteFiles");
+    }
 
     // delete unnecessary files if any, this is done outside the mutex
     if (job_context.HaveSomethingToClean() ||
@@ -4269,14 +4426,20 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
   } else if (immutable_db_options_.use_virtual_compaction &&
              virtual_sst_registry_ &&
              [&]() {
-               // Dispatch to virtual compaction only if at least one input
-               // file is still a virtual SST. After Phase 2 materialization,
-               // subsequent compactions see only real files — those must go
-               // through the normal compaction path.
+               // Dispatch to virtual compaction if any input is virtual, or if
+               // a stale/prepicked compaction still points at a virtual file
+               // that has already disappeared from disk.
                for (size_t lvl = 0; lvl < c->num_input_levels(); lvl++) {
                  for (size_t i = 0; i < c->num_input_files(lvl); i++) {
-                   uint64_t fnum = c->input(lvl, i)->fd.GetNumber();
+                   const auto* fmd = c->input(lvl, i);
+                   uint64_t fnum = fmd->fd.GetNumber();
                    if (virtual_sst_registry_->Lookup(fnum) != nullptr) {
+                     return true;
+                   }
+                   std::string fname = TableFileName(
+                       c->immutable_options().cf_paths, fnum,
+                       fmd->fd.GetPathId());
+                   if (!env_->FileExists(fname).ok()) {
                      return true;
                    }
                  }
@@ -4284,7 +4447,8 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
                return false;
              }()) {
     // ── Virtual compaction: PLR model merge instead of actual I/O ──
-    status = RunVirtualCompaction(c.get(), job_context, log_buffer);
+    status = RunVirtualCompaction(c.get(), job_context, log_buffer,
+                                  &compaction_released);
     if (status.ok()) {
       InstallSuperVersionAndScheduleWork(
           c->column_family_data(), job_context->superversion_contexts.data());
@@ -4664,7 +4828,30 @@ void DBImpl::BuildCompactionJobInfo(
   compaction_job_info->base_input_level = c->start_level();
   compaction_job_info->output_level = c->output_level();
   compaction_job_info->stats = compaction_job_stats;
-  const auto& input_table_properties = c->GetOrInitInputTableProperties();
+  bool load_input_table_properties = true;
+  if (immutable_db_options_.use_virtual_compaction) {
+    for (size_t i = 0; i < c->num_input_levels(); ++i) {
+      for (const auto fmd : *c->inputs(i)) {
+        const FileDescriptor& desc = fmd->fd;
+        const uint64_t file_number = desc.GetNumber();
+        auto fn = TableFileName(c->immutable_options().cf_paths, file_number,
+                                desc.GetPathId());
+        if ((virtual_sst_registry_ &&
+             virtual_sst_registry_->IsVirtual(file_number)) ||
+            !env_->FileExists(fn).ok()) {
+          load_input_table_properties = false;
+          break;
+        }
+      }
+      if (!load_input_table_properties) {
+        break;
+      }
+    }
+  }
+  const TablePropertiesCollection empty_input_table_properties;
+  const auto& input_table_properties =
+      load_input_table_properties ? c->GetOrInitInputTableProperties()
+                                  : empty_input_table_properties;
   const auto& output_table_properties = c->GetOutputTableProperties();
   compaction_job_info->table_properties.insert(input_table_properties.begin(),
                                                input_table_properties.end());
@@ -4751,8 +4938,12 @@ void DBImpl::InstallSuperVersionAndScheduleWork(
   if (UNLIKELY(sv_context->new_superversion == nullptr)) {
     sv_context->NewSuperVersion();
   }
+  const uint64_t install_sv_t0 = immutable_db_options_.clock->NowMicros();
   cfd->InstallSuperVersion(sv_context, &mutex_,
                            std::move(new_seqno_to_time_mapping));
+  version_metadata_superversion_install_us_.fetch_add(
+      immutable_db_options_.clock->NowMicros() - install_sv_t0,
+      std::memory_order_relaxed);
 
   // There may be a small data race here. The snapshot tricking bottommost
   // compaction may already be released here. But assuming there will always be
@@ -4910,56 +5101,678 @@ void DBImpl::ResetBottomPriCompactionIntent(ColumnFamilyData* cfd,
   c.reset();
 }
 
-Status DBImpl::RegisterVirtualL0File(VersionEdit* edit) {
+void DBImpl::ResetVirtualCompactionStats() {
+  virtual_compaction_jobs_.store(0, std::memory_order_relaxed);
+  virtual_compaction_input_files_.store(0, std::memory_order_relaxed);
+  virtual_compaction_output_files_.store(0, std::memory_order_relaxed);
+  virtual_compaction_gather_us_.store(0, std::memory_order_relaxed);
+  virtual_compaction_merge_us_.store(0, std::memory_order_relaxed);
+  virtual_compaction_split_us_.store(0, std::memory_order_relaxed);
+  virtual_compaction_mutex_wait_us_.store(0, std::memory_order_relaxed);
+  virtual_compaction_edit_build_us_.store(0, std::memory_order_relaxed);
+  virtual_compaction_log_apply_us_.store(0, std::memory_order_relaxed);
+  virtual_compaction_total_us_.store(0, std::memory_order_relaxed);
+  virtual_compaction_commit_batches_.store(0, std::memory_order_relaxed);
+  virtual_compaction_commit_jobs_.store(0, std::memory_order_relaxed);
+  virtual_compaction_commit_queue_wait_us_.store(0, std::memory_order_relaxed);
+  virtual_compaction_commit_leader_log_apply_us_.store(
+      0, std::memory_order_relaxed);
+  virtual_trivial_move_jobs_.store(0, std::memory_order_relaxed);
+  virtual_trivial_move_files_.store(0, std::memory_order_relaxed);
+  virtual_trivial_move_bytes_.store(0, std::memory_order_relaxed);
+  virtual_trivial_move_log_apply_us_.store(0, std::memory_order_relaxed);
+  virtual_trivial_move_total_us_.store(0, std::memory_order_relaxed);
+  version_metadata_superversion_install_us_.store(0,
+                                                  std::memory_order_relaxed);
+  version_metadata_obsolete_collect_us_.store(0, std::memory_order_relaxed);
+  version_metadata_obsolete_purge_us_.store(0, std::memory_order_relaxed);
+  virtual_l0_pending_.clear();
+  virtual_l0_pending_bytes_ = 0;
+  virtual_l0_visible_files_ = 0;
+  virtual_l0_visible_bytes_ = 0;
+  virtual_l0_window_stats_ = VirtualL0WindowStats();
+  virtual_l0_window_stats_.target_visible_bytes =
+      virtual_l0_target_visible_bytes_;
+  virtual_l0_window_stats_.max_register_batch_files =
+      virtual_l0_max_register_batch_files_;
+}
+
+DBImpl::VirtualCompactionStats DBImpl::GetVirtualCompactionStats() const {
+  VirtualCompactionStats stats;
+  stats.jobs = virtual_compaction_jobs_.load(std::memory_order_relaxed);
+  stats.input_files =
+      virtual_compaction_input_files_.load(std::memory_order_relaxed);
+  stats.output_files =
+      virtual_compaction_output_files_.load(std::memory_order_relaxed);
+  stats.gather_us =
+      virtual_compaction_gather_us_.load(std::memory_order_relaxed);
+  stats.merge_us =
+      virtual_compaction_merge_us_.load(std::memory_order_relaxed);
+  stats.split_us =
+      virtual_compaction_split_us_.load(std::memory_order_relaxed);
+  stats.mutex_wait_us =
+      virtual_compaction_mutex_wait_us_.load(std::memory_order_relaxed);
+  stats.edit_build_us =
+      virtual_compaction_edit_build_us_.load(std::memory_order_relaxed);
+  stats.log_apply_us =
+      virtual_compaction_log_apply_us_.load(std::memory_order_relaxed);
+  stats.total_us =
+      virtual_compaction_total_us_.load(std::memory_order_relaxed);
+  stats.commit_batches =
+      virtual_compaction_commit_batches_.load(std::memory_order_relaxed);
+  stats.commit_jobs =
+      virtual_compaction_commit_jobs_.load(std::memory_order_relaxed);
+  stats.commit_queue_wait_us =
+      virtual_compaction_commit_queue_wait_us_.load(std::memory_order_relaxed);
+  stats.commit_leader_log_apply_us =
+      virtual_compaction_commit_leader_log_apply_us_.load(
+          std::memory_order_relaxed);
+  stats.trivial_move_jobs =
+      virtual_trivial_move_jobs_.load(std::memory_order_relaxed);
+  stats.trivial_move_files =
+      virtual_trivial_move_files_.load(std::memory_order_relaxed);
+  stats.trivial_move_bytes =
+      virtual_trivial_move_bytes_.load(std::memory_order_relaxed);
+  stats.trivial_move_log_apply_us =
+      virtual_trivial_move_log_apply_us_.load(std::memory_order_relaxed);
+  stats.trivial_move_total_us =
+      virtual_trivial_move_total_us_.load(std::memory_order_relaxed);
+  stats.superversion_install_us =
+      version_metadata_superversion_install_us_.load(
+          std::memory_order_relaxed);
+  stats.obsolete_collect_us =
+      version_metadata_obsolete_collect_us_.load(std::memory_order_relaxed);
+  stats.obsolete_purge_us =
+      version_metadata_obsolete_purge_us_.load(std::memory_order_relaxed);
+  return stats;
+}
+
+void DBImpl::ConfigureVirtualL0Window(uint64_t target_visible_bytes,
+                                      uint64_t max_register_batch_files) {
   InstrumentedMutexLock l(&mutex_);
+  virtual_l0_target_visible_bytes_ = target_visible_bytes;
+  virtual_l0_max_register_batch_files_ =
+      std::max<uint64_t>(1, max_register_batch_files);
+  virtual_l0_window_stats_.target_visible_bytes =
+      virtual_l0_target_visible_bytes_;
+  virtual_l0_window_stats_.max_register_batch_files =
+      virtual_l0_max_register_batch_files_;
+}
+
+DBImpl::VirtualL0WindowStats DBImpl::GetVirtualL0WindowStats() const {
+  InstrumentedMutexLock l(&mutex_);
+  VirtualL0WindowStats stats = virtual_l0_window_stats_;
+  stats.pending_files = virtual_l0_pending_.size();
+  stats.pending_bytes = virtual_l0_pending_bytes_;
+  stats.visible_files = virtual_l0_visible_files_;
+  stats.visible_bytes = virtual_l0_visible_bytes_;
+  stats.target_visible_bytes = virtual_l0_target_visible_bytes_;
+  stats.max_register_batch_files = virtual_l0_max_register_batch_files_;
+  return stats;
+}
+
+Status DBImpl::EnqueueVirtualL0Files(
+    std::vector<VirtualL0WindowFile>&& files,
+    VirtualL0RegistrationStats* stats) {
+  if (files.empty()) {
+    return Status::OK();
+  }
+
+  const uint64_t total_t0 = immutable_db_options_.clock->NowMicros();
+  const uint64_t mutex_t0 = total_t0;
+  InstrumentedMutexLock l(&mutex_);
+  const uint64_t mutex_t1 = immutable_db_options_.clock->NowMicros();
+
+  uint64_t bytes = 0;
+  for (auto& file : files) {
+    bytes += file.file_size;
+    virtual_l0_pending_bytes_ += file.file_size;
+    virtual_l0_pending_.push_back(std::move(file));
+  }
+  virtual_l0_window_stats_.queued_files += files.size();
+  virtual_l0_window_stats_.queued_bytes += bytes;
+  virtual_l0_window_stats_.pending_files = virtual_l0_pending_.size();
+  virtual_l0_window_stats_.pending_bytes = virtual_l0_pending_bytes_;
+  virtual_l0_window_stats_.max_pending_files =
+      std::max<uint64_t>(virtual_l0_window_stats_.max_pending_files,
+                         virtual_l0_pending_.size());
+
+  if (stats != nullptr) {
+    stats->mutex_wait_us += mutex_t1 - mutex_t0;
+  }
+  Status s = RefillVirtualL0WindowLocked(stats);
+  if (stats != nullptr) {
+    stats->total_us += immutable_db_options_.clock->NowMicros() - total_t0;
+  }
+  return s;
+}
+
+Status DBImpl::RefillVirtualL0Window(VirtualL0RegistrationStats* stats) {
+  const uint64_t total_t0 = immutable_db_options_.clock->NowMicros();
+  const uint64_t mutex_t0 = total_t0;
+  InstrumentedMutexLock l(&mutex_);
+  const uint64_t mutex_t1 = immutable_db_options_.clock->NowMicros();
+  if (stats != nullptr) {
+    stats->mutex_wait_us += mutex_t1 - mutex_t0;
+  }
+  Status s = RefillVirtualL0WindowLocked(stats);
+  if (stats != nullptr) {
+    stats->total_us += immutable_db_options_.clock->NowMicros() - total_t0;
+  }
+  return s;
+}
+
+Status DBImpl::RefillVirtualL0WindowLocked(VirtualL0RegistrationStats* stats) {
+  mutex_.AssertHeld();
+  if (!immutable_db_options_.use_virtual_compaction ||
+      virtual_sst_registry_ == nullptr || virtual_l0_pending_.empty()) {
+    return Status::OK();
+  }
+
+  auto* cfd =
+      static_cast<ColumnFamilyHandleImpl*>(DefaultColumnFamily())->cfd();
+  const uint64_t target_bytes = virtual_l0_target_visible_bytes_ > 0
+                                    ? virtual_l0_target_visible_bytes_
+                                    : virtual_l0_pending_.front().file_size;
+  Status s;
+
+  while (!virtual_l0_pending_.empty() &&
+         virtual_l0_visible_bytes_ < target_bytes) {
+    const uint64_t refill_t0 = immutable_db_options_.clock->NowMicros();
+    std::vector<VirtualL0WindowFile> batch;
+    batch.reserve(virtual_l0_max_register_batch_files_);
+    uint64_t batch_bytes = 0;
+    const uint64_t remaining = target_bytes - virtual_l0_visible_bytes_;
+
+    while (!virtual_l0_pending_.empty() &&
+           batch.size() < virtual_l0_max_register_batch_files_) {
+      const uint64_t file_size = virtual_l0_pending_.front().file_size;
+      if (!batch.empty() && batch_bytes + file_size > remaining) {
+        break;
+      }
+      batch_bytes += file_size;
+      virtual_l0_pending_bytes_ -= file_size;
+      batch.push_back(std::move(virtual_l0_pending_.front()));
+      virtual_l0_pending_.pop_front();
+      if (batch_bytes >= remaining) {
+        break;
+      }
+    }
+    if (batch.empty()) {
+      break;
+    }
+
+    VersionEdit edit;
+    for (const auto& file : batch) {
+      std::string smallest_key =
+          virtual_sst_registry_->EncodeUserKey(file.vsst.key_min);
+      std::string largest_key =
+          virtual_sst_registry_->EncodeUserKey(file.vsst.key_max);
+      InternalKey smallest(Slice(smallest_key), kMaxSequenceNumber,
+                           kTypeValue);
+      InternalKey largest(Slice(largest_key), 0, kTypeValue);
+      edit.AddFile(0 /* level */, file.file_number, /* path_id */ 0,
+                   file.file_size, smallest, largest,
+                   /* smallest_seqno */ 0, /* largest_seqno */ 0,
+                   /* marked_for_compaction */ false, Temperature::kUnknown,
+                   kInvalidBlobFileNumber, /* oldest_ancester_time */ 0,
+                   /* file_creation_time */ 0, file.epoch_number,
+                   /* file_checksum */ "", /* file_checksum_func_name */ "",
+                   UniqueId64x2{}, /* compensated_range_deletion_size */ 0,
+                   /* tail_size */ 0,
+                   /* user_defined_timestamps_persisted */ true);
+    }
+
+    for (auto& file : batch) {
+      virtual_sst_registry_->Register(file.file_number, std::move(file.vsst));
+    }
+
+    const ReadOptions ro;
+    const WriteOptions wo;
+    const uint64_t log_t0 = immutable_db_options_.clock->NowMicros();
+    s = versions_->LogAndApply(cfd, ro, wo, &edit, &mutex_,
+                               directories_.GetDbDir());
+    const uint64_t log_us = immutable_db_options_.clock->NowMicros() - log_t0;
+    if (!s.ok()) {
+      for (const auto& file : batch) {
+        virtual_sst_registry_->Remove(file.file_number);
+      }
+      return s;
+    }
+
+    uint64_t install_us = 0;
+    uint64_t cleanup_us = 0;
+    {
+      SuperVersionContext sv_context(/* create_superversion = */ true);
+      const uint64_t install_t0 = immutable_db_options_.clock->NowMicros();
+      InstallSuperVersionAndScheduleWork(cfd, &sv_context);
+      const uint64_t install_t1 = immutable_db_options_.clock->NowMicros();
+      sv_context.Clean();
+      const uint64_t cleanup_t1 = immutable_db_options_.clock->NowMicros();
+      install_us = install_t1 - install_t0;
+      cleanup_us = cleanup_t1 - install_t1;
+    }
+
+    virtual_l0_visible_files_ += batch.size();
+    virtual_l0_visible_bytes_ += batch_bytes;
+    virtual_l0_window_stats_.registered_files += batch.size();
+    virtual_l0_window_stats_.registered_bytes += batch_bytes;
+    virtual_l0_window_stats_.register_batches++;
+    virtual_l0_window_stats_.max_register_batch =
+        std::max<uint64_t>(virtual_l0_window_stats_.max_register_batch,
+                           batch.size());
+    virtual_l0_window_stats_.max_register_batch_bytes =
+        std::max<uint64_t>(virtual_l0_window_stats_.max_register_batch_bytes,
+                           batch_bytes);
+    virtual_l0_window_stats_.pending_files = virtual_l0_pending_.size();
+    virtual_l0_window_stats_.pending_bytes = virtual_l0_pending_bytes_;
+    virtual_l0_window_stats_.visible_files = virtual_l0_visible_files_;
+    virtual_l0_window_stats_.visible_bytes = virtual_l0_visible_bytes_;
+    virtual_l0_window_stats_.log_apply_us += log_us;
+    virtual_l0_window_stats_.install_schedule_us += install_us;
+    virtual_l0_window_stats_.cleanup_us += cleanup_us;
+    virtual_l0_window_stats_.refill_us +=
+        immutable_db_options_.clock->NowMicros() - refill_t0;
+    if (stats != nullptr) {
+      stats->log_apply_us += log_us;
+      stats->install_schedule_us += install_us;
+      stats->cleanup_us += cleanup_us;
+    }
+  }
+
+  return Status::OK();
+}
+
+void DBImpl::AccountVirtualL0CompactionLocked(uint64_t input_files,
+                                              uint64_t input_bytes,
+                                              uint64_t output_files,
+                                              uint64_t output_bytes) {
+  mutex_.AssertHeld();
+  if (input_files > virtual_l0_visible_files_) {
+    virtual_l0_visible_files_ = 0;
+  } else {
+    virtual_l0_visible_files_ -= input_files;
+  }
+  if (input_bytes > virtual_l0_visible_bytes_) {
+    virtual_l0_visible_bytes_ = 0;
+  } else {
+    virtual_l0_visible_bytes_ -= input_bytes;
+  }
+  virtual_l0_visible_files_ += output_files;
+  virtual_l0_visible_bytes_ += output_bytes;
+  virtual_l0_window_stats_.consumed_files += input_files;
+  virtual_l0_window_stats_.consumed_bytes += input_bytes;
+  virtual_l0_window_stats_.visible_files = virtual_l0_visible_files_;
+  virtual_l0_window_stats_.visible_bytes = virtual_l0_visible_bytes_;
+}
+
+Status DBImpl::RegisterVirtualL0File(
+    VersionEdit* edit, VirtualL0RegistrationStats* stats) {
+  uint64_t total_t0 = immutable_db_options_.clock->NowMicros();
+  uint64_t mutex_t0 = total_t0;
+  InstrumentedMutexLock l(&mutex_);
+  uint64_t mutex_t1 = immutable_db_options_.clock->NowMicros();
   auto* cfd = static_cast<ColumnFamilyHandleImpl*>(
                   DefaultColumnFamily())->cfd();
 
   const ReadOptions ro;
   const WriteOptions wo;
+  uint64_t log_t0 = immutable_db_options_.clock->NowMicros();
   Status s = versions_->LogAndApply(cfd, ro, wo, edit, &mutex_,
-                                     directories_.GetDbDir());
+                                    directories_.GetDbDir());
+  uint64_t log_t1 = immutable_db_options_.clock->NowMicros();
+  uint64_t install_us = 0;
+  uint64_t cleanup_us = 0;
   if (s.ok()) {
     SuperVersionContext sv_context(/* create_superversion = */ true);
+    uint64_t install_t0 = immutable_db_options_.clock->NowMicros();
     InstallSuperVersionAndScheduleWork(cfd, &sv_context);
+    uint64_t install_t1 = immutable_db_options_.clock->NowMicros();
     sv_context.Clean();
+    uint64_t cleanup_t1 = immutable_db_options_.clock->NowMicros();
+    install_us = install_t1 - install_t0;
+    cleanup_us = cleanup_t1 - install_t1;
+  }
+  if (stats != nullptr) {
+    uint64_t total_t1 = immutable_db_options_.clock->NowMicros();
+    stats->mutex_wait_us += mutex_t1 - mutex_t0;
+    stats->log_apply_us += log_t1 - log_t0;
+    stats->install_schedule_us += install_us;
+    stats->cleanup_us += cleanup_us;
+    stats->total_us += total_t1 - total_t0;
   }
   return s;
 }
 
+Status DBImpl::MarkVirtualL0FilesCompactionEligible(
+    const std::vector<uint64_t>& file_numbers, uint64_t* changed) {
+  if (changed != nullptr) {
+    *changed = 0;
+  }
+  if (file_numbers.empty()) {
+    return Status::OK();
+  }
+
+  InstrumentedMutexLock l(&mutex_);
+  auto* cfd = static_cast<ColumnFamilyHandleImpl*>(DefaultColumnFamily())->cfd();
+  auto* vstorage = cfd->current()->storage_info();
+  uint64_t local_changed = 0;
+  uint64_t local_visible = 0;
+  for (uint64_t file_number : file_numbers) {
+    const auto location = vstorage->GetFileLocation(file_number);
+    if (!location.IsValid() || location.GetLevel() != 0) {
+      continue;
+    }
+    auto* file = vstorage->LevelFiles(0)[location.GetPosition()];
+    if (!file->virtual_compaction_eligible) {
+      file->virtual_compaction_eligible = true;
+      local_changed++;
+    }
+    local_visible++;
+  }
+  if (local_changed > 0) {
+    vstorage->ComputeCompactionScore(cfd->ioptions(),
+                                     cfd->GetLatestMutableCFOptions());
+    EnqueuePendingCompaction(cfd);
+    MaybeScheduleFlushOrCompaction();
+  }
+  if (changed != nullptr) {
+    *changed = local_visible;
+  }
+  return Status::OK();
+}
+
+Status DBImpl::CommitVirtualCompactionEdit(
+    Compaction* c, ColumnFamilyData* cfd, VersionEdit* edit,
+    const std::vector<VirtualCompactionPendingOutput>& pending_outputs,
+    const std::vector<uint64_t>& input_file_numbers,
+    const std::vector<std::pair<uint64_t, VirtualSST>>* moved_virtuals,
+    bool* compaction_released, uint64_t* log_apply_us,
+    uint64_t* commit_queue_wait_us, uint64_t* commit_batch_size,
+  uint64_t l0_input_files, uint64_t l0_input_bytes,
+  uint64_t l0_output_files, uint64_t l0_output_bytes) {
+  mutex_.AssertHeld();
+  const size_t max_batch_size = static_cast<size_t>(
+      std::max<uint64_t>(1, GetVcompEnvUInt64(
+                                "VCOMP_BG_COMMIT_BATCH_MAX", 64)));
+  const uint64_t batch_delay_us =
+      GetVcompEnvUInt64("VCOMP_BG_COMMIT_DELAY_US", 0);
+
+  auto release_request = [](VirtualCompactionCommitRequest* req,
+                            const Status& s) {
+    if (req->compaction_released != nullptr && !*req->compaction_released) {
+      req->compaction->ReleaseCompactionFiles(s);
+      *req->compaction_released = true;
+    }
+  };
+
+  VirtualCompactionCommitRequest req;
+  req.cfd = cfd;
+  req.compaction = c;
+  req.edit = edit;
+  req.pending_outputs = &pending_outputs;
+  req.input_file_numbers = &input_file_numbers;
+  req.moved_virtuals = moved_virtuals;
+  req.compaction_released = compaction_released;
+  req.l0_input_files = l0_input_files;
+  req.l0_input_bytes = l0_input_bytes;
+  req.l0_output_files = l0_output_files;
+  req.l0_output_bytes = l0_output_bytes;
+  req.enqueue_us = immutable_db_options_.clock->NowMicros();
+
+  virtual_compaction_commit_queue_.push_back(&req);
+  virtual_compaction_commit_cv_.Signal();
+
+  if (virtual_compaction_commit_in_progress_) {
+    while (!req.done) {
+      virtual_compaction_commit_cv_.Wait();
+    }
+  } else {
+    virtual_compaction_commit_in_progress_ = true;
+    while (!virtual_compaction_commit_queue_.empty()) {
+      if (batch_delay_us > 0 &&
+          virtual_compaction_commit_queue_.size() < max_batch_size) {
+        mutex_.Unlock();
+        immutable_db_options_.clock->SleepForMicroseconds(batch_delay_us);
+        mutex_.Lock();
+        if (virtual_compaction_commit_queue_.empty()) {
+          continue;
+        }
+      }
+      ColumnFamilyData* batch_cfd = virtual_compaction_commit_queue_.front()->cfd;
+      std::vector<VirtualCompactionCommitRequest*> batch;
+      batch.reserve(max_batch_size);
+      while (!virtual_compaction_commit_queue_.empty() &&
+             batch.size() < max_batch_size &&
+             virtual_compaction_commit_queue_.front()->cfd == batch_cfd) {
+        batch.push_back(virtual_compaction_commit_queue_.front());
+        virtual_compaction_commit_queue_.pop_front();
+      }
+
+      autovector<VersionEdit*> edit_list;
+      std::vector<VirtualCompactionCommitRequest*> commit_batch;
+      commit_batch.reserve(batch.size());
+      const uint64_t commit_start_us = immutable_db_options_.clock->NowMicros();
+      for (auto* r : batch) {
+        bool current = true;
+        for (uint64_t fnum : *r->input_file_numbers) {
+          if (!r->cfd->current()->storage_info()->GetFileLocation(fnum).IsValid()) {
+            current = false;
+            break;
+          }
+        }
+        if (!current) {
+          r->status = Status::OK();
+          r->commit_start_us = commit_start_us;
+          r->commit_done_us = commit_start_us;
+          r->batch_size = batch.size();
+          release_request(r, r->status);
+          r->done = true;
+          continue;
+        }
+        edit_list.emplace_back(r->edit);
+        commit_batch.push_back(r);
+      }
+
+      Status s;
+      uint64_t log_apply_wall_us = 0;
+      if (!edit_list.empty()) {
+        const ReadOptions read_options(Env::IOActivity::kCompaction);
+        const WriteOptions write_options(Env::IOActivity::kCompaction);
+        const uint64_t log_t0 = immutable_db_options_.clock->NowMicros();
+        s = versions_->LogAndApply(
+            batch_cfd, read_options, write_options, edit_list, &mutex_,
+            directories_.GetDbDir(), /*new_descriptor_log=*/false,
+            /*column_family_options=*/nullptr,
+            [&](const Status& cb_status) {
+              for (auto* r : commit_batch) {
+                if (cb_status.ok()) {
+                  if (r->moved_virtuals != nullptr) {
+                    // Trivial moves keep the same file number and only change
+                    // the virtual SST level. Do not remove the input entry.
+                    for (const auto& moved : *r->moved_virtuals) {
+                      virtual_sst_registry_->Register(moved.first,
+                                                      moved.second);
+                    }
+                  } else {
+                    for (const auto& output : *r->pending_outputs) {
+                      virtual_sst_registry_->Register(output.file_number,
+                                                      output.vsst);
+                    }
+                    for (uint64_t fnum : *r->input_file_numbers) {
+                      virtual_sst_registry_->Remove(fnum);
+                    }
+                  }
+                }
+                release_request(r, cb_status);
+              }
+            });
+        log_apply_wall_us = immutable_db_options_.clock->NowMicros() - log_t0;
+        virtual_compaction_commit_batches_.fetch_add(
+            1, std::memory_order_relaxed);
+        virtual_compaction_commit_jobs_.fetch_add(commit_batch.size(),
+                                                  std::memory_order_relaxed);
+        virtual_compaction_commit_leader_log_apply_us_.fetch_add(
+            log_apply_wall_us, std::memory_order_relaxed);
+      }
+
+      if (s.ok()) {
+        for (auto* r : commit_batch) {
+          AccountVirtualL0CompactionLocked(r->l0_input_files,
+                                           r->l0_input_bytes,
+                                           r->l0_output_files,
+                                           r->l0_output_bytes);
+        }
+        Status refill_status = RefillVirtualL0WindowLocked(nullptr);
+        if (!refill_status.ok()) {
+          s = refill_status;
+        }
+      }
+
+      const uint64_t done_us = immutable_db_options_.clock->NowMicros();
+      for (auto* r : commit_batch) {
+        r->status = s;
+        r->commit_start_us = commit_start_us;
+        r->commit_done_us = done_us;
+        r->batch_size = commit_batch.size();
+        if (r->compaction_released != nullptr && !*r->compaction_released) {
+          release_request(r, s);
+        } else if (!s.ok()) {
+          s.PermitUncheckedError();
+        }
+        r->done = true;
+      }
+      for (auto* r : batch) {
+        if (!r->done) {
+          r->status = Status::OK();
+          r->commit_start_us = commit_start_us;
+          r->commit_done_us = done_us;
+          r->batch_size = batch.size();
+          release_request(r, r->status);
+          r->done = true;
+        }
+      }
+      virtual_compaction_commit_cv_.SignalAll();
+    }
+    virtual_compaction_commit_in_progress_ = false;
+    virtual_compaction_commit_cv_.SignalAll();
+  }
+
+  const uint64_t queue_wait =
+      req.commit_start_us > req.enqueue_us ? req.commit_start_us - req.enqueue_us
+                                           : 0;
+  const uint64_t total_commit_us =
+      req.commit_done_us > req.enqueue_us ? req.commit_done_us - req.enqueue_us
+                                          : 0;
+  if (log_apply_us != nullptr) {
+    *log_apply_us = total_commit_us;
+  }
+  if (commit_queue_wait_us != nullptr) {
+    *commit_queue_wait_us = queue_wait;
+  }
+  if (commit_batch_size != nullptr) {
+    *commit_batch_size = req.batch_size;
+  }
+  return req.status;
+}
+
 Status DBImpl::RunVirtualCompaction(Compaction* c,
                                     JobContext* /*job_context*/,
-                                    LogBuffer* log_buffer) {
+                                    LogBuffer* log_buffer,
+                                    bool* compaction_released) {
   mutex_.AssertHeld();
+  uint64_t total_t0 = immutable_db_options_.clock->NowMicros();
+  uint64_t gather_t0 = total_t0;
   assert(virtual_sst_registry_);
   auto* cfd = c->column_family_data();
   int output_level = c->output_level();
+  auto release_compaction = [&](const Status& s) {
+    if (compaction_released != nullptr && !*compaction_released) {
+      c->ReleaseCompactionFiles(s);
+      *compaction_released = true;
+    }
+  };
 
   // Gather input PLR models from all input levels.
+  std::vector<VirtualSST> input_vssts;
   std::vector<const PLRModel*> models;
   std::vector<uint64_t> num_entries_vec;
   std::vector<uint64_t> key_mins_vec;
   std::vector<uint64_t> key_maxs_vec;
   std::vector<uint64_t> input_file_numbers;
+  std::vector<int> input_levels;
+  uint64_t l0_input_files = 0;
+  uint64_t l0_input_bytes = 0;
+  size_t num_input_files = 0;
+  std::string input_level_summary;
+  for (size_t lvl = 0; lvl < c->num_input_levels(); lvl++) {
+    num_input_files += c->num_input_files(lvl);
+    if (!input_level_summary.empty()) {
+      input_level_summary.append(",");
+    }
+    input_level_summary.append("L");
+    input_level_summary.append(std::to_string(c->level(lvl)));
+    input_level_summary.append("=");
+    input_level_summary.append(std::to_string(c->num_input_files(lvl)));
+  }
+  input_vssts.reserve(num_input_files);
+  models.reserve(num_input_files);
+  num_entries_vec.reserve(num_input_files);
+  key_mins_vec.reserve(num_input_files);
+  key_maxs_vec.reserve(num_input_files);
+  input_file_numbers.reserve(num_input_files);
+  input_levels.reserve(num_input_files);
 
   for (size_t lvl = 0; lvl < c->num_input_levels(); lvl++) {
     for (size_t i = 0; i < c->num_input_files(lvl); i++) {
       auto* fmd = c->input(lvl, i);
       uint64_t fnum = fmd->fd.GetNumber();
-      const VirtualSST* vsst = virtual_sst_registry_->Lookup(fnum);
-      if (!vsst) {
-        continue;
+      VirtualSST vsst;
+      if (!virtual_sst_registry_->LookupCopy(fnum, &vsst)) {
+        auto location = cfd->current()->storage_info()->GetFileLocation(fnum);
+        if (!location.IsValid()) {
+          ROCKS_LOG_BUFFER(log_buffer,
+                           "[%s] Skipping stale virtual compaction: input "
+                           "file %" PRIu64 " is no longer current",
+                           cfd->GetName().c_str(), fnum);
+          release_compaction(Status::OK());
+          return Status::OK();
+        }
+        std::string fname = TableFileName(c->immutable_options().cf_paths,
+                                          fnum, fmd->fd.GetPathId());
+        if (!env_->FileExists(fname).ok()) {
+          Status s = Status::Corruption(
+              "current virtual SST missing from registry", fname);
+          ROCKS_LOG_BUFFER(log_buffer, "[%s] %s", cfd->GetName().c_str(),
+                           s.ToString().c_str());
+          release_compaction(s);
+          return s;
+        }
+        Status s = Status::NotSupported(
+            "mixed physical/virtual compaction input", fname);
+        ROCKS_LOG_BUFFER(log_buffer, "[%s] %s", cfd->GetName().c_str(),
+                         s.ToString().c_str());
+        release_compaction(s);
+        return s;
       }
-      models.push_back(&vsst->plr_model);
-      num_entries_vec.push_back(vsst->num_entries);
-      key_mins_vec.push_back(vsst->key_min);
-      key_maxs_vec.push_back(vsst->key_max);
+      input_vssts.push_back(std::move(vsst));
+      const VirtualSST& input_vsst = input_vssts.back();
+      models.push_back(&input_vsst.plr_model);
+      num_entries_vec.push_back(input_vsst.num_entries);
+      key_mins_vec.push_back(input_vsst.key_min);
+      key_maxs_vec.push_back(input_vsst.key_max);
       input_file_numbers.push_back(fnum);
+      input_levels.push_back(c->level(lvl));
+      if (c->level(lvl) == 0) {
+        l0_input_files++;
+        l0_input_bytes += fmd->fd.GetFileSize();
+      }
     }
   }
+  uint64_t gather_us = immutable_db_options_.clock->NowMicros() - gather_t0;
 
   if (models.empty()) {
-    c->ReleaseCompactionFiles(Status::OK());
+    release_compaction(Status::OK());
     return Status::OK();
   }
 
@@ -4976,6 +5789,7 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
                                   /*dedup=*/true, &adjusted_entries);
   uint64_t merge_us = immutable_db_options_.clock->NowMicros() - merge_t0;
 
+  uint64_t split_t0 = immutable_db_options_.clock->NowMicros();
   // Compute naive total entries and global key range.
   uint64_t naive_entries = 0;
   uint64_t global_min = std::numeric_limits<uint64_t>::max();
@@ -4989,9 +5803,10 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   // When density is very low, PLR integration error can exceed the dedup
   // signal, causing adjusted > naive. Cap to avoid underflow.
   // Naive path: uint64_t total_entries = naive_entries;
-  uint64_t total_entries = (adjusted_entries > 0 && adjusted_entries <= naive_entries)
-                               ? adjusted_entries
-                               : naive_entries;
+  uint64_t total_entries =
+      (adjusted_entries > 0 && adjusted_entries <= naive_entries)
+          ? adjusted_entries
+          : naive_entries;
   uint64_t dedup_estimate = naive_entries - total_entries;
 
   uint64_t target_sst_size = virtual_sst_registry_->GetTargetSSTSize();
@@ -5001,98 +5816,245 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   // This matches RocksDB's compaction behavior of splitting at grandparent
   // boundaries to limit overlap with the next level.
   std::vector<uint64_t> gp_boundaries;
+  std::vector<std::pair<uint64_t, uint64_t>> gp_ranges;
   {
     const auto& grandparents = c->grandparents();
     gp_boundaries.reserve(grandparents.size() * 2);
+    gp_ranges.reserve(grandparents.size());
     for (const auto* fmd : grandparents) {
       // Extract uint64 key from InternalKey (first 8 bytes, big-endian).
       auto extract_key = [](const InternalKey& ik) -> uint64_t {
         uint64_t k = 0;
-        if (ik.size() >= 8) {
-          const char* d = ik.user_key().data();
+        Slice user_key = ik.user_key();
+        if (user_key.size() >= 8) {
+          const char* d = user_key.data();
           for (int b = 0; b < 8; b++)
             k = (k << 8) | static_cast<uint8_t>(d[b]);
         }
         return k;
       };
-      gp_boundaries.push_back(extract_key(fmd->smallest));
-      gp_boundaries.push_back(extract_key(fmd->largest));
+      uint64_t gp_min = extract_key(fmd->smallest);
+      uint64_t gp_max = extract_key(fmd->largest);
+      if (gp_max < gp_min) std::swap(gp_min, gp_max);
+      gp_boundaries.push_back(gp_min);
+      gp_boundaries.push_back(gp_max);
+      gp_ranges.emplace_back(gp_min, gp_max);
     }
     std::sort(gp_boundaries.begin(), gp_boundaries.end());
-    gp_boundaries.erase(
-        std::unique(gp_boundaries.begin(), gp_boundaries.end()),
-        gp_boundaries.end());
+    gp_boundaries.erase(std::unique(gp_boundaries.begin(), gp_boundaries.end()),
+                        gp_boundaries.end());
+    std::sort(gp_ranges.begin(), gp_ranges.end());
   }
 
   // Split into output VirtualSSTs.
   std::vector<VirtualSST> output_vssts = SplitIntoSSTs(
-      merged, total_entries, target_sst_size, avg_entry_size,
-      global_min, global_max, output_level, gp_boundaries);
+      merged, total_entries, target_sst_size, avg_entry_size, global_min,
+      global_max, output_level, gp_boundaries);
+  uint64_t split_us = immutable_db_options_.clock->NowMicros() - split_t0;
 
+  auto key_width = [](uint64_t key_min, uint64_t key_max) -> uint64_t {
+    return key_max >= key_min ? key_max - key_min + 1 : 0;
+  };
+  uint64_t max_output_width = 0;
+  uint64_t max_output_entries = 0;
+  size_t max_output_idx = 0;
+  for (size_t i = 0; i < output_vssts.size(); i++) {
+    uint64_t width = key_width(output_vssts[i].key_min, output_vssts[i].key_max);
+    if (width > max_output_width) {
+      max_output_width = width;
+      max_output_entries = output_vssts[i].num_entries;
+      max_output_idx = i;
+    }
+  }
+  double max_output_ratio =
+      max_output_entries == 0
+          ? 0.0
+          : static_cast<double>(max_output_width) /
+                static_cast<double>(max_output_entries);
+
+  // Range diagnostics are intentionally sparse. Full per-output logging is too
+  // noisy at TB scale, so only emit details for high-level wide-range or large
+  // fan-in cases.
+  bool log_range_stats =
+      output_level >= 3 && !output_vssts.empty() &&
+      (input_file_numbers.size() >= 100 || output_vssts.size() >= 100 ||
+       max_output_ratio >= 64.0);
+  if (log_range_stats) {
+    std::vector<uint64_t> output_widths;
+    output_widths.reserve(output_vssts.size());
+    for (const auto& vsst : output_vssts) {
+      output_widths.push_back(key_width(vsst.key_min, vsst.key_max));
+    }
+    std::sort(output_widths.begin(), output_widths.end());
+    auto percentile = [&](double p) -> uint64_t {
+      if (output_widths.empty()) return 0;
+      size_t idx = static_cast<size_t>(
+          std::min<double>(output_widths.size() - 1,
+                           std::ceil(p * output_widths.size()) - 1));
+      return output_widths[idx];
+    };
+
+    uint64_t max_input_width = 0;
+    uint64_t max_input_entries = 0;
+    uint64_t max_input_file = 0;
+    int max_input_level = -1;
+    for (size_t i = 0; i < key_mins_vec.size(); i++) {
+      uint64_t width = key_width(key_mins_vec[i], key_maxs_vec[i]);
+      if (width > max_input_width) {
+        max_input_width = width;
+        max_input_entries = num_entries_vec[i];
+        max_input_file = input_file_numbers[i];
+        max_input_level = input_levels[i];
+      }
+    }
+
+    auto gp_overlap_count = [&](const VirtualSST& vsst) -> size_t {
+      size_t count = 0;
+      for (const auto& gp : gp_ranges) {
+        if (gp.second < vsst.key_min) continue;
+        if (gp.first > vsst.key_max) break;
+        count++;
+      }
+      return count;
+    };
+
+    ROCKS_LOG_BUFFER(
+        log_buffer,
+        "[%s] VComp range stats L%d -> L%d: inputs=%zu outputs=%zu "
+        "out_width[p50=%" PRIu64 ",p95=%" PRIu64 ",p99=%" PRIu64
+        ",max=%" PRIu64 "] max_out_idx=%zu max_out_entries=%" PRIu64
+        " max_out_ratio=%.2f max_input_file=%" PRIu64
+        " max_input_level=%d max_input_width=%" PRIu64
+        " max_input_entries=%" PRIu64,
+        cfd->GetName().c_str(), c->start_level(), output_level,
+        input_file_numbers.size(), output_vssts.size(), percentile(0.50),
+        percentile(0.95), percentile(0.99), max_output_width, max_output_idx,
+        max_output_entries, max_output_ratio, max_input_file, max_input_level,
+        max_input_width, max_input_entries);
+
+    std::vector<size_t> top_outputs(output_vssts.size());
+    for (size_t i = 0; i < top_outputs.size(); i++) top_outputs[i] = i;
+    std::sort(top_outputs.begin(), top_outputs.end(),
+              [&](size_t a, size_t b) {
+                return key_width(output_vssts[a].key_min,
+                                 output_vssts[a].key_max) >
+                       key_width(output_vssts[b].key_min,
+                                 output_vssts[b].key_max);
+              });
+    size_t top_n = std::min<size_t>(3, top_outputs.size());
+    for (size_t rank = 0; rank < top_n; rank++) {
+      size_t idx = top_outputs[rank];
+      const auto& vsst = output_vssts[idx];
+      uint64_t width = key_width(vsst.key_min, vsst.key_max);
+      double ratio = vsst.num_entries == 0
+                         ? 0.0
+                         : static_cast<double>(width) /
+                               static_cast<double>(vsst.num_entries);
+      ROCKS_LOG_BUFFER(
+          log_buffer,
+          "[%s] VComp range top L%d -> L%d: rank=%zu out_idx=%zu "
+          "width=%" PRIu64 " entries=%" PRIu64 " ratio=%.2f "
+          "key_min=%" PRIu64 " key_max=%" PRIu64 " gp_overlap=%zu",
+          cfd->GetName().c_str(), c->start_level(), output_level, rank + 1,
+          idx, width, vsst.num_entries, ratio, vsst.key_min, vsst.key_max,
+          gp_overlap_count(vsst));
+    }
+  }
+
+  uint64_t mutex_t0 = immutable_db_options_.clock->NowMicros();
   mutex_.Lock();
+  uint64_t mutex_wait_us = immutable_db_options_.clock->NowMicros() - mutex_t0;
 
+  uint64_t edit_t0 = immutable_db_options_.clock->NowMicros();
   // Build VersionEdit: delete inputs, add outputs.
   VersionEdit* edit = c->edit();
 
   // Delete input files.
   c->AddInputDeletions(edit);
 
-  // Allocate file numbers and register output VirtualSSTs.
-  for (auto& vsst : output_vssts) {
-    uint64_t fnum = versions_->NewFileNumber();
-    virtual_sst_registry_->Register(fnum, vsst);
+  std::vector<VirtualCompactionPendingOutput> pending_outputs;
+  pending_outputs.reserve(output_vssts.size());
+  uint64_t l0_output_files = 0;
+  uint64_t l0_output_bytes = 0;
 
-    std::string smallest_key = virtual_sst_registry_->EncodeUserKey(vsst.key_min);
-    std::string largest_key = virtual_sst_registry_->EncodeUserKey(vsst.key_max);
+  // Allocate file numbers and build output metadata. Registry publication is
+  // delayed until the VersionSet update succeeds.
+  for (const auto& vsst : output_vssts) {
+    uint64_t fnum = versions_->NewFileNumber();
+    pending_outputs.push_back(VirtualCompactionPendingOutput{fnum, vsst});
+    if (output_level == 0) {
+      l0_output_files++;
+      l0_output_bytes += vsst.size_bytes;
+    }
+
+    std::string smallest_key =
+        virtual_sst_registry_->EncodeUserKey(vsst.key_min);
+    std::string largest_key =
+        virtual_sst_registry_->EncodeUserKey(vsst.key_max);
     InternalKey smallest(Slice(smallest_key), kMaxSequenceNumber, kTypeValue);
     InternalKey largest(Slice(largest_key), 0, kTypeValue);
 
-    edit->AddFile(output_level, fnum, /*path_id=*/0,
-                  vsst.size_bytes, smallest, largest,
-                  /*smallest_seqno=*/0, /*largest_seqno=*/0,
-                  /*marked_for_compaction=*/false,
-                  Temperature::kUnknown,
-                  kInvalidBlobFileNumber,
-                  /*oldest_ancester_time=*/0,
-                  /*file_creation_time=*/0,
-                  /*epoch_number=*/fnum,
-                  /*file_checksum=*/"",
-                  /*file_checksum_func_name=*/"",
-                  UniqueId64x2{},
-                  /*compensated_range_deletion_size=*/0,
+    edit->AddFile(output_level, fnum, /*path_id=*/0, vsst.size_bytes, smallest,
+                  largest, /*smallest_seqno=*/0, /*largest_seqno=*/0,
+                  /*marked_for_compaction=*/false, Temperature::kUnknown,
+                  kInvalidBlobFileNumber, /*oldest_ancester_time=*/0,
+                  /*file_creation_time=*/0, /*epoch_number=*/fnum,
+                  /*file_checksum=*/"", /*file_checksum_func_name=*/"",
+                  UniqueId64x2{}, /*compensated_range_deletion_size=*/0,
                   /*tail_size=*/0,
                   /*user_defined_timestamps_persisted=*/true);
   }
 
-  // Remove old VirtualSSTs from registry.
-  for (uint64_t fnum : input_file_numbers) {
-    virtual_sst_registry_->Remove(fnum);
+  uint64_t edit_build_us = immutable_db_options_.clock->NowMicros() - edit_t0;
+
+  uint64_t log_apply_us = 0;
+  uint64_t commit_queue_wait_us = 0;
+  uint64_t commit_batch_size = 0;
+  Status s = CommitVirtualCompactionEdit(
+      c, cfd, edit, pending_outputs, input_file_numbers,
+      /*moved_virtuals=*/nullptr, compaction_released, &log_apply_us,
+      &commit_queue_wait_us, &commit_batch_size, l0_input_files,
+      l0_input_bytes, l0_output_files, l0_output_bytes);
+  if (compaction_released != nullptr && !*compaction_released) {
+    release_compaction(s);
+  } else if (!s.ok()) {
+    s.PermitUncheckedError();
   }
+  uint64_t total_us = immutable_db_options_.clock->NowMicros() - total_t0;
 
-  // Release compaction files and apply edit.
-  auto manifest_wcb = [&c](const Status& s) {
-    c->ReleaseCompactionFiles(s);
-  };
-
-  const ReadOptions read_options(Env::IOActivity::kCompaction);
-  const WriteOptions write_options(Env::IOActivity::kCompaction);
-
-  Status s = versions_->LogAndApply(
-      cfd, read_options, write_options, edit, &mutex_,
-      directories_.GetDbDir(), /*new_descriptor_log=*/false,
-      /*column_family_options=*/nullptr, manifest_wcb);
+  virtual_compaction_jobs_.fetch_add(1, std::memory_order_relaxed);
+  virtual_compaction_input_files_.fetch_add(input_file_numbers.size(),
+                                            std::memory_order_relaxed);
+  virtual_compaction_output_files_.fetch_add(output_vssts.size(),
+                                             std::memory_order_relaxed);
+  virtual_compaction_gather_us_.fetch_add(gather_us, std::memory_order_relaxed);
+  virtual_compaction_merge_us_.fetch_add(merge_us, std::memory_order_relaxed);
+  virtual_compaction_split_us_.fetch_add(split_us, std::memory_order_relaxed);
+  virtual_compaction_mutex_wait_us_.fetch_add(mutex_wait_us,
+                                              std::memory_order_relaxed);
+  virtual_compaction_edit_build_us_.fetch_add(edit_build_us,
+                                              std::memory_order_relaxed);
+  virtual_compaction_log_apply_us_.fetch_add(log_apply_us,
+                                             std::memory_order_relaxed);
+  virtual_compaction_total_us_.fetch_add(total_us, std::memory_order_relaxed);
+  virtual_compaction_commit_queue_wait_us_.fetch_add(
+      commit_queue_wait_us, std::memory_order_relaxed);
 
   if (s.ok()) {
     ROCKS_LOG_BUFFER(
         log_buffer,
-        "[%s] Virtual compaction L%d -> L%d: %zu inputs (%" PRIu64 " segs), "
-        "%zu outputs, %" PRIu64 " entries (naive %" PRIu64 ", dedup %" PRIu64
-        "), merge=%" PRIu64 "us",
+        "[%s] Virtual compaction L%d -> L%d: %zu inputs [%s] (%" PRIu64
+        " segs), %zu outputs, %" PRIu64 " entries (naive %" PRIu64
+        ", dedup %" PRIu64 "), total=%" PRIu64 "us gather=%" PRIu64
+        "us merge=%" PRIu64 "us split=%" PRIu64 "us mutex_wait=%" PRIu64
+        "us edit=%" PRIu64 "us log_apply=%" PRIu64
+        "us commit_queue=%" PRIu64 "us commit_batch=%" PRIu64,
         cfd->GetName().c_str(), c->start_level(), output_level,
-        input_file_numbers.size(), input_segments_total,
-        output_vssts.size(), total_entries,
-        naive_entries, dedup_estimate, merge_us);
-
+        input_file_numbers.size(), input_level_summary.c_str(),
+        input_segments_total, output_vssts.size(), total_entries,
+        naive_entries, dedup_estimate, total_us, gather_us, merge_us,
+        split_us, mutex_wait_us, edit_build_us, log_apply_us,
+        commit_queue_wait_us, commit_batch_size);
   }
 
   return s;

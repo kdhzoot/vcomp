@@ -9,6 +9,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "db/virtual_compaction/virtual_sst.h"
@@ -42,25 +43,44 @@ class VirtualSSTRegistry {
     return key;
   }
 
-  // Register a VirtualSST with the given file number.
-  void Register(uint64_t file_number, VirtualSST vsst) {
-    std::lock_guard<std::mutex> lk(mu_);
-    registry_[file_number] = std::move(vsst);
-  }
+    // Register a VirtualSST with the given file number.
+    void Register(uint64_t file_number, VirtualSST vsst) {
+      std::lock_guard<std::mutex> lk(mu_);
+      registry_[file_number] = std::move(vsst);
+      retired_.erase(file_number);
+    }
 
-  // Look up a VirtualSST by file number. Returns nullptr if not found.
-  const VirtualSST* Lookup(uint64_t file_number) const {
-    std::lock_guard<std::mutex> lk(mu_);
-    auto it = registry_.find(file_number);
-    if (it == registry_.end()) return nullptr;
-    return &it->second;
-  }
+    // Look up a VirtualSST by file number. Returns nullptr if not found.
+    const VirtualSST* Lookup(uint64_t file_number) const {
+      std::lock_guard<std::mutex> lk(mu_);
+      auto it = registry_.find(file_number);
+      if (it == registry_.end()) return nullptr;
+      return &it->second;
+    }
 
-  // Remove a VirtualSST from the registry.
-  void Remove(uint64_t file_number) {
-    std::lock_guard<std::mutex> lk(mu_);
-    registry_.erase(file_number);
-  }
+    bool LookupCopy(uint64_t file_number, VirtualSST* out) const {
+      std::lock_guard<std::mutex> lk(mu_);
+      auto it = registry_.find(file_number);
+      if (it == registry_.end()) return false;
+      *out = it->second;
+      return true;
+    }
+
+    // Remove a VirtualSST from the registry.
+    void Remove(uint64_t file_number) {
+      std::lock_guard<std::mutex> lk(mu_);
+      if (registry_.erase(file_number) > 0) {
+        retired_.insert(file_number);
+      }
+    }
+
+    bool ConsumeVirtualOrRetired(uint64_t file_number) {
+      std::lock_guard<std::mutex> lk(mu_);
+      if (registry_.erase(file_number) > 0) {
+        return true;
+      }
+      return retired_.erase(file_number) > 0;
+    }
 
   // Check if a file number corresponds to a virtual SST.
   bool IsVirtual(uint64_t file_number) const {
@@ -69,15 +89,25 @@ class VirtualSSTRegistry {
   }
 
   // Get all registered file numbers and their VirtualSSTs.
-  std::vector<std::pair<uint64_t, const VirtualSST*>> GetAll() const {
-    std::lock_guard<std::mutex> lk(mu_);
-    std::vector<std::pair<uint64_t, const VirtualSST*>> result;
-    result.reserve(registry_.size());
-    for (const auto& kv : registry_) {
-      result.emplace_back(kv.first, &kv.second);
+    std::vector<std::pair<uint64_t, const VirtualSST*>> GetAll() const {
+      std::lock_guard<std::mutex> lk(mu_);
+      std::vector<std::pair<uint64_t, const VirtualSST*>> result;
+      result.reserve(registry_.size());
+      for (const auto& kv : registry_) {
+        result.emplace_back(kv.first, &kv.second);
+      }
+      return result;
     }
-    return result;
-  }
+
+    std::vector<std::pair<uint64_t, VirtualSST>> GetAllCopies() const {
+      std::lock_guard<std::mutex> lk(mu_);
+      std::vector<std::pair<uint64_t, VirtualSST>> result;
+      result.reserve(registry_.size());
+      for (const auto& kv : registry_) {
+        result.emplace_back(kv.first, kv.second);
+      }
+      return result;
+    }
 
   size_t Size() const {
     std::lock_guard<std::mutex> lk(mu_);
@@ -85,9 +115,10 @@ class VirtualSSTRegistry {
   }
 
  private:
-  mutable std::mutex mu_;
-  std::unordered_map<uint64_t, VirtualSST> registry_;
-  uint32_t key_size_ = 16;
+    mutable std::mutex mu_;
+    std::unordered_map<uint64_t, VirtualSST> registry_;
+    std::unordered_set<uint64_t> retired_;
+    uint32_t key_size_ = 16;
   uint64_t avg_entry_size_ = 1048;
   uint64_t target_sst_size_ = 64ULL * 1024 * 1024;
 };

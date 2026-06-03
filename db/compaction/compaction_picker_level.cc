@@ -9,7 +9,8 @@
 
 #include "db/compaction/compaction_picker_level.h"
 
-#include <atomic>
+#include <algorithm>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -19,22 +20,6 @@
 #include "test_util/sync_point.h"
 
 namespace ROCKSDB_NAMESPACE {
-
-// vcomp: minimum total L0 data (bytes) before the L0→L1 picker fires.
-// Defaults to 4 GB (~ baseline's measured per-event L0→L1 input size).
-// FillVirtual sets it to 0 at end-of-load to force final L0 drain via
-// virtual compaction, eliminating the leftover real-L0 files that would
-// otherwise force a slow real-I/O compact0.
-static std::atomic<uint64_t> g_vcomp_l0_l1_min_data_bytes{
-    4000ULL * 1024 * 1024};
-
-uint64_t VcompL0L1MinDataBytes() {
-  return g_vcomp_l0_l1_min_data_bytes.load(std::memory_order_relaxed);
-}
-
-void SetVcompL0L1MinDataBytes(uint64_t bytes) {
-  g_vcomp_l0_l1_min_data_bytes.store(bytes, std::memory_order_relaxed);
-}
 
 bool LevelCompactionPicker::NeedsCompaction(
     const VersionStorageInfo* vstorage) const {
@@ -256,14 +241,7 @@ void LevelCompactionBuilder::SetupInitialFiles() {
           // In these cases, to reduce L0 file count and thus reduce likelihood
           // of write stalls, we can attempt compacting a span of files within
           // L0.
-          //
-          // vcomp: skip this fallback. The PickFileToCompact size gate is the
-          // only L0→? trigger we want. Without this skip, PickIntraL0Compaction
-          // fires whenever L0 ≥ trigger+2 and starts consolidating L0 files
-          // into a megafile — which is exactly the intra-L0 cascade the size
-          // gate is designed to bypass.
-          if (!ioptions_.use_virtual_compaction &&
-              PickIntraL0Compaction()) {
+          if (PickIntraL0Compaction()) {
             output_level_ = 0;
             compaction_reason_ = CompactionReason::kLevelL0FilesNum;
             break;
@@ -681,6 +659,9 @@ bool LevelCompactionBuilder::TryPickL0TrivialMove() {
       CompactionInputFiles output_level_inputs;
       output_level_inputs.level = output_level_;
       FileMetaData* file = *it;
+      if (!file->virtual_compaction_eligible) {
+        continue;
+      }
       if (it == level_files.rbegin()) {
         my_smallest = file->smallest;
         my_largest = file->largest;
@@ -810,27 +791,6 @@ bool LevelCompactionBuilder::TryExtendNonL0TrivialMove(int start_index,
 }
 
 bool LevelCompactionBuilder::PickFileToCompact() {
-  if (start_level_ == 0 && ioptions_.use_virtual_compaction) {
-    // vcomp: gate L0→L1 by total L0 data size, not by file count. baseline's
-    // L0→L1 input_data_size averages ~4876 MB (n=83 events, baseline_run1
-    // in 260415 batch). The structural variable that maps vcomp's tree to
-    // baseline's is per-event L0→L1 data volume — not file count, not
-    // intra-L0 cascade. `level0_file_num_compaction_trigger` stays at its
-    // (low) default so the picker keeps waking up; we just defer execution
-    // until the data threshold is met. The threshold is read from a global
-    // atomic so FillVirtual can lower it to 0 at end-of-load and force a
-    // final drain — see VcompL0L1MinDataBytes() in this file.
-    const uint64_t min_bytes = VcompL0L1MinDataBytes();
-    const auto& level_files = vstorage_->LevelFiles(0);
-    uint64_t total_l0_bytes = 0;
-    for (const auto* f : level_files) {
-      total_l0_bytes += f->fd.GetFileSize();
-    }
-    if (total_l0_bytes < min_bytes) {
-      return false;
-    }
-  }
-
   // level 0 files are overlapping. So we cannot pick more
   // than one concurrent compactions at this level. This
   // could be made better by looking at key-ranges that are
@@ -869,6 +829,10 @@ bool LevelCompactionBuilder::PickFileToCompact() {
        cmp_idx < file_scores.size(); cmp_idx++) {
     int index = file_scores[cmp_idx];
     auto* f = level_files[index];
+
+    if (!f->virtual_compaction_eligible) {
+      continue;
+    }
 
     // do not pick a file to compact if it is being compacted
     // from n-1 level.
@@ -944,13 +908,23 @@ bool LevelCompactionBuilder::PickFileToCompact() {
 }
 
 bool LevelCompactionBuilder::PickIntraL0Compaction() {
+  if (ioptions_.use_virtual_compaction) {
+    return false;
+  }
   start_level_inputs_.clear();
   const std::vector<FileMetaData*>& level_files =
       vstorage_->LevelFiles(0 /* level */);
-  if (level_files.size() <
-          static_cast<size_t>(
-              mutable_cf_options_.level0_file_num_compaction_trigger + 2) ||
-      level_files[0]->being_compacted) {
+  const size_t max_num_file = static_cast<size_t>(
+      mutable_cf_options_.level0_file_num_compaction_trigger + 2);
+  size_t eligible_files = 0;
+  for (const auto& file : level_files) {
+    if (file->virtual_compaction_eligible) {
+      eligible_files++;
+    }
+  }
+  if (eligible_files <
+      static_cast<size_t>(
+          mutable_cf_options_.level0_file_num_compaction_trigger + 2)) {
     // If L0 isn't accumulating much files beyond the regular trigger, don't
     // resort to L0->L0 compaction yet.
     return false;
@@ -958,11 +932,14 @@ bool LevelCompactionBuilder::PickIntraL0Compaction() {
   return FindIntraL0Compaction(level_files, kMinFilesForIntraL0Compaction,
                                std::numeric_limits<uint64_t>::max(),
                                mutable_cf_options_.max_compaction_bytes,
-                               &start_level_inputs_);
+                               max_num_file, &start_level_inputs_);
 }
 
 bool LevelCompactionBuilder::PickSizeBasedIntraL0Compaction() {
   assert(start_level_ == 0);
+  if (ioptions_.use_virtual_compaction) {
+    return false;
+  }
   int base_level = vstorage_->base_level();
   if (base_level <= 0) {
     return false;
@@ -971,11 +948,24 @@ bool LevelCompactionBuilder::PickSizeBasedIntraL0Compaction() {
       vstorage_->LevelFiles(/*level=*/0);
   size_t min_num_file =
       std::max(2, mutable_cf_options_.level0_file_num_compaction_trigger);
-  if (l0_files.size() < min_num_file) {
+  size_t max_num_file = std::max<size_t>(
+      min_num_file,
+      static_cast<size_t>(
+          mutable_cf_options_.level0_file_num_compaction_trigger + 2));
+  size_t eligible_files = 0;
+  for (const auto& file : l0_files) {
+    if (file->virtual_compaction_eligible) {
+      eligible_files++;
+    }
+  }
+  if (eligible_files < min_num_file) {
     return false;
   }
   uint64_t l0_size = 0;
   for (const auto& file : l0_files) {
+    if (!file->virtual_compaction_eligible) {
+      continue;
+    }
     assert(file->compensated_file_size >= file->fd.GetFileSize());
     // Compact down L0s with more deletions.
     l0_size += file->compensated_file_size;
@@ -1002,10 +992,16 @@ bool LevelCompactionBuilder::PickSizeBasedIntraL0Compaction() {
   start_level_inputs_.clear();
   start_level_inputs_.level = 0;
   for (const auto& file : l0_files) {
+    if (!file->virtual_compaction_eligible) {
+      continue;
+    }
     if (file->being_compacted) {
       break;
     }
     start_level_inputs_.files.push_back(file);
+    if (start_level_inputs_.files.size() >= max_num_file) {
+      break;
+    }
   }
   if (start_level_inputs_.files.size() < min_num_file) {
     start_level_inputs_.clear();

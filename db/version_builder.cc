@@ -9,6 +9,7 @@
 
 #include "db/version_builder.h"
 
+#include <chrono>
 #include <algorithm>
 #include <atomic>
 #include <cinttypes>
@@ -663,6 +664,11 @@ class VersionBuilder::Rep {
 
   Status CheckConsistency(const VersionStorageInfo* vstorage) const {
     assert(vstorage);
+
+    if (version_set_ != nullptr &&
+        version_set_->db_options()->use_virtual_compaction) {
+      return Status::OK();
+    }
 
     // Always run consistency checks in debug build
 #ifdef NDEBUG
@@ -1418,7 +1424,17 @@ class VersionBuilder::Rep {
     // Merge the set of added files with the set of pre-existing files.
     // Drop any deleted files.  Store the result in *vstorage.
     const auto& base_files = base_vstorage_->LevelFiles(level);
-    const auto& unordered_added_files = levels_[level].added_files;
+    const auto& level_state = levels_[level];
+    const auto& unordered_added_files = level_state.added_files;
+    const bool l0_missing =
+        track_found_and_missing_files_ && level == 0 && !l0_missing_files_.empty();
+
+    if (!l0_missing && unordered_added_files.empty() &&
+        level_state.deleted_files.empty()) {
+      vstorage->AddFilesForUnchangedLevel(level, base_files);
+      return;
+    }
+
     vstorage->Reserve(level, base_files.size() + unordered_added_files.size());
 
     MergeUnorderdAddedFilesWithBase(
@@ -1478,6 +1494,13 @@ class VersionBuilder::Rep {
     if (!num_levels_) {
       return;
     }
+
+    size_t total_files = 0;
+    for (int level = 0; level < num_levels_; ++level) {
+      total_files += base_vstorage_->LevelFiles(level).size();
+      total_files += levels_[level].added_files.size();
+    }
+    vstorage->ReserveFileLocations(total_files);
 
     EpochNumberRequirement epoch_number_requirement =
         vstorage->GetEpochNumberRequirement();
@@ -1610,31 +1633,86 @@ class VersionBuilder::Rep {
   }
 
   // Save the current state in *vstorage.
-  Status SaveTo(VersionStorageInfo* vstorage) const {
+  Status SaveTo(VersionStorageInfo* vstorage,
+                VersionBuilder::SaveToTimingStats* timing_stats = nullptr)
+      const {
     assert(!track_found_and_missing_files_ || valid_version_available_);
     Status s;
+    VersionBuilder::SaveToTimingStats ignored_timing;
+    VersionBuilder::SaveToTimingStats* stats =
+        timing_stats != nullptr ? timing_stats : &ignored_timing;
+    const bool collect_timing = timing_stats != nullptr;
+    auto now_micros = []() -> uint64_t {
+      return std::chrono::duration_cast<std::chrono::microseconds>(
+                 std::chrono::steady_clock::now().time_since_epoch())
+          .count();
+    };
+    auto add_timed = [&](uint64_t* dst, auto&& fn) {
+      if (!collect_timing) {
+        return fn();
+      }
+      const uint64_t t0 = now_micros();
+      Status timed_s = fn();
+      *dst += now_micros() - t0;
+      return timed_s;
+    };
+    auto add_timed_void = [&](uint64_t* dst, auto&& fn) {
+      if (!collect_timing) {
+        fn();
+        return;
+      }
+      const uint64_t t0 = now_micros();
+      fn();
+      *dst += now_micros() - t0;
+    };
 
 #ifndef NDEBUG
     // The same check is done within Apply() so we skip it in release mode.
-    s = CheckConsistency(base_vstorage_);
+    s = add_timed(&stats->consistency_base_us,
+                  [&] { return CheckConsistency(base_vstorage_); });
     if (!s.ok()) {
       return s;
     }
 #endif  // NDEBUG
 
-    s = CheckConsistency(vstorage);
+    s = add_timed(&stats->consistency_new_us,
+                  [&] { return CheckConsistency(vstorage); });
     if (!s.ok()) {
       return s;
     }
 
-    SaveSSTFilesTo(vstorage);
+    add_timed_void(&stats->save_sst_us,
+                   [&] { SaveSSTFilesTo(vstorage); });
 
-    SaveBlobFilesTo(vstorage);
+    add_timed_void(&stats->save_blob_us,
+                   [&] { SaveBlobFilesTo(vstorage); });
 
-    SaveCompactCursorsTo(vstorage);
+    add_timed_void(&stats->save_cursors_us,
+                   [&] { SaveCompactCursorsTo(vstorage); });
 
-    s = CheckConsistency(vstorage);
+    s = add_timed(&stats->consistency_final_us,
+                  [&] { return CheckConsistency(vstorage); });
     return s;
+  }
+
+  void GetChangedLevels(std::vector<bool>* changed_levels) const {
+    assert(changed_levels);
+    changed_levels->assign(num_levels_, false);
+    if (has_invalid_levels_) {
+      std::fill(changed_levels->begin(), changed_levels->end(), true);
+      return;
+    }
+    for (int level = 0; level < num_levels_; ++level) {
+      if (!levels_[level].added_files.empty() ||
+          !levels_[level].deleted_files.empty()) {
+        (*changed_levels)[level] = true;
+      }
+    }
+    for (const auto& cursor : updated_compact_cursors_) {
+      if (cursor.first >= 0 && cursor.first < num_levels_) {
+        (*changed_levels)[cursor.first] = true;
+      }
+    }
   }
 
   Status LoadTableHandlers(InternalStats* internal_stats, int max_threads,
@@ -1771,8 +1849,13 @@ Status VersionBuilder::Apply(const VersionEdit* edit) {
   return rep_->Apply(edit);
 }
 
-Status VersionBuilder::SaveTo(VersionStorageInfo* vstorage) const {
-  return rep_->SaveTo(vstorage);
+Status VersionBuilder::SaveTo(VersionStorageInfo* vstorage,
+                              SaveToTimingStats* timing_stats) const {
+  return rep_->SaveTo(vstorage, timing_stats);
+}
+
+void VersionBuilder::GetChangedLevels(std::vector<bool>* changed_levels) const {
+  return rep_->GetChangedLevels(changed_levels);
 }
 
 Status VersionBuilder::LoadTableHandlers(

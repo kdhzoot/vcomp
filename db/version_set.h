@@ -19,6 +19,7 @@
 // synchronization on all accesses.
 
 #pragma once
+#include <array>
 #include <atomic>
 #include <deque>
 #include <limits>
@@ -144,8 +145,12 @@ class VersionStorageInfo {
   ~VersionStorageInfo();
 
   void Reserve(int level, size_t size) { files_[level].reserve(size); }
+  void ReserveFileLocations(size_t size) { file_locations_.reserve(size); }
 
   void AddFile(int level, FileMetaData* f);
+  void AddFilesForUnchangedLevel(int level,
+                                 const std::vector<FileMetaData*>& files);
+  void MarkCompactionPriRebuildLevels(const std::vector<bool>& changed_levels);
 
   // Resize/Initialize the space for compact_cursor_
   void ResizeCompactCursors(int level) {
@@ -183,8 +188,24 @@ class VersionStorageInfo {
 
   void AddBlobFile(std::shared_ptr<BlobFileMetaData> blob_file_meta);
 
+  struct PrepareTimingStats {
+    static constexpr size_t kLevelStatsSize = 16;
+    uint64_t compute_compaction_score_us = 0;
+    uint64_t compaction_pri_us = 0;
+    std::array<uint64_t, kLevelStatsSize> compaction_pri_level_us{};
+    uint64_t file_index_us = 0;
+    uint64_t file_indexer_us = 0;
+    uint64_t level_files_brief_us = 0;
+    uint64_t l0_non_overlap_us = 0;
+    uint64_t file_location_us = 0;
+    uint64_t bottommost_us = 0;
+    uint64_t bottommost_skipped = 0;
+    uint64_t other_us = 0;
+  };
+
   void PrepareForVersionAppend(const ImmutableOptions& immutable_options,
-                               const MutableCFOptions& mutable_cf_options);
+                               const MutableCFOptions& mutable_cf_options,
+                               PrepareTimingStats* timing_stats = nullptr);
 
   // REQUIRES: PrepareForVersionAppend has been called
   void SetFinalized();
@@ -643,18 +664,35 @@ class VersionStorageInfo {
   const Comparator* user_comparator() const { return user_comparator_; }
 
  private:
+  struct LevelCompactionStats {
+    uint64_t file_size = 0;
+    uint64_t compensated_size = 0;
+    uint64_t non_compacting_compensated_size = 0;
+    int non_compacting_file_count = 0;
+    int l0_eligible_file_count = 0;
+    uint64_t l0_eligible_file_size = 0;
+    uint64_t l0_eligible_non_compacting_compensated_size = 0;
+    int l0_eligible_non_compacting_file_count = 0;
+    bool first_file_being_compacted = false;
+  };
+
   void ComputeCompensatedSizes();
+  void CollectLevelCompactionStats(
+      std::vector<LevelCompactionStats>* stats) const;
+  void InvalidateLevelCompactionStats();
   void UpdateNumNonEmptyLevels();
   void CalculateBaseBytes(const ImmutableOptions& ioptions,
                           const MutableCFOptions& options);
-  void UpdateFilesByCompactionPri(const ImmutableOptions& immutable_options,
-                                  const MutableCFOptions& mutable_cf_options);
+  void UpdateFilesByCompactionPri(
+      const ImmutableOptions& immutable_options,
+      const MutableCFOptions& mutable_cf_options,
+      PrepareTimingStats* timing_stats = nullptr);
 
   void GenerateFileIndexer() {
     file_indexer_.UpdateIndex(&arena_, num_non_empty_levels_, files_);
   }
 
-  void GenerateLevelFilesBrief();
+  void GenerateLevelFilesBrief(bool copy_keys = true);
   void GenerateLevel0NonOverlapping();
   void GenerateBottommostFiles();
   void GenerateFileLocationIndex();
@@ -760,6 +798,8 @@ class VersionStorageInfo {
   // These are used to pick the best compaction level
   std::vector<double> compaction_score_;
   std::vector<int> compaction_level_;
+  std::vector<LevelCompactionStats> level_compaction_stats_;
+  bool level_compaction_stats_valid_ = false;
   int l0_delay_trigger_count_ = 0;  // Count used to trigger slow down and stop
                                     // for number of L0 files.
 
@@ -968,7 +1008,9 @@ class Version {
   // Loads some stats information from files (if update_stats is set) and
   // populates derived data structures. Call without mutex held. It needs to be
   // called before appending the version to the version set.
-  void PrepareAppend(const ReadOptions& read_options, bool update_stats);
+  void PrepareAppend(
+      const ReadOptions& read_options, bool update_stats,
+      VersionStorageInfo::PrepareTimingStats* timing_stats = nullptr);
 
   // Reference count management (so Versions do not disappear out from
   // under live iterators)
@@ -1289,6 +1331,63 @@ class VersionSet {
       const ColumnFamilyOptions* new_cf_options = nullptr,
       const std::vector<std::function<void(const Status&)>>& manifest_wcbs = {},
       const std::function<Status()>& pre_cb = {});
+
+  struct LogAndApplyBreakdownStats {
+    uint64_t calls = 0;
+    uint64_t groups = 0;
+    uint64_t group_writers = 0;
+    uint64_t group_edits = 0;
+    uint64_t writer_wait_us = 0;
+    uint64_t pre_cb_us = 0;
+    uint64_t group_build_us = 0;
+    uint64_t group_find_version_us = 0;
+    uint64_t group_new_version_us = 0;
+    uint64_t group_apply_us = 0;
+    uint64_t group_push_us = 0;
+    uint64_t save_to_us = 0;
+    uint64_t save_to_builder_us = 0;
+    uint64_t save_to_changed_levels_us = 0;
+    uint64_t save_to_mark_rebuild_us = 0;
+    uint64_t save_to_consistency_base_us = 0;
+    uint64_t save_to_consistency_new_us = 0;
+    uint64_t save_to_sst_files_us = 0;
+    uint64_t save_to_blob_files_us = 0;
+    uint64_t save_to_cursors_us = 0;
+    uint64_t save_to_consistency_final_us = 0;
+    uint64_t manifest_write_total_us = 0;
+    uint64_t load_table_handlers_us = 0;
+    uint64_t new_manifest_us = 0;
+    uint64_t prepare_append_us = 0;
+    uint64_t prepare_compaction_score_us = 0;
+    uint64_t prepare_compaction_pri_us = 0;
+    std::array<uint64_t, VersionStorageInfo::PrepareTimingStats::kLevelStatsSize>
+        prepare_compaction_pri_level_us{};
+    uint64_t prepare_file_index_us = 0;
+    uint64_t prepare_file_indexer_us = 0;
+    uint64_t prepare_level_files_brief_us = 0;
+    uint64_t prepare_l0_non_overlap_us = 0;
+    uint64_t prepare_file_location_us = 0;
+    uint64_t prepare_bottommost_us = 0;
+    uint64_t prepare_bottommost_skipped = 0;
+    uint64_t prepare_other_us = 0;
+    uint64_t encode_us = 0;
+    uint64_t add_record_us = 0;
+    uint64_t sync_manifest_us = 0;
+    uint64_t set_current_us = 0;
+    uint64_t log_flush_us = 0;
+    uint64_t mutex_reacquire_us = 0;
+    uint64_t wal_apply_us = 0;
+    uint64_t install_version_us = 0;
+    uint64_t append_compaction_score_us = 0;
+    uint64_t writer_callback_us = 0;
+    uint64_t total_us = 0;
+  };
+
+  void ResetLogAndApplyBreakdownStats();
+  LogAndApplyBreakdownStats GetLogAndApplyBreakdownStats() const;
+  void SetLogAndApplyBreakdownEnabled(bool enabled) {
+    log_apply_breakdown_enabled_.store(enabled, std::memory_order_relaxed);
+  }
 
   void WakeUpWaitingManifestWriters();
 
@@ -1768,6 +1867,57 @@ class VersionSet {
 
   // Pointer to the DB's ErrorHandler.
   ErrorHandler* const error_handler_;
+
+  std::atomic<uint64_t> log_apply_calls_{0};
+  std::atomic<uint64_t> log_apply_groups_{0};
+  std::atomic<uint64_t> log_apply_group_writers_{0};
+  std::atomic<uint64_t> log_apply_group_edits_{0};
+  std::atomic<uint64_t> log_apply_writer_wait_us_{0};
+  std::atomic<uint64_t> log_apply_pre_cb_us_{0};
+  std::atomic<uint64_t> log_apply_group_build_us_{0};
+  std::atomic<uint64_t> log_apply_group_find_version_us_{0};
+  std::atomic<uint64_t> log_apply_group_new_version_us_{0};
+  std::atomic<uint64_t> log_apply_group_apply_us_{0};
+  std::atomic<uint64_t> log_apply_group_push_us_{0};
+  std::atomic<uint64_t> log_apply_save_to_us_{0};
+  std::atomic<uint64_t> log_apply_save_to_builder_us_{0};
+  std::atomic<uint64_t> log_apply_save_to_changed_levels_us_{0};
+  std::atomic<uint64_t> log_apply_save_to_mark_rebuild_us_{0};
+  std::atomic<uint64_t> log_apply_save_to_consistency_base_us_{0};
+  std::atomic<uint64_t> log_apply_save_to_consistency_new_us_{0};
+  std::atomic<uint64_t> log_apply_save_to_sst_files_us_{0};
+  std::atomic<uint64_t> log_apply_save_to_blob_files_us_{0};
+  std::atomic<uint64_t> log_apply_save_to_cursors_us_{0};
+  std::atomic<uint64_t> log_apply_save_to_consistency_final_us_{0};
+  std::atomic<uint64_t> log_apply_manifest_write_total_us_{0};
+  std::atomic<uint64_t> log_apply_load_table_handlers_us_{0};
+  std::atomic<uint64_t> log_apply_new_manifest_us_{0};
+  std::atomic<uint64_t> log_apply_prepare_append_us_{0};
+  std::atomic<uint64_t> log_apply_prepare_compaction_score_us_{0};
+  std::atomic<uint64_t> log_apply_prepare_compaction_pri_us_{0};
+  std::array<std::atomic<uint64_t>,
+             VersionStorageInfo::PrepareTimingStats::kLevelStatsSize>
+      log_apply_prepare_compaction_pri_level_us_{};
+  std::atomic<uint64_t> log_apply_prepare_file_index_us_{0};
+  std::atomic<uint64_t> log_apply_prepare_file_indexer_us_{0};
+  std::atomic<uint64_t> log_apply_prepare_level_files_brief_us_{0};
+  std::atomic<uint64_t> log_apply_prepare_l0_non_overlap_us_{0};
+  std::atomic<uint64_t> log_apply_prepare_file_location_us_{0};
+  std::atomic<uint64_t> log_apply_prepare_bottommost_us_{0};
+  std::atomic<uint64_t> log_apply_prepare_bottommost_skipped_{0};
+  std::atomic<uint64_t> log_apply_prepare_other_us_{0};
+  std::atomic<uint64_t> log_apply_encode_us_{0};
+  std::atomic<uint64_t> log_apply_add_record_us_{0};
+  std::atomic<uint64_t> log_apply_sync_manifest_us_{0};
+  std::atomic<uint64_t> log_apply_set_current_us_{0};
+  std::atomic<uint64_t> log_apply_log_flush_us_{0};
+  std::atomic<uint64_t> log_apply_mutex_reacquire_us_{0};
+  std::atomic<uint64_t> log_apply_wal_apply_us_{0};
+  std::atomic<uint64_t> log_apply_install_version_us_{0};
+  std::atomic<uint64_t> log_apply_append_compaction_score_us_{0};
+  std::atomic<uint64_t> log_apply_writer_callback_us_{0};
+  std::atomic<uint64_t> log_apply_total_us_{0};
+  std::atomic<bool> log_apply_breakdown_enabled_{true};
 
  private:
   // REQUIRES db mutex at beginning. may release and re-acquire db mutex

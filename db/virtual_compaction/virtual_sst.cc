@@ -138,14 +138,15 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
 
     uint64_t key_start = (i == 0) ? global_min
                                   : plr.Inverse(static_cast<double>(pos_start));
-    uint64_t key_end = (i == num_ssts - 1)
-                           ? global_max
-                           : plr.Inverse(static_cast<double>(pos_end));
+    uint64_t key_end =
+        (i == num_ssts - 1)
+            ? global_max
+            : plr.Inverse(static_cast<double>(pos_end - 1));
 
-    // Ensure non-overlapping ranges between adjacent SSTs.
-    if (i < num_ssts - 1 && key_end > key_start) {
-      key_end = key_end - 1;
-    }
+    // File metadata should describe the actual keys in this output run, not a
+    // gapless partition of the key space. Sparse random keys can have large
+    // gaps between adjacent output files, and claiming those gaps as part of
+    // the previous file creates false overlap with lower levels.
     if (key_end < key_start) key_end = key_start;
 
     // Extract sub-PLR with local rank starting at 0.

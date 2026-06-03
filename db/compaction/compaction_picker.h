@@ -320,6 +320,7 @@ class NullCompactionPicker : public CompactionPicker {
 // @param max_compaction_bytes            Maximum total size in bytes (in terms
 //                                        of compensated file size) for files
 //                                        to be compacted.
+// @param max_files_to_compact            Maximum number of files to compact.
 // @param [out] comp_inputs               If a compaction was found, will be
 //                                        initialized with corresponding input
 //                                        files. Cannot be nullptr.
@@ -329,6 +330,7 @@ bool FindIntraL0Compaction(const std::vector<FileMetaData*>& level_files,
                            size_t min_files_to_compact,
                            uint64_t max_compact_bytes_per_del_file,
                            uint64_t max_compaction_bytes,
+                           size_t max_files_to_compact,
                            CompactionInputFiles* comp_inputs);
 
 CompressionType GetCompressionType(const VersionStorageInfo* vstorage,

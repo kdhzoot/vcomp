@@ -911,6 +911,28 @@ void DoGenerateLevelFilesBrief(LevelFilesBrief* file_level,
   }
 }
 
+namespace {
+void DoGenerateLevelFilesBriefNoKeyCopy(LevelFilesBrief* file_level,
+                                        const std::vector<FileMetaData*>& files,
+                                        Arena* arena) {
+  assert(file_level);
+  assert(arena);
+
+  size_t num = files.size();
+  file_level->num_files = num;
+  char* mem = arena->AllocateAligned(num * sizeof(FdWithKeyRange));
+  file_level->files = new (mem) FdWithKeyRange[num];
+
+  for (size_t i = 0; i < num; i++) {
+    FdWithKeyRange& f = file_level->files[i];
+    f.fd = files[i]->fd;
+    f.file_metadata = files[i];
+    f.smallest_key = files[i]->smallest.Encode();
+    f.largest_key = files[i]->largest.Encode();
+  }
+}
+}  // namespace
+
 static bool AfterFile(const Comparator* ucmp, const Slice* user_key,
                       const FdWithKeyRange* f) {
   // nullptr user_key occurs before all keys and is therefore never after *f
@@ -2479,6 +2501,7 @@ VersionStorageInfo::VersionStorageInfo(
       next_file_to_compact_by_size_(num_levels_),
       compaction_score_(num_levels_),
       compaction_level_(num_levels_),
+      level_compaction_stats_(num_levels_),
       l0_delay_trigger_count_(0),
       compact_cursor_(num_levels_),
       accumulated_file_size_(0),
@@ -2509,6 +2532,28 @@ VersionStorageInfo::VersionStorageInfo(
     oldest_snapshot_seqnum_ = ref_vstorage->oldest_snapshot_seqnum_;
     compact_cursor_ = ref_vstorage->compact_cursor_;
     compact_cursor_.resize(num_levels_);
+    files_by_compaction_pri_ = ref_vstorage->files_by_compaction_pri_;
+    files_by_compaction_pri_.resize(num_levels_);
+  }
+}
+
+void VersionStorageInfo::MarkCompactionPriRebuildLevels(
+    const std::vector<bool>& changed_levels) {
+  for (int level = 0; level < num_levels_ - 1; ++level) {
+    const bool level_changed =
+        level < static_cast<int>(changed_levels.size()) &&
+        changed_levels[level];
+    const bool output_level_changed =
+        level + 1 < static_cast<int>(changed_levels.size()) &&
+        changed_levels[level + 1];
+    const bool changed =
+        level >= static_cast<int>(changed_levels.size()) || level_changed ||
+        output_level_changed ||
+        files_by_compaction_pri_[level].size() != files_[level].size();
+    if (changed) {
+      files_by_compaction_pri_[level].clear();
+      next_file_to_compact_by_size_[level] = 0;
+    }
   }
 }
 
@@ -3383,30 +3428,87 @@ bool Version::IsFilterSkipped(int level, bool is_file_last_in_level) {
          level == storage_info_.num_non_empty_levels() - 1;
 }
 
-void VersionStorageInfo::GenerateLevelFilesBrief() {
+void VersionStorageInfo::GenerateLevelFilesBrief(bool copy_keys) {
   level_files_brief_.resize(num_non_empty_levels_);
   for (int level = 0; level < num_non_empty_levels_; level++) {
-    DoGenerateLevelFilesBrief(&level_files_brief_[level], files_[level],
-                              &arena_);
+    if (copy_keys) {
+      DoGenerateLevelFilesBrief(&level_files_brief_[level], files_[level],
+                                &arena_);
+    } else {
+      DoGenerateLevelFilesBriefNoKeyCopy(&level_files_brief_[level],
+                                         files_[level], &arena_);
+    }
   }
 }
 
 void VersionStorageInfo::PrepareForVersionAppend(
     const ImmutableOptions& immutable_options,
-    const MutableCFOptions& mutable_cf_options) {
+    const MutableCFOptions& mutable_cf_options,
+    PrepareTimingStats* timing_stats) {
+  const bool collect_timing = timing_stats != nullptr;
+  const uint64_t total_t0 = collect_timing ? clock_->NowMicros() : 0;
+  uint64_t timed_us = 0;
+  auto add_timed = [&](uint64_t* dst, auto&& fn) {
+    if (!collect_timing) {
+      fn();
+      return;
+    }
+    const uint64_t t0 = clock_->NowMicros();
+    fn();
+    const uint64_t elapsed = clock_->NowMicros() - t0;
+    *dst += elapsed;
+    timed_us += elapsed;
+  };
+
   ComputeCompensatedSizes();
   UpdateNumNonEmptyLevels();
   CalculateBaseBytes(immutable_options, mutable_cf_options);
-  UpdateFilesByCompactionPri(immutable_options, mutable_cf_options);
-  GenerateFileIndexer();
-  GenerateLevelFilesBrief();
-  GenerateLevel0NonOverlapping();
-  GenerateBottommostFiles();
-  GenerateFileLocationIndex();
+
+  if (timing_stats) {
+    add_timed(&timing_stats->compaction_pri_us, [&] {
+      UpdateFilesByCompactionPri(immutable_options, mutable_cf_options,
+                                 timing_stats);
+    });
+    if (!immutable_options.use_virtual_compaction) {
+      add_timed(&timing_stats->file_indexer_us,
+                [&] { GenerateFileIndexer(); });
+    }
+    add_timed(&timing_stats->level_files_brief_us, [&] {
+      GenerateLevelFilesBrief(!immutable_options.use_virtual_compaction);
+    });
+    add_timed(&timing_stats->l0_non_overlap_us,
+              [&] { GenerateLevel0NonOverlapping(); });
+    add_timed(&timing_stats->file_location_us,
+              [&] { GenerateFileLocationIndex(); });
+    timing_stats->file_index_us +=
+        timing_stats->file_indexer_us + timing_stats->level_files_brief_us +
+        timing_stats->l0_non_overlap_us + timing_stats->file_location_us;
+    if (immutable_options.use_virtual_compaction) {
+      timing_stats->bottommost_skipped++;
+    } else {
+      add_timed(&timing_stats->bottommost_us,
+                [&] { GenerateBottommostFiles(); });
+    }
+    const uint64_t total_us = clock_->NowMicros() - total_t0;
+    timing_stats->other_us += total_us > timed_us ? total_us - timed_us : 0;
+  } else {
+    UpdateFilesByCompactionPri(immutable_options, mutable_cf_options);
+    if (!immutable_options.use_virtual_compaction) {
+      GenerateFileIndexer();
+    }
+    GenerateLevelFilesBrief(!immutable_options.use_virtual_compaction);
+    GenerateLevel0NonOverlapping();
+    if (!immutable_options.use_virtual_compaction) {
+      GenerateBottommostFiles();
+    }
+    GenerateFileLocationIndex();
+  }
 }
 
 void Version::PrepareAppend(const ReadOptions& read_options,
-                            bool update_stats) {
+                            bool update_stats,
+                            VersionStorageInfo::PrepareTimingStats*
+                                timing_stats) {
   TEST_SYNC_POINT_CALLBACK(
       "Version::PrepareAppend:forced_check",
       static_cast<void*>(&storage_info_.force_consistency_checks_));
@@ -3415,11 +3517,15 @@ void Version::PrepareAppend(const ReadOptions& read_options,
     UpdateAccumulatedStats(read_options);
   }
 
-  storage_info_.PrepareForVersionAppend(cfd_->ioptions(), mutable_cf_options_);
+  storage_info_.PrepareForVersionAppend(cfd_->ioptions(), mutable_cf_options_,
+                                        timing_stats);
 }
 
 bool Version::MaybeInitializeFileMetaData(const ReadOptions& read_options,
                                           FileMetaData* file_meta) {
+  if (vset_->db_options_->use_virtual_compaction) {
+    return false;
+  }
   if (file_meta->init_stats_from_file || file_meta->compensated_file_size > 0) {
     return false;
   }
@@ -3477,6 +3583,9 @@ void VersionStorageInfo::RemoveCurrentStats(FileMetaData* file_meta) {
 }
 
 void Version::UpdateAccumulatedStats(const ReadOptions& read_options) {
+  if (vset_->db_options_->use_virtual_compaction) {
+    return;
+  }
   // maximum number of table properties loaded from files.
   const int kMaxInitCount = 20;
   int init_count = 0;
@@ -3530,10 +3639,16 @@ void Version::UpdateAccumulatedStats(const ReadOptions& read_options) {
 void VersionStorageInfo::ComputeCompensatedSizes() {
   static const int kDeletionWeightOnCompaction = 2;
   uint64_t average_value_size = GetAverageValueSize();
+  level_compaction_stats_.assign(num_levels_, LevelCompactionStats());
 
   // compute the compensated size
   for (int level = 0; level < num_levels_; level++) {
-    for (auto* file_meta : files_[level]) {
+    auto& stats = level_compaction_stats_[level];
+    for (size_t i = 0; i < files_[level].size(); ++i) {
+      auto* file_meta = files_[level][i];
+      if (i == 0) {
+        stats.first_file_being_compacted = file_meta->being_compacted;
+      }
       // Here we only compute compensated_file_size for those file_meta
       // which compensated_file_size is uninitialized (== 0). This is true only
       // for files that have been created right now and no other thread has
@@ -3558,8 +3673,61 @@ void VersionStorageInfo::ComputeCompensatedSizes() {
         file_meta->compensated_file_size +=
             file_meta->compensated_range_deletion_size;
       }
+
+      stats.file_size += file_meta->fd.GetFileSize();
+      stats.compensated_size += file_meta->compensated_file_size;
+      if (!file_meta->being_compacted) {
+        stats.non_compacting_compensated_size +=
+            file_meta->compensated_file_size;
+        stats.non_compacting_file_count++;
+      }
+      if (level == 0 && file_meta->virtual_compaction_eligible) {
+        stats.l0_eligible_file_count++;
+        stats.l0_eligible_file_size += file_meta->fd.GetFileSize();
+        if (!file_meta->being_compacted) {
+          stats.l0_eligible_non_compacting_compensated_size +=
+              file_meta->compensated_file_size;
+          stats.l0_eligible_non_compacting_file_count++;
+        }
+      }
     }
   }
+  level_compaction_stats_valid_ = true;
+}
+
+void VersionStorageInfo::CollectLevelCompactionStats(
+    std::vector<LevelCompactionStats>* stats) const {
+  assert(stats != nullptr);
+  stats->assign(num_levels_, LevelCompactionStats());
+  for (int level = 0; level < num_levels_; level++) {
+    auto& level_stats = (*stats)[level];
+    for (size_t i = 0; i < files_[level].size(); ++i) {
+      FileMetaData* file_meta = files_[level][i];
+      if (i == 0) {
+        level_stats.first_file_being_compacted = file_meta->being_compacted;
+      }
+      level_stats.file_size += file_meta->fd.GetFileSize();
+      level_stats.compensated_size += file_meta->compensated_file_size;
+      if (!file_meta->being_compacted) {
+        level_stats.non_compacting_compensated_size +=
+            file_meta->compensated_file_size;
+        level_stats.non_compacting_file_count++;
+      }
+      if (level == 0 && file_meta->virtual_compaction_eligible) {
+        level_stats.l0_eligible_file_count++;
+        level_stats.l0_eligible_file_size += file_meta->fd.GetFileSize();
+        if (!file_meta->being_compacted) {
+          level_stats.l0_eligible_non_compacting_compensated_size +=
+              file_meta->compensated_file_size;
+          level_stats.l0_eligible_non_compacting_file_count++;
+        }
+      }
+    }
+  }
+}
+
+void VersionStorageInfo::InvalidateLevelCompactionStats() {
+  level_compaction_stats_valid_ = false;
 }
 
 int VersionStorageInfo::MaxInputLevel() const {
@@ -3595,15 +3763,20 @@ void VersionStorageInfo::EstimateCompactionBytesNeeded(
   // We keep doing it to Level 2, 3, etc, until the last level and return the
   // accumulated bytes.
 
-  uint64_t bytes_compact_to_next_level = 0;
-  uint64_t level_size = 0;
-  for (auto* f : files_[0]) {
-    level_size += f->fd.GetFileSize();
+  std::vector<LevelCompactionStats> local_level_stats;
+  const std::vector<LevelCompactionStats>* level_stats =
+      &level_compaction_stats_;
+  if (!level_compaction_stats_valid_ || finalized_) {
+    CollectLevelCompactionStats(&local_level_stats);
+    level_stats = &local_level_stats;
   }
+
+  uint64_t bytes_compact_to_next_level = 0;
+  uint64_t level_size = (*level_stats)[0].l0_eligible_file_size;
+  int eligible_l0_count = (*level_stats)[0].l0_eligible_file_count;
   // Level 0
   bool level0_compact_triggered = false;
-  if (static_cast<int>(files_[0].size()) >=
-          mutable_cf_options.level0_file_num_compaction_trigger ||
+  if (eligible_l0_count >= mutable_cf_options.level0_file_num_compaction_trigger ||
       level_size >= mutable_cf_options.max_bytes_for_level_base) {
     level0_compact_triggered = true;
     estimated_compaction_needed_bytes_ = level_size;
@@ -3618,18 +3791,12 @@ void VersionStorageInfo::EstimateCompactionBytesNeeded(
     level_size = 0;
     if (bytes_next_level > 0) {
 #ifndef NDEBUG
-      uint64_t level_size2 = 0;
-      for (auto* f : files_[level]) {
-        level_size2 += f->fd.GetFileSize();
-      }
-      assert(level_size2 == bytes_next_level);
+      assert((*level_stats)[level].file_size == bytes_next_level);
 #endif
       level_size = bytes_next_level;
       bytes_next_level = 0;
     } else {
-      for (auto* f : files_[level]) {
-        level_size += f->fd.GetFileSize();
-      }
+      level_size = (*level_stats)[level].file_size;
     }
     if (level == base_level() && level0_compact_triggered) {
       // Add base level size to compaction if level0 compaction triggered.
@@ -3646,9 +3813,7 @@ void VersionStorageInfo::EstimateCompactionBytesNeeded(
 
       assert(bytes_next_level == 0);
       if (level + 1 < num_levels_) {
-        for (auto* f : files_[level + 1]) {
-          bytes_next_level += f->fd.GetFileSize();
-        }
+        bytes_next_level = (*level_stats)[level + 1].file_size;
       }
       if (bytes_next_level > 0) {
         assert(level_size > 0);
@@ -3738,6 +3903,14 @@ bool ShouldChangeFileTemperature(const ImmutableOptions& ioptions,
 void VersionStorageInfo::ComputeCompactionScore(
     const ImmutableOptions& immutable_options,
     const MutableCFOptions& mutable_cf_options) {
+  std::vector<LevelCompactionStats> local_level_stats;
+  const std::vector<LevelCompactionStats>* level_stats =
+      &level_compaction_stats_;
+  if (!level_compaction_stats_valid_ || finalized_) {
+    CollectLevelCompactionStats(&local_level_stats);
+    level_stats = &local_level_stats;
+  }
+
   double total_downcompact_bytes = 0.0;
   // Historically, score is defined as actual bytes in a level divided by
   // the level's target size, and 1.0 is the threshold for triggering
@@ -3765,15 +3938,11 @@ void VersionStorageInfo::ComputeCompactionScore(
       // file size is small (perhaps because of a small write-buffer
       // setting, or very high compression ratios, or lots of
       // overwrites/deletions).
-      int num_sorted_runs = 0;
-      uint64_t total_size = 0;
-      for (auto* f : files_[level]) {
-        total_downcompact_bytes += static_cast<double>(f->fd.GetFileSize());
-        if (!f->being_compacted) {
-          total_size += f->compensated_file_size;
-          num_sorted_runs++;
-        }
-      }
+      const LevelCompactionStats& l0_stats = (*level_stats)[level];
+      int num_sorted_runs = l0_stats.l0_eligible_non_compacting_file_count;
+      uint64_t total_size = l0_stats.l0_eligible_non_compacting_compensated_size;
+      total_downcompact_bytes +=
+          static_cast<double>(l0_stats.l0_eligible_file_size);
       if (compaction_style_ == kCompactionStyleUniversal) {
         // For universal compaction, we use level0 score to indicate
         // compaction score for the whole DB. Adding other levels as if
@@ -3784,7 +3953,8 @@ void VersionStorageInfo::ComputeCompactionScore(
           // In that case, the below check may not catch a level being
           // compacted as it only checks the first file. The worst that can
           // happen is a scheduled compaction thread will find nothing to do.
-          if (!files_[i].empty() && !files_[i][0]->being_compacted) {
+          if (!files_[i].empty() &&
+              !(*level_stats)[i].first_file_being_compacted) {
             num_sorted_runs++;
           }
         }
@@ -3852,10 +4022,8 @@ void VersionStorageInfo::ComputeCompactionScore(
               // total_downcompact_bytes = total_size > LBase size,
               // LBase score is lower than 10.0. So L0->LBase is prioritized
               // over LBase -> LBase+1.
-              uint64_t base_level_size = 0;
-              for (auto f : files_[base_level_]) {
-                base_level_size += f->compensated_file_size;
-              }
+              uint64_t base_level_size =
+                  (*level_stats)[base_level_].compensated_size;
               score = std::max(score, static_cast<double>(total_size) /
                                           static_cast<double>(std::max(
                                               base_level_size,
@@ -3873,14 +4041,10 @@ void VersionStorageInfo::ComputeCompactionScore(
       }
     } else {  // level > 0
       // Compute the ratio of current size to size limit.
-      uint64_t level_bytes_no_compacting = 0;
-      uint64_t level_total_bytes = 0;
-      for (auto f : files_[level]) {
-        level_total_bytes += f->fd.GetFileSize();
-        if (!f->being_compacted) {
-          level_bytes_no_compacting += f->compensated_file_size;
-        }
-      }
+      const LevelCompactionStats& stats = (*level_stats)[level];
+      uint64_t level_bytes_no_compacting =
+          stats.non_compacting_compensated_size;
+      uint64_t level_total_bytes = stats.file_size;
       if (!immutable_options.level_compaction_dynamic_level_bytes) {
         score = static_cast<double>(level_bytes_no_compacting) /
                 MaxBytesForLevel(level);
@@ -3933,6 +4097,7 @@ void VersionStorageInfo::ComputeCompactionScore(
       }
     }
   }
+
   ComputeFilesMarkedForCompaction(max_output_level);
   ComputeBottommostFilesMarkedForCompaction(
       immutable_options.cf_allow_ingest_behind ||
@@ -4174,6 +4339,7 @@ namespace {
 struct Fsize {
   size_t index;
   FileMetaData* file;
+  uint64_t compaction_order = 0;
 };
 
 // Comparator that is used to sort files based on their size
@@ -4186,9 +4352,32 @@ bool CompareCompensatedSizeDescending(const Fsize& first, const Fsize& second) {
 
 void VersionStorageInfo::AddFile(int level, FileMetaData* f) {
   auto& level_files = files_[level];
+  const size_t pos = level_files.size();
   level_files.push_back(f);
 
   f->refs++;
+
+  const uint64_t file_number = f->fd.GetNumber();
+  assert(file_locations_.find(file_number) == file_locations_.end());
+  file_locations_.emplace(file_number, FileLocation(level, pos));
+  InvalidateLevelCompactionStats();
+}
+
+void VersionStorageInfo::AddFilesForUnchangedLevel(
+    int level, const std::vector<FileMetaData*>& files) {
+  auto& level_files = files_[level];
+  assert(level_files.empty());
+  level_files = files;
+
+  for (size_t pos = 0; pos < level_files.size(); ++pos) {
+    FileMetaData* f = level_files[pos];
+    f->refs++;
+
+    const uint64_t file_number = f->fd.GetNumber();
+    assert(file_locations_.find(file_number) == file_locations_.end());
+    file_locations_.emplace(file_number, FileLocation(level, pos));
+  }
+  InvalidateLevelCompactionStats();
 }
 
 void VersionStorageInfo::AddBlobFile(
@@ -4264,7 +4453,7 @@ void SortFileByOverlappingRatio(
     const std::vector<FileMetaData*>& next_level_files, SystemClock* clock,
     int level, int num_non_empty_levels, uint64_t ttl,
     std::vector<Fsize>* temp) {
-  std::unordered_map<uint64_t, uint64_t> file_to_order;
+  (void)files;
   auto next_level_it = next_level_files.begin();
 
   int64_t curr_time;
@@ -4277,7 +4466,8 @@ void SortFileByOverlappingRatio(
   FileTtlBooster ttl_booster(static_cast<uint64_t>(curr_time), ttl,
                              num_non_empty_levels, level);
 
-  for (auto& file : files) {
+  for (auto& fsize : *temp) {
+    FileMetaData* file = fsize.file;
     uint64_t overlapping_bytes = 0;
     // Skip files in next level that is smaller than current file
     while (next_level_it != next_level_files.end() &&
@@ -4299,9 +4489,8 @@ void SortFileByOverlappingRatio(
     uint64_t ttl_boost_score = (ttl > 0) ? ttl_booster.GetBoostScore(file) : 1;
     assert(ttl_boost_score > 0);
     assert(file->compensated_file_size != 0);
-    file_to_order[file->fd.GetNumber()] = overlapping_bytes * 1024U /
-                                          file->compensated_file_size /
-                                          ttl_boost_score;
+    fsize.compaction_order = overlapping_bytes * 1024U /
+                             file->compensated_file_size / ttl_boost_score;
   }
 
   size_t num_to_sort = temp->size() > VersionStorageInfo::kNumberFilesToSort
@@ -4316,12 +4505,10 @@ void SortFileByOverlappingRatio(
         // help the trivial move case to have more files to
         // extend.
         if (f1.file->marked_for_compaction == f2.file->marked_for_compaction) {
-          if (file_to_order[f1.file->fd.GetNumber()] ==
-              file_to_order[f2.file->fd.GetNumber()]) {
+          if (f1.compaction_order == f2.compaction_order) {
             return icmp.Compare(f1.file->smallest, f2.file->smallest) < 0;
           }
-          return file_to_order[f1.file->fd.GetNumber()] <
-                 file_to_order[f2.file->fd.GetNumber()];
+          return f1.compaction_order < f2.compaction_order;
         } else {
           return f1.file->marked_for_compaction >
                  f2.file->marked_for_compaction;
@@ -4386,7 +4573,8 @@ void SortFileByRoundRobin(const InternalKeyComparator& icmp,
 }  // anonymous namespace
 
 void VersionStorageInfo::UpdateFilesByCompactionPri(
-    const ImmutableOptions& ioptions, const MutableCFOptions& options) {
+    const ImmutableOptions& ioptions, const MutableCFOptions& options,
+    PrepareTimingStats* timing_stats) {
   if (compaction_style_ == kCompactionStyleNone ||
       compaction_style_ == kCompactionStyleFIFO ||
       compaction_style_ == kCompactionStyleUniversal) {
@@ -4395,9 +4583,14 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
   }
   // No need to sort the highest level because it is never compacted.
   for (int level = 0; level < num_levels() - 1; level++) {
+    const uint64_t level_t0 = timing_stats ? clock_->NowMicros() : 0;
     const std::vector<FileMetaData*>& files = files_[level];
     auto& files_by_compaction_pri = files_by_compaction_pri_[level];
-    assert(files_by_compaction_pri.size() == 0);
+    if (!files_by_compaction_pri.empty()) {
+      assert(files_by_compaction_pri.size() == files.size());
+      next_file_to_compact_by_size_[level] = 0;
+      continue;
+    }
 
     // populate a temp vector for sorting based on size
     std::vector<Fsize> temp(files.size());
@@ -4450,6 +4643,12 @@ void VersionStorageInfo::UpdateFilesByCompactionPri(
     }
     next_file_to_compact_by_size_[level] = 0;
     assert(files_[level].size() == files_by_compaction_pri_[level].size());
+    if (timing_stats &&
+        level < static_cast<int>(
+                    PrepareTimingStats::kLevelStatsSize)) {
+      timing_stats->compaction_pri_level_us[level] +=
+          clock_->NowMicros() - level_t0;
+    }
   }
 }
 
@@ -4512,6 +4711,11 @@ void VersionStorageInfo::GenerateFileLocationIndex() {
     num_files += files_[level].size();
   }
 
+  if (file_locations_.size() == num_files) {
+    return;
+  }
+
+  file_locations_.clear();
   file_locations_.reserve(num_files);
 
   for (int level = 0; level < num_levels_; ++level) {
@@ -5019,7 +5223,12 @@ void VersionStorageInfo::CalculateBaseBytes(const ImmutableOptions& ioptions,
                                             const MutableCFOptions& options) {
   // Special logic to set number of sorted runs.
   // It is to match the previous behavior when all files are in L0.
-  int num_l0_count = static_cast<int>(files_[0].size());
+  int num_l0_count = 0;
+  for (auto* f : files_[0]) {
+    if (f->virtual_compaction_eligible) {
+      num_l0_count++;
+    }
+  }
   if (compaction_style_ == kCompactionStyleUniversal) {
     // For universal compaction, we use level0 score to indicate
     // compaction score for the whole DB. Adding other levels as if
@@ -5634,12 +5843,167 @@ void VersionSet::TuneMaxManifestFileSize() {
                    (100U + max_manifest_space_amp_pct_) / 100U);
 }
 
+void VersionSet::ResetLogAndApplyBreakdownStats() {
+  log_apply_calls_.store(0, std::memory_order_relaxed);
+  log_apply_groups_.store(0, std::memory_order_relaxed);
+  log_apply_group_writers_.store(0, std::memory_order_relaxed);
+  log_apply_group_edits_.store(0, std::memory_order_relaxed);
+  log_apply_writer_wait_us_.store(0, std::memory_order_relaxed);
+  log_apply_pre_cb_us_.store(0, std::memory_order_relaxed);
+  log_apply_group_build_us_.store(0, std::memory_order_relaxed);
+  log_apply_group_find_version_us_.store(0, std::memory_order_relaxed);
+  log_apply_group_new_version_us_.store(0, std::memory_order_relaxed);
+  log_apply_group_apply_us_.store(0, std::memory_order_relaxed);
+  log_apply_group_push_us_.store(0, std::memory_order_relaxed);
+  log_apply_save_to_us_.store(0, std::memory_order_relaxed);
+  log_apply_save_to_builder_us_.store(0, std::memory_order_relaxed);
+  log_apply_save_to_changed_levels_us_.store(0, std::memory_order_relaxed);
+  log_apply_save_to_mark_rebuild_us_.store(0, std::memory_order_relaxed);
+  log_apply_save_to_consistency_base_us_.store(0, std::memory_order_relaxed);
+  log_apply_save_to_consistency_new_us_.store(0, std::memory_order_relaxed);
+  log_apply_save_to_sst_files_us_.store(0, std::memory_order_relaxed);
+  log_apply_save_to_blob_files_us_.store(0, std::memory_order_relaxed);
+  log_apply_save_to_cursors_us_.store(0, std::memory_order_relaxed);
+  log_apply_save_to_consistency_final_us_.store(0, std::memory_order_relaxed);
+  log_apply_manifest_write_total_us_.store(0, std::memory_order_relaxed);
+  log_apply_load_table_handlers_us_.store(0, std::memory_order_relaxed);
+  log_apply_new_manifest_us_.store(0, std::memory_order_relaxed);
+  log_apply_prepare_append_us_.store(0, std::memory_order_relaxed);
+  log_apply_prepare_compaction_score_us_.store(0, std::memory_order_relaxed);
+  log_apply_prepare_compaction_pri_us_.store(0, std::memory_order_relaxed);
+  for (auto& level_us : log_apply_prepare_compaction_pri_level_us_) {
+    level_us.store(0, std::memory_order_relaxed);
+  }
+  log_apply_prepare_file_index_us_.store(0, std::memory_order_relaxed);
+  log_apply_prepare_file_indexer_us_.store(0, std::memory_order_relaxed);
+  log_apply_prepare_level_files_brief_us_.store(0, std::memory_order_relaxed);
+  log_apply_prepare_l0_non_overlap_us_.store(0, std::memory_order_relaxed);
+  log_apply_prepare_file_location_us_.store(0, std::memory_order_relaxed);
+  log_apply_prepare_bottommost_us_.store(0, std::memory_order_relaxed);
+  log_apply_prepare_bottommost_skipped_.store(0, std::memory_order_relaxed);
+  log_apply_prepare_other_us_.store(0, std::memory_order_relaxed);
+  log_apply_encode_us_.store(0, std::memory_order_relaxed);
+  log_apply_add_record_us_.store(0, std::memory_order_relaxed);
+  log_apply_sync_manifest_us_.store(0, std::memory_order_relaxed);
+  log_apply_set_current_us_.store(0, std::memory_order_relaxed);
+  log_apply_log_flush_us_.store(0, std::memory_order_relaxed);
+  log_apply_mutex_reacquire_us_.store(0, std::memory_order_relaxed);
+  log_apply_wal_apply_us_.store(0, std::memory_order_relaxed);
+  log_apply_install_version_us_.store(0, std::memory_order_relaxed);
+  log_apply_append_compaction_score_us_.store(0, std::memory_order_relaxed);
+  log_apply_writer_callback_us_.store(0, std::memory_order_relaxed);
+  log_apply_total_us_.store(0, std::memory_order_relaxed);
+}
+
+VersionSet::LogAndApplyBreakdownStats
+VersionSet::GetLogAndApplyBreakdownStats() const {
+  LogAndApplyBreakdownStats stats;
+  stats.calls = log_apply_calls_.load(std::memory_order_relaxed);
+  stats.groups = log_apply_groups_.load(std::memory_order_relaxed);
+  stats.group_writers =
+      log_apply_group_writers_.load(std::memory_order_relaxed);
+  stats.group_edits = log_apply_group_edits_.load(std::memory_order_relaxed);
+  stats.writer_wait_us =
+      log_apply_writer_wait_us_.load(std::memory_order_relaxed);
+  stats.pre_cb_us = log_apply_pre_cb_us_.load(std::memory_order_relaxed);
+  stats.group_build_us =
+      log_apply_group_build_us_.load(std::memory_order_relaxed);
+  stats.group_find_version_us =
+      log_apply_group_find_version_us_.load(std::memory_order_relaxed);
+  stats.group_new_version_us =
+      log_apply_group_new_version_us_.load(std::memory_order_relaxed);
+  stats.group_apply_us =
+      log_apply_group_apply_us_.load(std::memory_order_relaxed);
+  stats.group_push_us =
+      log_apply_group_push_us_.load(std::memory_order_relaxed);
+  stats.save_to_us = log_apply_save_to_us_.load(std::memory_order_relaxed);
+  stats.save_to_builder_us =
+      log_apply_save_to_builder_us_.load(std::memory_order_relaxed);
+  stats.save_to_changed_levels_us =
+      log_apply_save_to_changed_levels_us_.load(std::memory_order_relaxed);
+  stats.save_to_mark_rebuild_us =
+      log_apply_save_to_mark_rebuild_us_.load(std::memory_order_relaxed);
+  stats.save_to_consistency_base_us =
+      log_apply_save_to_consistency_base_us_.load(std::memory_order_relaxed);
+  stats.save_to_consistency_new_us =
+      log_apply_save_to_consistency_new_us_.load(std::memory_order_relaxed);
+  stats.save_to_sst_files_us =
+      log_apply_save_to_sst_files_us_.load(std::memory_order_relaxed);
+  stats.save_to_blob_files_us =
+      log_apply_save_to_blob_files_us_.load(std::memory_order_relaxed);
+  stats.save_to_cursors_us =
+      log_apply_save_to_cursors_us_.load(std::memory_order_relaxed);
+  stats.save_to_consistency_final_us =
+      log_apply_save_to_consistency_final_us_.load(std::memory_order_relaxed);
+  stats.manifest_write_total_us =
+      log_apply_manifest_write_total_us_.load(std::memory_order_relaxed);
+  stats.load_table_handlers_us =
+      log_apply_load_table_handlers_us_.load(std::memory_order_relaxed);
+  stats.new_manifest_us =
+      log_apply_new_manifest_us_.load(std::memory_order_relaxed);
+  stats.prepare_append_us =
+      log_apply_prepare_append_us_.load(std::memory_order_relaxed);
+  stats.prepare_compaction_score_us =
+      log_apply_prepare_compaction_score_us_.load(std::memory_order_relaxed);
+  stats.prepare_compaction_pri_us =
+      log_apply_prepare_compaction_pri_us_.load(std::memory_order_relaxed);
+  for (size_t i = 0; i < stats.prepare_compaction_pri_level_us.size(); ++i) {
+    stats.prepare_compaction_pri_level_us[i] =
+        log_apply_prepare_compaction_pri_level_us_[i].load(
+            std::memory_order_relaxed);
+  }
+  stats.prepare_file_index_us =
+      log_apply_prepare_file_index_us_.load(std::memory_order_relaxed);
+  stats.prepare_file_indexer_us =
+      log_apply_prepare_file_indexer_us_.load(std::memory_order_relaxed);
+  stats.prepare_level_files_brief_us =
+      log_apply_prepare_level_files_brief_us_.load(std::memory_order_relaxed);
+  stats.prepare_l0_non_overlap_us =
+      log_apply_prepare_l0_non_overlap_us_.load(std::memory_order_relaxed);
+  stats.prepare_file_location_us =
+      log_apply_prepare_file_location_us_.load(std::memory_order_relaxed);
+  stats.prepare_bottommost_us =
+      log_apply_prepare_bottommost_us_.load(std::memory_order_relaxed);
+  stats.prepare_bottommost_skipped =
+      log_apply_prepare_bottommost_skipped_.load(std::memory_order_relaxed);
+  stats.prepare_other_us =
+      log_apply_prepare_other_us_.load(std::memory_order_relaxed);
+  stats.encode_us = log_apply_encode_us_.load(std::memory_order_relaxed);
+  stats.add_record_us =
+      log_apply_add_record_us_.load(std::memory_order_relaxed);
+  stats.sync_manifest_us =
+      log_apply_sync_manifest_us_.load(std::memory_order_relaxed);
+  stats.set_current_us =
+      log_apply_set_current_us_.load(std::memory_order_relaxed);
+  stats.log_flush_us =
+      log_apply_log_flush_us_.load(std::memory_order_relaxed);
+  stats.mutex_reacquire_us =
+      log_apply_mutex_reacquire_us_.load(std::memory_order_relaxed);
+  stats.wal_apply_us =
+      log_apply_wal_apply_us_.load(std::memory_order_relaxed);
+  stats.install_version_us =
+      log_apply_install_version_us_.load(std::memory_order_relaxed);
+  stats.append_compaction_score_us =
+      log_apply_append_compaction_score_us_.load(std::memory_order_relaxed);
+  stats.writer_callback_us =
+      log_apply_writer_callback_us_.load(std::memory_order_relaxed);
+  stats.total_us = log_apply_total_us_.load(std::memory_order_relaxed);
+  return stats;
+}
+
 void VersionSet::AppendVersion(ColumnFamilyData* column_family_data,
                                Version* v) {
   // compute new compaction score
+  const bool collect_timing =
+      log_apply_breakdown_enabled_.load(std::memory_order_relaxed);
+  uint64_t score_t0 = collect_timing ? clock_->NowMicros() : 0;
   v->storage_info()->ComputeCompactionScore(
       column_family_data->ioptions(),
       column_family_data->GetLatestMutableCFOptions());
+  if (collect_timing) {
+    log_apply_append_compaction_score_us_.fetch_add(
+        clock_->NowMicros() - score_t0, std::memory_order_relaxed);
+  }
 
   // Mark v finalized
   v->storage_info_.SetFinalized();
@@ -5697,12 +6061,49 @@ Status VersionSet::ProcessManifestWrites(
   bool skip_manifest_write =
       first_writer.edit_list.front()->IsNoManifestWriteDummy();
 
+  uint64_t group_build_us = 0;
+  uint64_t group_find_version_us = 0;
+  uint64_t group_new_version_us = 0;
+  uint64_t group_apply_us = 0;
+  uint64_t group_push_us = 0;
+  uint64_t save_to_us = 0;
+  uint64_t save_to_builder_us = 0;
+  uint64_t save_to_changed_levels_us = 0;
+  uint64_t save_to_mark_rebuild_us = 0;
+  VersionBuilder::SaveToTimingStats save_to_timing;
+  uint64_t manifest_write_total_us = 0;
+  uint64_t load_table_handlers_us = 0;
+  uint64_t new_manifest_us = 0;
+  uint64_t prepare_append_us = 0;
+  VersionStorageInfo::PrepareTimingStats prepare_timing;
+  uint64_t encode_us = 0;
+  uint64_t add_record_us = 0;
+  uint64_t sync_manifest_us = 0;
+  uint64_t set_current_us = 0;
+  uint64_t log_flush_us = 0;
+  uint64_t mutex_reacquire_us = 0;
+  uint64_t wal_apply_us = 0;
+  uint64_t install_version_us = 0;
+  uint64_t writer_callback_us = 0;
+  uint64_t group_writers = 0;
+  uint64_t group_edits = 0;
+  const bool collect_timing =
+      log_apply_breakdown_enabled_.load(std::memory_order_relaxed);
+  auto now_micros = [&]() -> uint64_t {
+    return collect_timing ? clock_->NowMicros() : 0;
+  };
+
   if (first_writer.edit_list.front()->IsColumnFamilyManipulation()) {
     // No group commits for column family add or drop
+    uint64_t group_t0 = now_micros();
     LogAndApplyCFHelper(first_writer.edit_list.front(), &max_last_sequence);
     batch_edits.push_back(first_writer.edit_list.front());
     batch_edits_ts_sz.push_back(std::nullopt);
+    group_writers = 1;
+    group_edits = 1;
+    group_build_us += now_micros() - group_t0;
   } else {
+    uint64_t group_t0 = now_micros();
     auto it = manifest_writers_.cbegin();
     size_t group_start = std::numeric_limits<size_t>::max();
     for (;;) {
@@ -5710,6 +6111,8 @@ Status VersionSet::ProcessManifestWrites(
       last_writer = *it;
       assert(last_writer != nullptr);
       assert(last_writer->cfd != nullptr);
+      group_writers++;
+      group_edits += last_writer->edit_list.size();
       if (last_writer->cfd->IsDropped()) {
         // If we detect a dropped CF at this point, and the corresponding
         // version edits belong to an atomic group, then we need to find out
@@ -5747,6 +6150,7 @@ Status VersionSet::ProcessManifestWrites(
         // TODO(yanqin) maybe consider unordered_map
         Version* version = nullptr;
         VersionBuilder* builder = nullptr;
+        uint64_t find_version_t0 = now_micros();
         for (int i = 0; i != static_cast<int>(versions.size()); ++i) {
           uint32_t cf_id = last_writer->cfd->GetID();
           if (versions[i]->cfd()->GetID() == cf_id) {
@@ -5759,9 +6163,11 @@ Status VersionSet::ProcessManifestWrites(
             break;
           }
         }
+        group_find_version_us += now_micros() - find_version_t0;
         if (version == nullptr) {
           // WAL manipulations do not need to be applied to versions.
           if (!last_writer->IsAllWalEdits()) {
+            uint64_t new_version_t0 = now_micros();
             version = new Version(
                 last_writer->cfd, this, file_options_,
                 last_writer->cfd ? last_writer->cfd->GetLatestMutableCFOptions()
@@ -5771,6 +6177,7 @@ Status VersionSet::ProcessManifestWrites(
             builder_guards.emplace_back(
                 new BaseReferencedVersionBuilder(last_writer->cfd));
             builder = builder_guards.back()->version_builder();
+            group_new_version_us += now_micros() - new_version_t0;
           }
           assert(last_writer->IsAllWalEdits() || builder);
           assert(last_writer->IsAllWalEdits() || version);
@@ -5790,8 +6197,10 @@ Status VersionSet::ProcessManifestWrites(
           } else if (group_start != std::numeric_limits<size_t>::max()) {
             group_start = std::numeric_limits<size_t>::max();
           }
+          uint64_t apply_t0 = now_micros();
           Status s = LogAndApplyHelper(last_writer->cfd, builder, e,
                                        &max_last_sequence, mu);
+          group_apply_us += now_micros() - apply_t0;
           if (!s.ok()) {
             // free up the allocated memory
             for (auto v : versions) {
@@ -5800,8 +6209,10 @@ Status VersionSet::ProcessManifestWrites(
             // FIXME? manifest_writers_ still has requested updates
             return s;
           }
+          uint64_t push_t0 = now_micros();
           batch_edits.push_back(e);
           batch_edits_ts_sz.push_back(edit_ts_sz);
+          group_push_us += now_micros() - push_t0;
         }
       }
       // Loop increment/conditions
@@ -5821,11 +6232,28 @@ Status VersionSet::ProcessManifestWrites(
         break;
       }
     }
+    group_build_us += now_micros() - group_t0;
+    uint64_t save_t0 = now_micros();
     for (int i = 0; i < static_cast<int>(versions.size()); ++i) {
       assert(!builder_guards.empty() &&
              builder_guards.size() == versions.size());
       auto* builder = builder_guards[i]->version_builder();
-      Status s = builder->SaveTo(versions[i]->storage_info());
+      uint64_t builder_t0 = now_micros();
+      VersionBuilder::SaveToTimingStats one_save_timing;
+      Status s = builder->SaveTo(versions[i]->storage_info(),
+                                 collect_timing ? &one_save_timing : nullptr);
+      save_to_builder_us += now_micros() - builder_t0;
+      if (collect_timing) {
+        save_to_timing.consistency_base_us +=
+            one_save_timing.consistency_base_us;
+        save_to_timing.consistency_new_us +=
+            one_save_timing.consistency_new_us;
+        save_to_timing.save_sst_us += one_save_timing.save_sst_us;
+        save_to_timing.save_blob_us += one_save_timing.save_blob_us;
+        save_to_timing.save_cursors_us += one_save_timing.save_cursors_us;
+        save_to_timing.consistency_final_us +=
+            one_save_timing.consistency_final_us;
+      }
       if (!s.ok()) {
         // free up the allocated memory
         for (auto v : versions) {
@@ -5834,7 +6262,16 @@ Status VersionSet::ProcessManifestWrites(
         // FIXME? manifest_writers_ still has requested updates
         return s;
       }
+      uint64_t changed_t0 = now_micros();
+      std::vector<bool> changed_levels;
+      builder->GetChangedLevels(&changed_levels);
+      save_to_changed_levels_us += now_micros() - changed_t0;
+      uint64_t mark_t0 = now_micros();
+      versions[i]->storage_info()->MarkCompactionPriRebuildLevels(
+          changed_levels);
+      save_to_mark_rebuild_us += now_micros() - mark_t0;
     }
+    save_to_us += now_micros() - save_t0;
   }
 
 #ifndef NDEBUG
@@ -5926,11 +6363,39 @@ Status VersionSet::ProcessManifestWrites(
   if (skip_manifest_write) {
     if (s.ok()) {
       constexpr bool update_stats = true;
+      uint64_t prepare_t0 = now_micros();
       for (int i = 0; i < static_cast<int>(versions.size()); ++i) {
         // NOTE: normally called with DB mutex released, but we don't
-        // want to release the DB mutex in this mode of LogAndApply
-        versions[i]->PrepareAppend(read_options, update_stats);
+        // want to release the DB mutex in this mode of LogAndApply.
+        VersionStorageInfo::PrepareTimingStats one_prepare_timing;
+        versions[i]->PrepareAppend(read_options, update_stats,
+                                   collect_timing ? &one_prepare_timing
+                                                  : nullptr);
+        if (collect_timing) {
+          prepare_timing.compute_compaction_score_us +=
+              one_prepare_timing.compute_compaction_score_us;
+          prepare_timing.compaction_pri_us +=
+              one_prepare_timing.compaction_pri_us;
+          for (size_t level = 0;
+               level < prepare_timing.compaction_pri_level_us.size(); ++level) {
+            prepare_timing.compaction_pri_level_us[level] +=
+                one_prepare_timing.compaction_pri_level_us[level];
+          }
+          prepare_timing.file_index_us += one_prepare_timing.file_index_us;
+          prepare_timing.file_indexer_us += one_prepare_timing.file_indexer_us;
+          prepare_timing.level_files_brief_us +=
+              one_prepare_timing.level_files_brief_us;
+          prepare_timing.l0_non_overlap_us +=
+              one_prepare_timing.l0_non_overlap_us;
+          prepare_timing.file_location_us +=
+              one_prepare_timing.file_location_us;
+          prepare_timing.bottommost_us += one_prepare_timing.bottommost_us;
+          prepare_timing.bottommost_skipped +=
+              one_prepare_timing.bottommost_skipped;
+          prepare_timing.other_us += one_prepare_timing.other_us;
+        }
       }
+      prepare_append_us += now_micros() - prepare_t0;
     }
   } else {
     FileOptions opt_file_opts = fs_->OptimizeForManifestWrite(file_options_);
@@ -5939,10 +6404,12 @@ Status VersionSet::ProcessManifestWrites(
       opt_file_opts.temperature = file_options_.temperature;
     }
     mu->Unlock();
+    uint64_t manifest_write_t0 = now_micros();
     TEST_SYNC_POINT("VersionSet::LogAndApply:WriteManifestStart");
     TEST_SYNC_POINT_CALLBACK("VersionSet::LogAndApply:WriteManifest", nullptr);
     if (!first_writer.edit_list.front()->IsColumnFamilyManipulation() &&
         !db_options_->use_virtual_compaction) {
+      uint64_t load_table_t0 = now_micros();
       for (int i = 0; i < static_cast<int>(versions.size()); ++i) {
         assert(!builder_guards.empty() &&
                builder_guards.size() == versions.size());
@@ -5960,10 +6427,12 @@ Status VersionSet::ProcessManifestWrites(
           s = Status::OK();
         }
       }
+      load_table_handlers_us += now_micros() - load_table_t0;
     }
 
     log::Writer* raw_desc_log_ptr = descriptor_log_.get();
     if (s.ok() && new_descriptor_log) {
+      uint64_t new_manifest_t0 = now_micros();
       // This is fine because everything inside of this block is serialized --
       // only one thread can be here at the same time
       // create new manifest file
@@ -5992,15 +6461,46 @@ Status VersionSet::ProcessManifestWrites(
         manifest_io_status = io_s;
         s = io_s;
       }
+      new_manifest_us += now_micros() - new_manifest_t0;
     }
 
     if (s.ok()) {
       if (!first_writer.edit_list.front()->IsColumnFamilyManipulation()) {
         constexpr bool update_stats = true;
 
+        uint64_t prepare_t0 = now_micros();
         for (int i = 0; i < static_cast<int>(versions.size()); ++i) {
-          versions[i]->PrepareAppend(read_options, update_stats);
+          VersionStorageInfo::PrepareTimingStats one_prepare_timing;
+          versions[i]->PrepareAppend(read_options, update_stats,
+                                     collect_timing ? &one_prepare_timing
+                                                    : nullptr);
+          if (collect_timing) {
+            prepare_timing.compute_compaction_score_us +=
+                one_prepare_timing.compute_compaction_score_us;
+            prepare_timing.compaction_pri_us +=
+                one_prepare_timing.compaction_pri_us;
+            for (size_t level = 0;
+                 level < prepare_timing.compaction_pri_level_us.size();
+                 ++level) {
+              prepare_timing.compaction_pri_level_us[level] +=
+                  one_prepare_timing.compaction_pri_level_us[level];
+            }
+            prepare_timing.file_index_us += one_prepare_timing.file_index_us;
+            prepare_timing.file_indexer_us +=
+                one_prepare_timing.file_indexer_us;
+            prepare_timing.level_files_brief_us +=
+                one_prepare_timing.level_files_brief_us;
+            prepare_timing.l0_non_overlap_us +=
+                one_prepare_timing.l0_non_overlap_us;
+            prepare_timing.file_location_us +=
+                one_prepare_timing.file_location_us;
+            prepare_timing.bottommost_us += one_prepare_timing.bottommost_us;
+            prepare_timing.bottommost_skipped +=
+                one_prepare_timing.bottommost_skipped;
+            prepare_timing.other_us += one_prepare_timing.other_us;
+          }
         }
+        prepare_append_us += now_micros() - prepare_t0;
       }
 
       // Write new records to MANIFEST log
@@ -6013,11 +6513,13 @@ Status VersionSet::ProcessManifestWrites(
         files_to_quarantine_if_commit_fail.push_back(
             e->GetFilesToQuarantineIfCommitFail());
         std::string record;
+        uint64_t encode_t0 = now_micros();
         if (!e->EncodeTo(&record, batch_edits_ts_sz[bidx])) {
           s = Status::Corruption("Unable to encode VersionEdit:" +
                                  e->DebugString(true));
           break;
         }
+        encode_us += now_micros() - encode_t0;
         TEST_KILL_RANDOM_WITH_WEIGHT("VersionSet::LogAndApply:BeforeAddRecord",
                                      REDUCE_ODDS2);
 #ifndef NDEBUG
@@ -6032,7 +6534,9 @@ Status VersionSet::ProcessManifestWrites(
         }
         ++idx;
 #endif /* !NDEBUG */
+        uint64_t add_record_t0 = now_micros();
         io_s = raw_desc_log_ptr->AddRecord(write_options, record);
+        add_record_us += now_micros() - add_record_t0;
         if (!io_s.ok()) {
           s = io_s;
           manifest_io_status = io_s;
@@ -6041,8 +6545,10 @@ Status VersionSet::ProcessManifestWrites(
       }
 
       if (s.ok()) {
+        uint64_t sync_t0 = now_micros();
         io_s =
             SyncManifest(db_options_, write_options, raw_desc_log_ptr->file());
+        sync_manifest_us += now_micros() - sync_t0;
         manifest_io_status = io_s;
         TEST_SYNC_POINT_CALLBACK(
             "VersionSet::ProcessManifestWrites:AfterSyncManifest", &io_s);
@@ -6060,9 +6566,11 @@ Status VersionSet::ProcessManifestWrites(
       assert(manifest_io_status.ok());
     }
     if (s.ok() && new_descriptor_log) {
+      uint64_t set_current_t0 = now_micros();
       io_s = SetCurrentFile(
           write_options, fs_.get(), dbname_, pending_manifest_file_number_,
           file_options_.temperature, dir_contains_current_file);
+      set_current_us += now_micros() - set_current_t0;
       if (!io_s.ok()) {
         s = io_s;
         // Quarantine old manifest file in case new manifest file's CURRENT
@@ -6091,13 +6599,19 @@ Status VersionSet::ProcessManifestWrites(
       TEST_SYNC_POINT("VersionSet::LogAndApply::ColumnFamilyDrop:2");
     }
 
+    uint64_t log_flush_t0 = now_micros();
     LogFlush(db_options_->info_log);
+    log_flush_us += now_micros() - log_flush_t0;
     TEST_SYNC_POINT("VersionSet::LogAndApply:WriteManifestDone");
+    uint64_t reacquire_t0 = now_micros();
     mu->Lock();
+    mutex_reacquire_us += now_micros() - reacquire_t0;
+    manifest_write_total_us += now_micros() - manifest_write_t0;
   }
 
   if (s.ok()) {
     // Apply WAL edits, DB mutex must be held.
+    uint64_t wal_t0 = now_micros();
     for (auto& e : batch_edits) {
       if (e->IsWalAddition()) {
         s = wals_.AddWals(e->GetWalAdditions());
@@ -6108,6 +6622,7 @@ Status VersionSet::ProcessManifestWrites(
         break;
       }
     }
+    wal_apply_us += now_micros() - wal_t0;
   }
 
   if (!io_s.ok()) {
@@ -6137,6 +6652,7 @@ Status VersionSet::ProcessManifestWrites(
 
   // Install the new versions
   if (s.ok()) {
+    uint64_t install_t0 = now_micros();
     if (first_writer.edit_list.front()->IsColumnFamilyAdd()) {
       assert(batch_edits.size() == 1);
       assert(new_cf_options != nullptr);
@@ -6192,6 +6708,7 @@ Status VersionSet::ProcessManifestWrites(
       manifest_file_size_ = new_manifest_file_size;
       prev_log_number_ = first_writer.edit_list.front()->GetPrevLogNumber();
     }
+    install_version_us += now_micros() - install_t0;
   } else {
     std::string version_edits;
     for (auto& e : batch_edits) {
@@ -6270,6 +6787,7 @@ Status VersionSet::ProcessManifestWrites(
 #endif  // NDEBUG
 
   // wake up all the waiting writers
+  uint64_t callback_t0 = now_micros();
   while (true) {
     ManifestWriter* ready = manifest_writers_.front();
     manifest_writers_.pop_front();
@@ -6295,6 +6813,92 @@ Status VersionSet::ProcessManifestWrites(
   if (!manifest_writers_.empty()) {
     manifest_writers_.front()->cv.Signal();
   }
+  writer_callback_us += now_micros() - callback_t0;
+
+  if (collect_timing) {
+    log_apply_group_build_us_.fetch_add(group_build_us,
+                                        std::memory_order_relaxed);
+    log_apply_group_find_version_us_.fetch_add(group_find_version_us,
+                                               std::memory_order_relaxed);
+    log_apply_group_new_version_us_.fetch_add(group_new_version_us,
+                                              std::memory_order_relaxed);
+    log_apply_group_apply_us_.fetch_add(group_apply_us,
+                                        std::memory_order_relaxed);
+    log_apply_group_push_us_.fetch_add(group_push_us,
+                                       std::memory_order_relaxed);
+    log_apply_groups_.fetch_add(1, std::memory_order_relaxed);
+    log_apply_group_writers_.fetch_add(group_writers,
+                                       std::memory_order_relaxed);
+    log_apply_group_edits_.fetch_add(group_edits, std::memory_order_relaxed);
+    log_apply_save_to_us_.fetch_add(save_to_us, std::memory_order_relaxed);
+    log_apply_save_to_builder_us_.fetch_add(save_to_builder_us,
+                                            std::memory_order_relaxed);
+    log_apply_save_to_changed_levels_us_.fetch_add(
+        save_to_changed_levels_us, std::memory_order_relaxed);
+    log_apply_save_to_mark_rebuild_us_.fetch_add(
+        save_to_mark_rebuild_us, std::memory_order_relaxed);
+    log_apply_save_to_consistency_base_us_.fetch_add(
+        save_to_timing.consistency_base_us, std::memory_order_relaxed);
+    log_apply_save_to_consistency_new_us_.fetch_add(
+        save_to_timing.consistency_new_us, std::memory_order_relaxed);
+    log_apply_save_to_sst_files_us_.fetch_add(save_to_timing.save_sst_us,
+                                              std::memory_order_relaxed);
+    log_apply_save_to_blob_files_us_.fetch_add(save_to_timing.save_blob_us,
+                                               std::memory_order_relaxed);
+    log_apply_save_to_cursors_us_.fetch_add(save_to_timing.save_cursors_us,
+                                            std::memory_order_relaxed);
+    log_apply_save_to_consistency_final_us_.fetch_add(
+        save_to_timing.consistency_final_us, std::memory_order_relaxed);
+    log_apply_manifest_write_total_us_.fetch_add(manifest_write_total_us,
+                                                 std::memory_order_relaxed);
+    log_apply_load_table_handlers_us_.fetch_add(load_table_handlers_us,
+                                                std::memory_order_relaxed);
+    log_apply_new_manifest_us_.fetch_add(new_manifest_us,
+                                         std::memory_order_relaxed);
+    log_apply_prepare_append_us_.fetch_add(prepare_append_us,
+                                           std::memory_order_relaxed);
+    log_apply_prepare_compaction_score_us_.fetch_add(
+        prepare_timing.compute_compaction_score_us, std::memory_order_relaxed);
+    log_apply_prepare_compaction_pri_us_.fetch_add(
+        prepare_timing.compaction_pri_us, std::memory_order_relaxed);
+    for (size_t level = 0;
+         level < prepare_timing.compaction_pri_level_us.size(); ++level) {
+      log_apply_prepare_compaction_pri_level_us_[level].fetch_add(
+          prepare_timing.compaction_pri_level_us[level],
+          std::memory_order_relaxed);
+    }
+    log_apply_prepare_file_index_us_.fetch_add(prepare_timing.file_index_us,
+                                               std::memory_order_relaxed);
+    log_apply_prepare_file_indexer_us_.fetch_add(
+        prepare_timing.file_indexer_us, std::memory_order_relaxed);
+    log_apply_prepare_level_files_brief_us_.fetch_add(
+        prepare_timing.level_files_brief_us, std::memory_order_relaxed);
+    log_apply_prepare_l0_non_overlap_us_.fetch_add(
+        prepare_timing.l0_non_overlap_us, std::memory_order_relaxed);
+    log_apply_prepare_file_location_us_.fetch_add(
+        prepare_timing.file_location_us, std::memory_order_relaxed);
+    log_apply_prepare_bottommost_us_.fetch_add(prepare_timing.bottommost_us,
+                                               std::memory_order_relaxed);
+    log_apply_prepare_bottommost_skipped_.fetch_add(
+        prepare_timing.bottommost_skipped, std::memory_order_relaxed);
+    log_apply_prepare_other_us_.fetch_add(prepare_timing.other_us,
+                                          std::memory_order_relaxed);
+    log_apply_encode_us_.fetch_add(encode_us, std::memory_order_relaxed);
+    log_apply_add_record_us_.fetch_add(add_record_us,
+                                       std::memory_order_relaxed);
+    log_apply_sync_manifest_us_.fetch_add(sync_manifest_us,
+                                          std::memory_order_relaxed);
+    log_apply_set_current_us_.fetch_add(set_current_us,
+                                        std::memory_order_relaxed);
+    log_apply_log_flush_us_.fetch_add(log_flush_us, std::memory_order_relaxed);
+    log_apply_mutex_reacquire_us_.fetch_add(mutex_reacquire_us,
+                                            std::memory_order_relaxed);
+    log_apply_wal_apply_us_.fetch_add(wal_apply_us, std::memory_order_relaxed);
+    log_apply_install_version_us_.fetch_add(install_version_us,
+                                            std::memory_order_relaxed);
+    log_apply_writer_callback_us_.fetch_add(writer_callback_us,
+                                            std::memory_order_relaxed);
+  }
   return s;
 }
 
@@ -6314,9 +6918,26 @@ Status VersionSet::LogAndApply(
     const autovector<autovector<VersionEdit*>>& edit_lists,
     InstrumentedMutex* mu, FSDirectory* dir_contains_current_file,
     bool new_descriptor_log, const ColumnFamilyOptions* new_cf_options,
-    const std::vector<std::function<void(const Status&)>>& manifest_wcbs,
-    const std::function<Status()>& pre_cb) {
+  const std::vector<std::function<void(const Status&)>>& manifest_wcbs,
+  const std::function<Status()>& pre_cb) {
   mu->AssertHeld();
+  const bool collect_timing =
+      log_apply_breakdown_enabled_.load(std::memory_order_relaxed);
+  auto now_micros = [&]() -> uint64_t {
+    return collect_timing ? clock_->NowMicros() : 0;
+  };
+  uint64_t total_t0 = now_micros();
+  auto record_total = [&](uint64_t writer_wait_us, uint64_t pre_cb_us) {
+    if (!collect_timing) {
+      return;
+    }
+    log_apply_calls_.fetch_add(1, std::memory_order_relaxed);
+    log_apply_writer_wait_us_.fetch_add(writer_wait_us,
+                                        std::memory_order_relaxed);
+    log_apply_pre_cb_us_.fetch_add(pre_cb_us, std::memory_order_relaxed);
+    log_apply_total_us_.fetch_add(now_micros() - total_t0,
+                                  std::memory_order_relaxed);
+  };
   int num_edits = 0;
   for (const auto& elist : edit_lists) {
     num_edits += static_cast<int>(elist.size());
@@ -6354,9 +6975,11 @@ Status VersionSet::LogAndApply(
   ManifestWriter& first_writer = writers.front();
   TEST_SYNC_POINT_CALLBACK("VersionSet::LogAndApply:BeforeWriterWaiting",
                            nullptr);
+  uint64_t writer_wait_t0 = now_micros();
   while (!first_writer.done && &first_writer != manifest_writers_.front()) {
     first_writer.cv.Wait();
   }
+  uint64_t writer_wait_us = now_micros() - writer_wait_t0;
   if (first_writer.done) {
     // All non-CF-manipulation operations can be grouped together and
     // committed to MANIFEST. They should all have finished. The status code
@@ -6369,6 +6992,7 @@ Status VersionSet::LogAndApply(
 #endif /* !NDEBUG */
     // FIXME: One MANIFEST write failure can cause all writes to SetBGError,
     // should only SetBGError once.
+    record_total(writer_wait_us, 0);
     return first_writer.status;
   }
   TEST_SYNC_POINT_CALLBACK("VersionSet::LogAndApply:WakeUpAndNotDone", mu);
@@ -6386,8 +7010,11 @@ Status VersionSet::LogAndApply(
   }
   // Call pre_cb once we know we have work to do and are scheduled as the
   // exclusive manifest writer (and new Version appender)
+  uint64_t pre_cb_us = 0;
   if (s.ok() && pre_cb) {
+    uint64_t pre_cb_t0 = now_micros();
     s = pre_cb();
+    pre_cb_us = now_micros() - pre_cb_t0;
   }
   if (!s.ok()) {
     // Revert manifest_writers_
@@ -6398,11 +7025,14 @@ Status VersionSet::LogAndApply(
     if (!manifest_writers_.empty()) {
       manifest_writers_.front()->cv.Signal();
     }
+    record_total(writer_wait_us, pre_cb_us);
     return s;
   } else {
-    return ProcessManifestWrites(writers, mu, dir_contains_current_file,
-                                 new_descriptor_log, new_cf_options,
-                                 read_options, write_options);
+    s = ProcessManifestWrites(writers, mu, dir_contains_current_file,
+                              new_descriptor_log, new_cf_options,
+                              read_options, write_options);
+    record_total(writer_wait_us, pre_cb_us);
+    return s;
   }
 }
 

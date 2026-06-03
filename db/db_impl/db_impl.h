@@ -1108,7 +1108,84 @@ class DBImpl : public DB {
 
   // Register a virtual L0 file and trigger compaction scheduling.
   // Must NOT hold mutex when calling.
-  Status RegisterVirtualL0File(VersionEdit* edit);
+  struct VirtualL0RegistrationStats {
+    uint64_t mutex_wait_us = 0;
+    uint64_t log_apply_us = 0;
+    uint64_t install_schedule_us = 0;
+    uint64_t cleanup_us = 0;
+    uint64_t total_us = 0;
+  };
+
+  Status RegisterVirtualL0File(VersionEdit* edit,
+                               VirtualL0RegistrationStats* stats = nullptr);
+  Status MarkVirtualL0FilesCompactionEligible(
+      const std::vector<uint64_t>& file_numbers, uint64_t* changed = nullptr);
+
+  struct VirtualL0WindowFile {
+    uint64_t file_number = 0;
+    VirtualSST vsst;
+    uint64_t file_size = 0;
+    uint64_t epoch_number = 0;
+  };
+
+  struct VirtualL0WindowStats {
+    uint64_t queued_files = 0;
+    uint64_t queued_bytes = 0;
+    uint64_t registered_files = 0;
+    uint64_t registered_bytes = 0;
+    uint64_t consumed_files = 0;
+    uint64_t consumed_bytes = 0;
+    uint64_t register_batches = 0;
+    uint64_t max_register_batch = 0;
+    uint64_t max_register_batch_bytes = 0;
+    uint64_t max_pending_files = 0;
+    uint64_t pending_files = 0;
+    uint64_t pending_bytes = 0;
+    uint64_t visible_files = 0;
+    uint64_t visible_bytes = 0;
+    uint64_t target_visible_bytes = 0;
+    uint64_t max_register_batch_files = 0;
+    uint64_t refill_us = 0;
+    uint64_t log_apply_us = 0;
+    uint64_t install_schedule_us = 0;
+    uint64_t cleanup_us = 0;
+  };
+
+  void ConfigureVirtualL0Window(uint64_t target_visible_bytes,
+                                uint64_t max_register_batch_files);
+  Status EnqueueVirtualL0Files(std::vector<VirtualL0WindowFile>&& files,
+                               VirtualL0RegistrationStats* stats = nullptr);
+  Status RefillVirtualL0Window(VirtualL0RegistrationStats* stats = nullptr);
+  VirtualL0WindowStats GetVirtualL0WindowStats() const;
+
+  struct VirtualCompactionStats {
+    uint64_t jobs = 0;
+    uint64_t input_files = 0;
+    uint64_t output_files = 0;
+    uint64_t gather_us = 0;
+    uint64_t merge_us = 0;
+    uint64_t split_us = 0;
+    uint64_t mutex_wait_us = 0;
+    uint64_t edit_build_us = 0;
+    uint64_t log_apply_us = 0;
+    uint64_t total_us = 0;
+    uint64_t commit_batches = 0;
+    uint64_t commit_jobs = 0;
+    uint64_t commit_queue_wait_us = 0;
+    uint64_t commit_leader_log_apply_us = 0;
+    uint64_t trivial_move_jobs = 0;
+    uint64_t trivial_move_files = 0;
+    uint64_t trivial_move_bytes = 0;
+    uint64_t trivial_move_log_apply_us = 0;
+    uint64_t trivial_move_total_us = 0;
+    uint64_t superversion_install_us = 0;
+    uint64_t obsolete_collect_us = 0;
+    uint64_t obsolete_purge_us = 0;
+  };
+
+  void ResetVirtualCompactionStats();
+  VirtualCompactionStats GetVirtualCompactionStats() const;
+  void CleanupVirtualCompactionObsoleteFiles();
 
   // Initialize a brand new DB. The DB directory is expected to be empty before
   // calling it. Push new manifest file name into `new_filenames`.
@@ -1420,6 +1497,62 @@ class DBImpl : public DB {
 
   // Virtual SST registry for PLR-based virtual compaction.
   std::unique_ptr<VirtualSSTRegistry> virtual_sst_registry_;
+  struct VirtualCompactionPendingOutput {
+    uint64_t file_number = 0;
+    VirtualSST vsst;
+  };
+  struct VirtualCompactionCommitRequest {
+    ColumnFamilyData* cfd = nullptr;
+    Compaction* compaction = nullptr;
+    VersionEdit* edit = nullptr;
+    const std::vector<VirtualCompactionPendingOutput>* pending_outputs =
+        nullptr;
+    const std::vector<uint64_t>* input_file_numbers = nullptr;
+    const std::vector<std::pair<uint64_t, VirtualSST>>* moved_virtuals =
+        nullptr;
+    bool* compaction_released = nullptr;
+    uint64_t l0_input_files = 0;
+    uint64_t l0_input_bytes = 0;
+    uint64_t l0_output_files = 0;
+    uint64_t l0_output_bytes = 0;
+    uint64_t enqueue_us = 0;
+    uint64_t commit_start_us = 0;
+    uint64_t commit_done_us = 0;
+    uint64_t batch_size = 0;
+    Status status;
+    bool done = false;
+  };
+  std::deque<VirtualCompactionCommitRequest*> virtual_compaction_commit_queue_;
+  bool virtual_compaction_commit_in_progress_ = false;
+  std::atomic<uint64_t> virtual_compaction_jobs_{0};
+  std::atomic<uint64_t> virtual_compaction_input_files_{0};
+  std::atomic<uint64_t> virtual_compaction_output_files_{0};
+  std::atomic<uint64_t> virtual_compaction_gather_us_{0};
+  std::atomic<uint64_t> virtual_compaction_merge_us_{0};
+  std::atomic<uint64_t> virtual_compaction_split_us_{0};
+  std::atomic<uint64_t> virtual_compaction_mutex_wait_us_{0};
+  std::atomic<uint64_t> virtual_compaction_edit_build_us_{0};
+  std::atomic<uint64_t> virtual_compaction_log_apply_us_{0};
+  std::atomic<uint64_t> virtual_compaction_total_us_{0};
+  std::atomic<uint64_t> virtual_compaction_commit_batches_{0};
+  std::atomic<uint64_t> virtual_compaction_commit_jobs_{0};
+  std::atomic<uint64_t> virtual_compaction_commit_queue_wait_us_{0};
+  std::atomic<uint64_t> virtual_compaction_commit_leader_log_apply_us_{0};
+  std::atomic<uint64_t> virtual_trivial_move_jobs_{0};
+  std::atomic<uint64_t> virtual_trivial_move_files_{0};
+  std::atomic<uint64_t> virtual_trivial_move_bytes_{0};
+  std::atomic<uint64_t> virtual_trivial_move_log_apply_us_{0};
+  std::atomic<uint64_t> virtual_trivial_move_total_us_{0};
+  std::atomic<uint64_t> version_metadata_superversion_install_us_{0};
+  std::atomic<uint64_t> version_metadata_obsolete_collect_us_{0};
+  std::atomic<uint64_t> version_metadata_obsolete_purge_us_{0};
+  std::deque<VirtualL0WindowFile> virtual_l0_pending_;
+  uint64_t virtual_l0_pending_bytes_ = 0;
+  uint64_t virtual_l0_visible_files_ = 0;
+  uint64_t virtual_l0_visible_bytes_ = 0;
+  uint64_t virtual_l0_target_visible_bytes_ = 0;
+  uint64_t virtual_l0_max_register_batch_files_ = 1;
+  VirtualL0WindowStats virtual_l0_window_stats_;
 
   ErrorHandler error_handler_;
 
@@ -2493,7 +2626,22 @@ class DBImpl : public DB {
                               Env::Priority thread_pri);
   // Virtual compaction: PLR model merge instead of actual I/O.
   Status RunVirtualCompaction(Compaction* c, JobContext* job_context,
-                              LogBuffer* log_buffer);
+                              LogBuffer* log_buffer,
+                              bool* compaction_released);
+  Status CommitVirtualCompactionEdit(
+      Compaction* c, ColumnFamilyData* cfd, VersionEdit* edit,
+      const std::vector<VirtualCompactionPendingOutput>& pending_outputs,
+      const std::vector<uint64_t>& input_file_numbers,
+      const std::vector<std::pair<uint64_t, VirtualSST>>* moved_virtuals,
+      bool* compaction_released, uint64_t* log_apply_us,
+      uint64_t* commit_queue_wait_us, uint64_t* commit_batch_size,
+      uint64_t l0_input_files = 0, uint64_t l0_input_bytes = 0,
+      uint64_t l0_output_files = 0, uint64_t l0_output_bytes = 0);
+  Status RefillVirtualL0WindowLocked(VirtualL0RegistrationStats* stats);
+  void AccountVirtualL0CompactionLocked(uint64_t input_files,
+                                        uint64_t input_bytes,
+                                        uint64_t output_files,
+                                        uint64_t output_bytes);
 
   Status BackgroundFlush(bool* madeProgress, JobContext* job_context,
                          LogBuffer* log_buffer, FlushReason* reason,
@@ -2818,6 +2966,7 @@ class DBImpl : public DB {
   // * whenever SetOptions successfully updates options.
   // * whenever a column family is dropped.
   InstrumentedCondVar bg_cv_;
+  InstrumentedCondVar virtual_compaction_commit_cv_;
 
   ColumnFamilyHandleImpl* persist_stats_cf_handle_ = nullptr;
 

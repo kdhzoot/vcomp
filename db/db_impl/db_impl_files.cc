@@ -160,9 +160,14 @@ void DBImpl::FindObsoleteFiles(JobContext* job_context, bool force,
   // Get obsolete files.  This function will also update the list of
   // pending files in VersionSet().
   assert(versions_);
+  const uint64_t obsolete_collect_t0 =
+      immutable_db_options_.clock->NowMicros();
   versions_->GetObsoleteFiles(
       &job_context->sst_delete_files, &job_context->blob_delete_files,
       &job_context->manifest_delete_files, job_context->min_pending_output);
+  version_metadata_obsolete_collect_us_.fetch_add(
+      immutable_db_options_.clock->NowMicros() - obsolete_collect_t0,
+      std::memory_order_relaxed);
 
   // Mark the elements in job_context->sst_delete_files and
   // job_context->blob_delete_files as "grabbed for purge" so that other threads
@@ -375,8 +380,7 @@ void DBImpl::DeleteObsoleteFileImpl(int job_id, const std::string& fname,
 
   // Skip deletion for virtual SST files (no physical file on disk).
   if (type == kTableFile && virtual_sst_registry_ &&
-      virtual_sst_registry_->IsVirtual(number)) {
-    virtual_sst_registry_->Remove(number);
+      virtual_sst_registry_->ConsumeVirtualOrRetired(number)) {
     return;
   }
 
@@ -435,6 +439,7 @@ void DBImpl::PurgeObsoleteFiles(JobContext& state, bool schedule_only) {
   assert(state.manifest_file_number != 0);
 
   IGNORE_STATUS_IF_ERROR(Status::IOError());
+  const uint64_t obsolete_purge_t0 = immutable_db_options_.clock->NowMicros();
 
   // Now, convert lists to unordered sets, WITHOUT mutex held; set is slow.
   std::unordered_set<uint64_t> sst_live_set(state.sst_live.begin(),
@@ -740,6 +745,9 @@ void DBImpl::PurgeObsoleteFiles(JobContext& state, bool schedule_only) {
   if (pending_purge_obsolete_files_ == 0) {
     bg_cv_.SignalAll();
   }
+  version_metadata_obsolete_purge_us_.fetch_add(
+      immutable_db_options_.clock->NowMicros() - obsolete_purge_t0,
+      std::memory_order_relaxed);
   TEST_SYNC_POINT("DBImpl::PurgeObsoleteFiles:End");
 }
 
@@ -755,6 +763,11 @@ void DBImpl::DeleteObsoleteFiles() {
   }
   job_context.Clean();
   mutex_.Lock();
+}
+
+void DBImpl::CleanupVirtualCompactionObsoleteFiles() {
+  InstrumentedMutexLock l(&mutex_);
+  DeleteObsoleteFiles();
 }
 
 VersionEdit GetDBRecoveryEditForObsoletingMemTables(

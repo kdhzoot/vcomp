@@ -31,12 +31,17 @@ bool FindIntraL0Compaction(const std::vector<FileMetaData*>& level_files,
                            size_t min_files_to_compact,
                            uint64_t max_compact_bytes_per_del_file,
                            uint64_t max_compaction_bytes,
+                           size_t max_files_to_compact,
                            CompactionInputFiles* comp_inputs) {
   TEST_SYNC_POINT("FindIntraL0Compaction");
 
   size_t start = 0;
+  while (start < level_files.size() &&
+         !level_files[start]->virtual_compaction_eligible) {
+    start++;
+  }
 
-  if (level_files.size() == 0 || level_files[start]->being_compacted) {
+  if (start == level_files.size() || level_files[start]->being_compacted) {
     return false;
   }
 
@@ -45,12 +50,15 @@ bool FindIntraL0Compaction(const std::vector<FileMetaData*>& level_files,
   // Compaction range will be [start, limit).
   size_t limit;
   // Pull in files until the amount of compaction work per deleted file begins
-  // increasing or maximum total compaction size is reached.
+  // increasing, maximum total size is reached, or enough files were selected.
   size_t new_compact_bytes_per_del_file = 0;
-  for (limit = start + 1; limit < level_files.size(); ++limit) {
+  for (limit = start + 1;
+       limit < level_files.size() && (limit - start) < max_files_to_compact;
+       ++limit) {
     compact_bytes += static_cast<size_t>(level_files[limit]->fd.file_size);
     new_compact_bytes_per_del_file = compact_bytes / (limit - start);
-    if (level_files[limit]->being_compacted ||
+    if (!level_files[limit]->virtual_compaction_eligible ||
+        level_files[limit]->being_compacted ||
         new_compact_bytes_per_del_file > compact_bytes_per_del_file ||
         compact_bytes > max_compaction_bytes) {
       break;
@@ -514,6 +522,18 @@ bool CompactionPicker::SetupOtherInputs(
 
     CompactionInputFiles expanded_inputs;
     expanded_inputs.level = input_level;
+    auto filter_ineligible_virtual_l0 = [&]() {
+      if (input_level != 0) {
+        return;
+      }
+      expanded_inputs.files.erase(
+          std::remove_if(expanded_inputs.files.begin(),
+                         expanded_inputs.files.end(),
+                         [](const FileMetaData* file) {
+                           return !file->virtual_compaction_eligible;
+                         }),
+          expanded_inputs.files.end());
+    };
     // Get closed interval of output level
     InternalKey all_start, all_limit;
     GetRange(*inputs, *output_level_inputs, &all_start, &all_limit);
@@ -528,8 +548,10 @@ bool CompactionPicker::SetupOtherInputs(
                                      &expanded_inputs.files, base_index,
                                      nullptr, true, starting_l0_file);
     }
+    filter_ineligible_virtual_l0();
     uint64_t expanded_inputs_size = TotalFileSize(expanded_inputs.files);
-    if (!ExpandInputsToCleanCut(cf_name, vstorage, &expanded_inputs)) {
+    if (expanded_inputs.empty() ||
+        !ExpandInputsToCleanCut(cf_name, vstorage, &expanded_inputs)) {
       try_overlapping_inputs = false;
     }
     // It helps to reduce write amp and avoid a further separate compaction
@@ -560,6 +582,7 @@ bool CompactionPicker::SetupOtherInputs(
       vstorage->GetCleanInputsWithinInterval(input_level, &all_start,
                                              &all_limit, &expanded_inputs.files,
                                              base_index, nullptr);
+      filter_ineligible_virtual_l0();
       expanded_inputs_size = TotalFileSize(expanded_inputs.files);
       if (expanded_inputs.size() > inputs->size() &&
           !AreFilesInCompaction(expanded_inputs.files) &&
@@ -1248,6 +1271,17 @@ bool CompactionPicker::GetOverlappingL0Files(
                                  /*file_index=*/nullptr,
                                  /*expand_range=*/true,
                                  /*starting_l0_file=*/starting_l0_file);
+  std::vector<FileMetaData*> eligible_l0_files;
+  eligible_l0_files.reserve(start_level_inputs->files.size());
+  for (auto* file : start_level_inputs->files) {
+    if (file->virtual_compaction_eligible) {
+      eligible_l0_files.push_back(file);
+    }
+  }
+  start_level_inputs->files = std::move(eligible_l0_files);
+  if (start_level_inputs->files.empty()) {
+    return false;
+  }
 
   // If we include more L0 files in the same compaction run it can
   // cause the 'smallest' and 'largest' key to get extended to a

@@ -29,8 +29,10 @@
 #endif
 #include <atomic>
 #include <cinttypes>
+#include <cmath>
 #include <condition_variable>
 #include <cstddef>
+#include <deque>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -959,9 +961,21 @@ DEFINE_int32(level0_file_num_compaction_trigger,
              "Number of files in level-0 when compactions start.");
 
 DEFINE_int32(level0_file_num_register_batch, 0,
-             "fillvirtual: number of virtual L0 files to accumulate per "
-             "RegisterVirtualL0File call. 0 means use "
-             "level0_file_num_compaction_trigger.");
+             "Deprecated for fillvirtual closed-loop L0 release; ignored.");
+
+DEFINE_uint64(vcomp_release_batch_max, 256,
+              "Maximum number of shadow virtual L0 files to register in one "
+              "VersionEdit. Shadow files are not compaction-visible until "
+              "the size-gated release thread enables them.");
+
+DEFINE_uint64(vcomp_visible_l0_batch_mb, 0,
+              "Target total file size, in MiB, to make compaction-visible per "
+              "L0 release. If zero, one memtable flush worth of virtual SSTs "
+              "is released per batch.");
+
+DEFINE_bool(vcomp_log_apply_timing, true,
+            "Collect detailed LogAndApply timing breakdown for fillvirtual. "
+            "Disable to measure instrumentation overhead.");
 
 DEFINE_uint64(periodic_compaction_seconds,
               ROCKSDB_NAMESPACE::Options().periodic_compaction_seconds,
@@ -1936,11 +1950,6 @@ DEFINE_uint32(openandcompact_cancel_after_millseconds, 1,
               "openandcompact_test_cancel_on_odd is true");
 
 namespace ROCKSDB_NAMESPACE {
-
-// Defined in db/compaction/compaction_picker_level.cc. Lets FillVirtual
-// disable the L0→L1 size gate at end-of-load to drain residual L0 via
-// virtual compaction.
-extern void SetVcompL0L1MinDataBytes(uint64_t bytes);
 
 namespace {
 static Status CreateMemTableRepFactory(
@@ -5304,15 +5313,236 @@ class Benchmark {
     const uint64_t memtable_capacity =
         static_cast<uint64_t>(FLAGS_memtable_flush_size) * 1024 * 1024 /
         avg_entry_size;
+    const uint64_t total_flushes_expected =
+        (static_cast<uint64_t>(num_ops) + memtable_capacity - 1) /
+        memtable_capacity;
+    db_impl->ResetVirtualCompactionStats();
+    versions->ResetLogAndApplyBreakdownStats();
+    versions->SetLogAndApplyBreakdownEnabled(FLAGS_vcomp_log_apply_timing);
+
+    auto subtract_log_apply_stats =
+        [](const VersionSet::LogAndApplyBreakdownStats& a,
+           const VersionSet::LogAndApplyBreakdownStats& b) {
+          VersionSet::LogAndApplyBreakdownStats out;
+          out.calls = a.calls - b.calls;
+          out.groups = a.groups - b.groups;
+          out.group_writers = a.group_writers - b.group_writers;
+          out.group_edits = a.group_edits - b.group_edits;
+          out.writer_wait_us = a.writer_wait_us - b.writer_wait_us;
+          out.pre_cb_us = a.pre_cb_us - b.pre_cb_us;
+          out.group_build_us = a.group_build_us - b.group_build_us;
+          out.group_find_version_us =
+              a.group_find_version_us - b.group_find_version_us;
+          out.group_new_version_us =
+              a.group_new_version_us - b.group_new_version_us;
+          out.group_apply_us = a.group_apply_us - b.group_apply_us;
+          out.group_push_us = a.group_push_us - b.group_push_us;
+          out.save_to_us = a.save_to_us - b.save_to_us;
+          out.save_to_builder_us =
+              a.save_to_builder_us - b.save_to_builder_us;
+          out.save_to_changed_levels_us =
+              a.save_to_changed_levels_us - b.save_to_changed_levels_us;
+          out.save_to_mark_rebuild_us =
+              a.save_to_mark_rebuild_us - b.save_to_mark_rebuild_us;
+          out.save_to_consistency_base_us =
+              a.save_to_consistency_base_us - b.save_to_consistency_base_us;
+          out.save_to_consistency_new_us =
+              a.save_to_consistency_new_us - b.save_to_consistency_new_us;
+          out.save_to_sst_files_us =
+              a.save_to_sst_files_us - b.save_to_sst_files_us;
+          out.save_to_blob_files_us =
+              a.save_to_blob_files_us - b.save_to_blob_files_us;
+          out.save_to_cursors_us =
+              a.save_to_cursors_us - b.save_to_cursors_us;
+          out.save_to_consistency_final_us =
+              a.save_to_consistency_final_us -
+              b.save_to_consistency_final_us;
+          out.manifest_write_total_us =
+              a.manifest_write_total_us - b.manifest_write_total_us;
+          out.load_table_handlers_us =
+              a.load_table_handlers_us - b.load_table_handlers_us;
+          out.new_manifest_us = a.new_manifest_us - b.new_manifest_us;
+          out.prepare_append_us = a.prepare_append_us - b.prepare_append_us;
+          out.prepare_compaction_score_us =
+              a.prepare_compaction_score_us - b.prepare_compaction_score_us;
+          out.prepare_compaction_pri_us =
+              a.prepare_compaction_pri_us - b.prepare_compaction_pri_us;
+          for (size_t i = 0; i < out.prepare_compaction_pri_level_us.size();
+               ++i) {
+            out.prepare_compaction_pri_level_us[i] =
+                a.prepare_compaction_pri_level_us[i] -
+                b.prepare_compaction_pri_level_us[i];
+          }
+          out.prepare_file_index_us =
+              a.prepare_file_index_us - b.prepare_file_index_us;
+          out.prepare_file_indexer_us =
+              a.prepare_file_indexer_us - b.prepare_file_indexer_us;
+          out.prepare_level_files_brief_us =
+              a.prepare_level_files_brief_us - b.prepare_level_files_brief_us;
+          out.prepare_l0_non_overlap_us =
+              a.prepare_l0_non_overlap_us - b.prepare_l0_non_overlap_us;
+          out.prepare_file_location_us =
+              a.prepare_file_location_us - b.prepare_file_location_us;
+          out.prepare_bottommost_us =
+              a.prepare_bottommost_us - b.prepare_bottommost_us;
+          out.prepare_bottommost_skipped =
+              a.prepare_bottommost_skipped - b.prepare_bottommost_skipped;
+          out.prepare_other_us = a.prepare_other_us - b.prepare_other_us;
+          out.encode_us = a.encode_us - b.encode_us;
+          out.add_record_us = a.add_record_us - b.add_record_us;
+          out.sync_manifest_us = a.sync_manifest_us - b.sync_manifest_us;
+          out.set_current_us = a.set_current_us - b.set_current_us;
+          out.log_flush_us = a.log_flush_us - b.log_flush_us;
+          out.mutex_reacquire_us =
+              a.mutex_reacquire_us - b.mutex_reacquire_us;
+          out.wal_apply_us = a.wal_apply_us - b.wal_apply_us;
+          out.install_version_us =
+              a.install_version_us - b.install_version_us;
+          out.append_compaction_score_us =
+              a.append_compaction_score_us - b.append_compaction_score_us;
+          out.writer_callback_us =
+              a.writer_callback_us - b.writer_callback_us;
+          out.total_us = a.total_us - b.total_us;
+          return out;
+        };
+
+    auto print_log_apply_stats =
+        [](const char* label,
+           const VersionSet::LogAndApplyBreakdownStats& s) {
+          uint64_t manifest_inner =
+              s.load_table_handlers_us + s.new_manifest_us +
+              s.prepare_append_us + s.encode_us + s.add_record_us +
+              s.sync_manifest_us + s.set_current_us + s.log_flush_us +
+              s.mutex_reacquire_us;
+          uint64_t manifest_other =
+              s.manifest_write_total_us > manifest_inner
+                  ? s.manifest_write_total_us - manifest_inner
+                  : 0;
+          uint64_t accounted =
+              s.writer_wait_us + s.pre_cb_us + s.group_build_us +
+              s.save_to_us + s.manifest_write_total_us + s.wal_apply_us +
+              s.install_version_us + s.writer_callback_us;
+          uint64_t other = s.total_us > accounted ? s.total_us - accounted : 0;
+          fprintf(stderr,
+                  "  LogAndApply breakdown (%s): calls=%" PRIu64
+                  " groups=%" PRIu64 " writers=%" PRIu64 " edits=%" PRIu64
+                  " avg_writers/group=%.2f total=%.3fs avg=%.3fms\n",
+                  label, s.calls, s.groups, s.group_writers, s.group_edits,
+                  s.groups > 0
+                      ? static_cast<double>(s.group_writers) / s.groups
+                      : 0.0,
+                  s.total_us / 1e6,
+                  s.calls > 0 ? s.total_us / 1000.0 / s.calls : 0.0);
+          fprintf(stderr,
+                  "    pre: writer_wait=%.3fs pre_cb=%.3fs "
+                  "group_build=%.3fs save_to=%.3fs\n",
+                  s.writer_wait_us / 1e6, s.pre_cb_us / 1e6,
+                  s.group_build_us / 1e6, s.save_to_us / 1e6);
+          uint64_t group_inner =
+              s.group_find_version_us + s.group_new_version_us +
+              s.group_apply_us + s.group_push_us;
+          uint64_t group_other = s.group_build_us > group_inner
+                                     ? s.group_build_us - group_inner
+                                     : 0;
+          uint64_t save_inner =
+              s.save_to_builder_us + s.save_to_changed_levels_us +
+              s.save_to_mark_rebuild_us;
+          uint64_t save_other =
+              s.save_to_us > save_inner ? s.save_to_us - save_inner : 0;
+          uint64_t save_builder_inner =
+              s.save_to_consistency_base_us + s.save_to_consistency_new_us +
+              s.save_to_sst_files_us + s.save_to_blob_files_us +
+              s.save_to_cursors_us + s.save_to_consistency_final_us;
+          uint64_t save_builder_other =
+              s.save_to_builder_us > save_builder_inner
+                  ? s.save_to_builder_us - save_builder_inner
+                  : 0;
+          fprintf(stderr,
+                  "    group_build_detail: find_version=%.3fs "
+                  "new_version=%.3fs apply_edit=%.3fs push=%.3fs "
+                  "other=%.3fs\n",
+                  s.group_find_version_us / 1e6,
+                  s.group_new_version_us / 1e6, s.group_apply_us / 1e6,
+                  s.group_push_us / 1e6, group_other / 1e6);
+          fprintf(stderr,
+                  "    save_to_detail: builder=%.3fs changed_levels=%.3fs "
+                  "mark_rebuild=%.3fs other=%.3fs\n",
+                  s.save_to_builder_us / 1e6,
+                  s.save_to_changed_levels_us / 1e6,
+                  s.save_to_mark_rebuild_us / 1e6, save_other / 1e6);
+          fprintf(stderr,
+                  "    save_to_builder_detail: consistency_base=%.3fs "
+                  "consistency_new=%.3fs sst_files=%.3fs blob_files=%.3fs "
+                  "cursors=%.3fs consistency_final=%.3fs other=%.3fs\n",
+                  s.save_to_consistency_base_us / 1e6,
+                  s.save_to_consistency_new_us / 1e6,
+                  s.save_to_sst_files_us / 1e6,
+                  s.save_to_blob_files_us / 1e6,
+                  s.save_to_cursors_us / 1e6,
+                  s.save_to_consistency_final_us / 1e6,
+                  save_builder_other / 1e6);
+          fprintf(stderr,
+                  "    manifest: total=%.3fs load_table=%.3fs "
+                  "new_manifest=%.3fs prepare=%.3fs encode=%.3fs "
+                  "add_record=%.3fs sync=%.3fs set_current=%.3fs "
+                  "log_flush=%.3fs mutex_reacquire=%.3fs other=%.3fs\n",
+                  s.manifest_write_total_us / 1e6,
+                  s.load_table_handlers_us / 1e6, s.new_manifest_us / 1e6,
+                  s.prepare_append_us / 1e6, s.encode_us / 1e6,
+                  s.add_record_us / 1e6, s.sync_manifest_us / 1e6,
+                  s.set_current_us / 1e6, s.log_flush_us / 1e6,
+                  s.mutex_reacquire_us / 1e6, manifest_other / 1e6);
+          fprintf(stderr,
+                  "    prepare_detail: compaction_pri=%.3fs "
+                  "file_index=%.3fs bottommost=%.3fs "
+                  "bottommost_skipped=%" PRIu64 " other=%.3fs\n",
+                  s.prepare_compaction_pri_us / 1e6,
+                  s.prepare_file_index_us / 1e6,
+                  s.prepare_bottommost_us / 1e6,
+                  s.prepare_bottommost_skipped, s.prepare_other_us / 1e6);
+          std::string compaction_pri_levels;
+          for (size_t i = 0; i < s.prepare_compaction_pri_level_us.size();
+               ++i) {
+            if (s.prepare_compaction_pri_level_us[i] == 0) {
+              continue;
+            }
+            char buf[64];
+            snprintf(buf, sizeof(buf), " L%zu=%.3fs", i,
+                     s.prepare_compaction_pri_level_us[i] / 1e6);
+            compaction_pri_levels.append(buf);
+          }
+          if (!compaction_pri_levels.empty()) {
+            fprintf(stderr, "    compaction_pri_by_level:%s\n",
+                    compaction_pri_levels.c_str());
+          }
+          fprintf(stderr,
+                  "    file_index_detail: indexer=%.3fs "
+                  "level_brief=%.3fs l0_non_overlap=%.3fs "
+                  "file_location=%.3fs\n",
+                  s.prepare_file_indexer_us / 1e6,
+                  s.prepare_level_files_brief_us / 1e6,
+                  s.prepare_l0_non_overlap_us / 1e6,
+                  s.prepare_file_location_us / 1e6);
+          fprintf(stderr,
+                  "    post: wal=%.3fs install_version=%.3fs "
+                  "append_compaction_score=%.3fs callbacks=%.3fs "
+                  "other=%.3fs\n",
+                  s.wal_apply_us / 1e6, s.install_version_us / 1e6,
+                  s.append_compaction_score_us / 1e6,
+                  s.writer_callback_us / 1e6, other / 1e6);
+        };
 
     // ── Phase 1: Generate keys → sort → PLR fit → register as virtual L0 ──
     // Compaction is handled asynchronously by RocksDB's background threads.
     fprintf(stderr, "FillVirtual: generating %" PRId64 " keys...\n", num_ops);
+    fprintf(stderr, "LogAndApply timing: %s\n",
+            FLAGS_vcomp_log_apply_timing ? "on" : "off");
     auto phase1_start = FLAGS_env->NowMicros();
 
     uint64_t sort_us = 0, flush_us = 0, plr_fit_us = 0;
     uint64_t mutex_us = 0, regbuild_us = 0, addfile_us = 0;
     uint64_t total_flushes = 0;
+    uint64_t register_calls = 0;
     uint64_t total_keys_before_dedup = 0, total_keys_after_dedup = 0;
     uint64_t total_segments = 0;
     uint64_t next_epoch = 1;
@@ -5321,29 +5551,37 @@ class Benchmark {
     std::vector<uint64_t> memtable_buf;
     memtable_buf.reserve(memtable_capacity);
 
-    // Batch pending L0 files and register them in a single LogAndApply
-    // call per register_batch. This reduces MANIFEST writes from N to
-    // N/batch_size. Decoupled from level0_file_num_compaction_trigger so
-    // fillvirtual's batching can be tuned independently of BG L0 trigger.
-    VersionEdit pending_edit;
-    int pending_count = 0;
-    int register_batch = FLAGS_level0_file_num_register_batch > 0
-                             ? FLAGS_level0_file_num_register_batch
-                             : (FLAGS_level0_file_num_compaction_trigger > 0
-                                    ? FLAGS_level0_file_num_compaction_trigger
-                                    : 4);
+    std::atomic<bool> l0_window_failed{false};
+    Status l0_window_status;
+    DBImpl::VirtualL0RegistrationStats register_stats;
 
-    auto flush_pending_edit = [&]() {
-      if (pending_count == 0) return;
-      auto t0 = FLAGS_env->NowMicros();
-      Status s = db_impl->RegisterVirtualL0File(&pending_edit);
+    const uint64_t memtable_flush_bytes =
+        static_cast<uint64_t>(FLAGS_memtable_flush_size) * 1024 * 1024;
+    const uint64_t release_batch_max =
+        std::max<uint64_t>(1, FLAGS_vcomp_release_batch_max);
+    const uint64_t visible_l0_batch_bytes =
+        FLAGS_vcomp_visible_l0_batch_mb > 0
+            ? FLAGS_vcomp_visible_l0_batch_mb * 1024ULL * 1024ULL
+            : memtable_flush_bytes;
+    db_impl->ConfigureVirtualL0Window(visible_l0_batch_bytes,
+                                      release_batch_max);
+    const uint64_t reserved_l0_file_base =
+        versions->FetchAddFileNumber(total_flushes_expected);
+    uint64_t next_reserved_l0_file = reserved_l0_file_base;
+
+    auto enqueue_l0_window_batch =
+        [&](std::vector<DBImpl::VirtualL0WindowFile> files) {
+      auto register_t0 = FLAGS_env->NowMicros();
+      Status s =
+          db_impl->EnqueueVirtualL0Files(std::move(files), &register_stats);
+      flush_us += FLAGS_env->NowMicros() - register_t0;
+      register_calls++;
       if (!s.ok()) {
-        fprintf(stderr, "Error registering virtual L0 batch: %s\n",
+        fprintf(stderr, "Error enqueueing virtual L0 window batch: %s\n",
                 s.ToString().c_str());
+        return s;
       }
-      flush_us += (FLAGS_env->NowMicros() - t0);
-      pending_edit = VersionEdit();
-      pending_count = 0;
+      return s;
     };
 
     // Radix sort buffer and pass count, computed once based on key range.
@@ -5355,6 +5593,23 @@ class Benchmark {
       while (max_val > 0) { radix_passes++; max_val >>= 8; }
       if (radix_passes == 0) radix_passes = 1;
     }
+
+    std::vector<DBImpl::VirtualL0WindowFile> l0_window_enqueue_batch;
+    l0_window_enqueue_batch.reserve(release_batch_max);
+
+    auto flush_l0_window_enqueue_batch = [&]() {
+      if (l0_window_enqueue_batch.empty()) {
+        return;
+      }
+      Status s =
+          enqueue_l0_window_batch(std::move(l0_window_enqueue_batch));
+      l0_window_enqueue_batch.clear();
+      l0_window_enqueue_batch.reserve(release_batch_max);
+      if (!s.ok()) {
+        l0_window_status = s;
+        l0_window_failed.store(true, std::memory_order_relaxed);
+      }
+    };
 
     auto do_flush = [&]() {
       auto t0 = FLAGS_env->NowMicros();
@@ -5407,61 +5662,35 @@ class Benchmark {
           VirtualSST::EstimateSize(memtable_buf.size(), avg_entry_size);
 
       auto t3 = FLAGS_env->NowMicros();
-      // NOTE: NewFileNumber itself is atomic, but holding db_impl->mutex()
-      // here is intentional — it acts as an implicit throttle that paces
-      // fillvirtual to BG's compaction throughput. Removing the lock
-      // accelerates Phase 1 but causes L0 backlog runaway at scale (5+ TB):
-      // BG can't keep up, picker eventually fires monster L0->L1 compactions
-      // (e.g., 7775 inputs / 395 sec at 5 TB) and may wedge entirely.
-      // Until vcomp has explicit self-throttling or subcompactions, keep
-      // this lock.
-      uint64_t fnum;
-      {
-        InstrumentedMutexLock l(db_impl->mutex());
-        fnum = versions->NewFileNumber();
-      }
+      uint64_t fnum = next_reserved_l0_file++;
       auto t4 = FLAGS_env->NowMicros();
 
-      std::string smallest_key = registry->EncodeUserKey(vsst.key_min);
-      std::string largest_key = registry->EncodeUserKey(vsst.key_max);
-      registry->Register(fnum, std::move(vsst));
+      const uint64_t file_size = vsst.size_bytes;
+      DBImpl::VirtualL0WindowFile pending_file;
+      pending_file.file_number = fnum;
+      pending_file.vsst = std::move(vsst);
+      pending_file.file_size = file_size;
+      pending_file.epoch_number = next_epoch++;
       auto t5 = FLAGS_env->NowMicros();
 
-      InternalKey smallest(Slice(smallest_key), kMaxSequenceNumber, kTypeValue);
-      InternalKey largest(Slice(largest_key), 0, kTypeValue);
-      pending_edit.AddFile(0 /*level*/, fnum, /*path_id=*/0,
-                   VirtualSST::EstimateSize(memtable_buf.size(), avg_entry_size),
-                   smallest, largest,
-                   /*smallest_seqno=*/0, /*largest_seqno=*/0,
-                   /*marked_for_compaction=*/false,
-                   Temperature::kUnknown,
-                   kInvalidBlobFileNumber,
-                   /*oldest_ancester_time=*/0,
-                   /*file_creation_time=*/0,
-                   /*epoch_number=*/next_epoch++,
-                   /*file_checksum=*/"",
-                   /*file_checksum_func_name=*/"",
-                   UniqueId64x2{},
-                   /*compensated_range_deletion_size=*/0,
-                   /*tail_size=*/0,
-                   /*user_defined_timestamps_persisted=*/true);
+      l0_window_enqueue_batch.push_back(std::move(pending_file));
+      if (l0_window_enqueue_batch.size() >= release_batch_max) {
+        flush_l0_window_enqueue_batch();
+      }
       auto t6 = FLAGS_env->NowMicros();
 
       mutex_us    += (t4 - t3);   // mutex acquire + NewFileNumber
-      regbuild_us += (t5 - t4);   // EncodeUserKey x2 + registry->Register
-      addfile_us  += (t6 - t5);   // pending_edit.AddFile
+      regbuild_us += (t5 - t4);   // EncodeUserKey x2 + pending metadata
+      addfile_us  += (t6 - t5);   // pending batch push
 
-      pending_count++;
       total_flushes++;
       memtable_buf.clear();
-
-      // Flush batch when we hit the register batch size.
-      if (pending_count >= register_batch) {
-        flush_pending_edit();
-      }
     };
 
     for (int64_t i = 0; i < num_ops; i++) {
+      if (l0_window_failed.load(std::memory_order_relaxed)) {
+        break;
+      }
       uint64_t rand_num = rng.Next() % FLAGS_num;
       memtable_buf.push_back(rand_num);
 
@@ -5469,22 +5698,63 @@ class Benchmark {
         do_flush();
       }
     }
-    if (!memtable_buf.empty()) {
+    if (!l0_window_failed.load(std::memory_order_relaxed) &&
+        !memtable_buf.empty()) {
       do_flush();
     }
-    flush_pending_edit();  // Register remaining files.
+    if (!l0_window_failed.load(std::memory_order_relaxed)) {
+      flush_l0_window_enqueue_batch();
+    }
+    if (l0_window_failed.load(std::memory_order_relaxed)) {
+      fprintf(stderr, "FillVirtual: L0 window enqueue failed: %s\n",
+              l0_window_status.ToString().c_str());
+      return;
+    }
+    auto foreground_end = FLAGS_env->NowMicros();
 
-    auto phase1_end = FLAGS_env->NowMicros();
-    double phase1_secs = (phase1_end - phase1_start) / 1e6;
+    auto phase1_end = foreground_end;
+    uint64_t phase1_total_us = phase1_end - phase1_start;
+    double phase1_secs = phase1_total_us / 1e6;
     uint64_t accounted_us = sort_us + plr_fit_us + mutex_us + regbuild_us +
                             addfile_us + flush_us;
-    uint64_t keygen_us = (phase1_end - phase1_start) - accounted_us;
+    uint64_t keygen_us =
+        phase1_total_us > accounted_us ? phase1_total_us - accounted_us : 0;
     fprintf(stderr,
         "  Phase 1 breakdown: keygen=%.3fs sort=%.3fs plr_fit=%.3fs "
         "mutex=%.3fs regbuild=%.3fs addfile=%.3fs register=%.3fs\n",
         keygen_us / 1e6, sort_us / 1e6, plr_fit_us / 1e6,
         mutex_us / 1e6, regbuild_us / 1e6, addfile_us / 1e6,
         flush_us / 1e6);
+    fprintf(stderr,
+        "  Phase 1 keygen detail: foreground=%.3fs accounted=%.3fs "
+        "rng_push_loop=%.3fs release_thread=0\n",
+        phase1_total_us / 1e6, accounted_us / 1e6, keygen_us / 1e6);
+    uint64_t register_accounted_us =
+        register_stats.mutex_wait_us + register_stats.log_apply_us +
+        register_stats.install_schedule_us + register_stats.cleanup_us;
+    uint64_t register_other_us = register_stats.total_us > register_accounted_us
+                                     ? register_stats.total_us -
+                                           register_accounted_us
+                                     : 0;
+    auto l0_window_phase1 = db_impl->GetVirtualL0WindowStats();
+    fprintf(stderr,
+        "  Phase 1 register breakdown: calls=%" PRIu64
+        " files=%" PRIu64 " batches=%" PRIu64 " max_batch=%" PRIu64
+        " total=%.3fs mutex_wait=%.3fs log_apply=%.3fs "
+        "install_schedule=%.3fs cleanup=%.3fs other=%.3fs avg=%.3fms\n",
+        register_calls, l0_window_phase1.registered_files,
+        l0_window_phase1.register_batches,
+        l0_window_phase1.max_register_batch, register_stats.total_us / 1e6,
+        register_stats.mutex_wait_us / 1e6,
+        register_stats.log_apply_us / 1e6,
+        register_stats.install_schedule_us / 1e6,
+        register_stats.cleanup_us / 1e6,
+        register_other_us / 1e6,
+        register_calls > 0
+            ? register_stats.total_us / 1000.0 / register_calls
+            : 0.0);
+    auto log_apply_phase1 = versions->GetLogAndApplyBreakdownStats();
+    print_log_apply_stats("phase1", log_apply_phase1);
     fprintf(stderr, "  Flushes: %" PRIu64 " (avg %.0f keys/batch, %" PRIu64 " segments total)\n",
             total_flushes,
             total_flushes > 0 ? (double)total_keys_after_dedup / total_flushes : 0,
@@ -5498,8 +5768,8 @@ class Benchmark {
             phase1_secs);
 
     // ── Wait for all background compactions to finish ──
-    // First do a normal wait under the size gate (BG drains whatever it
-    // already has scheduled).
+    // First do a normal wait under the regular RocksDB trigger (BG drains
+    // whatever it already has scheduled).
     fprintf(stderr, "FillVirtual: waiting for background compactions...\n");
     auto wait_start = FLAGS_env->NowMicros();
     {
@@ -5512,20 +5782,46 @@ class Benchmark {
       }
     }
 
+    auto l0_window_after_wait = db_impl->GetVirtualL0WindowStats();
+    fprintf(stderr,
+        "  L0 visible window: queued=%" PRIu64 " registered=%" PRIu64
+        " consumed=%" PRIu64 " pending=%" PRIu64 " visible=%" PRIu64
+        " batches=%" PRIu64 " max_batch=%" PRIu64 " max_batch_mb=%.2f"
+        " max_pending=%" PRIu64 " target_mb=%.2f\n",
+        l0_window_after_wait.queued_files,
+        l0_window_after_wait.registered_files,
+        l0_window_after_wait.consumed_files,
+        l0_window_after_wait.pending_files,
+        l0_window_after_wait.visible_files,
+        l0_window_after_wait.register_batches,
+        l0_window_after_wait.max_register_batch,
+        l0_window_after_wait.max_register_batch_bytes / 1024.0 / 1024.0,
+        l0_window_after_wait.max_pending_files,
+        l0_window_after_wait.target_visible_bytes / 1024.0 / 1024.0);
+    fprintf(stderr,
+        "  L0 visible window breakdown: refill=%.3fs log_apply=%.3fs "
+        "install_schedule=%.3fs cleanup=%.3fs pending_mb=%.2f "
+        "visible_mb=%.2f\n",
+        l0_window_after_wait.refill_us / 1e6,
+        l0_window_after_wait.log_apply_us / 1e6,
+        l0_window_after_wait.install_schedule_us / 1e6,
+        l0_window_after_wait.cleanup_us / 1e6,
+        l0_window_after_wait.pending_bytes / 1024.0 / 1024.0,
+        l0_window_after_wait.visible_bytes / 1024.0 / 1024.0);
+
     // ── Final L0 drain ──
-    // Foreground is done, so no more virtual L0 files will arrive. Drop the
-    // size gate to 0 and poke the picker; BG will fire one final L0→L1 (and
-    // any cascades) with whatever's left at L0, all as virtual compactions.
-    // After this drain, L0 should be empty (or nearly so), so Phase 2 has
-    // no L0 files to materialize as real SSTs and the subsequent compact0
-    // step finds 0 files to compact.
-    fprintf(stderr, "FillVirtual: draining residual L0 (size gate off)...\n");
+    // Foreground is done, so no more virtual L0 files will arrive. Lower the
+    // file-count trigger to 1 so the tail can drain through the normal picker.
+    fprintf(stderr, "FillVirtual: draining residual L0...\n");
     auto drain_start = FLAGS_env->NowMicros();
-    SetVcompL0L1MinDataBytes(0);
-    // SetOptions on a no-op-effectively change forces MaybeScheduleFlushOrCompaction,
-    // which wakes the picker now that the size gate is off.
-    db_.db->SetOptions({{"level0_file_num_compaction_trigger", "3"}});
-    {
+    db_.db->SetOptions({{"level0_file_num_compaction_trigger", "1"}});
+    for (uint64_t drain_round = 0;; drain_round++) {
+      Status refill_s = db_impl->RefillVirtualL0Window(&register_stats);
+      if (!refill_s.ok()) {
+        fprintf(stderr, "Drain L0 refill error: %s\n",
+                refill_s.ToString().c_str());
+        return;
+      }
       WaitForCompactOptions wopt;
       wopt.abort_on_pause = false;
       wopt.flush = false;
@@ -5533,12 +5829,37 @@ class Benchmark {
       if (!s.ok()) {
         fprintf(stderr, "Drain WaitForCompact error: %s\n", s.ToString().c_str());
       }
+      auto drain_window = db_impl->GetVirtualL0WindowStats();
+      if (drain_window.pending_files == 0) {
+        break;
+      }
+      if (drain_round > total_flushes + 1) {
+        fprintf(stderr,
+                "Drain stopped: pending virtual L0 did not converge "
+                "(pending=%" PRIu64 ", visible=%" PRIu64 ")\n",
+                drain_window.pending_files, drain_window.visible_files);
+        return;
+      }
     }
     // Restore for any later use of the DB in this process.
-    db_.db->SetOptions({{"level0_file_num_compaction_trigger", "4"}});
-    SetVcompL0L1MinDataBytes(4000ULL * 1024 * 1024);
+    db_.db->SetOptions({{"level0_file_num_compaction_trigger",
+                         std::to_string(FLAGS_level0_file_num_compaction_trigger)}});
     fprintf(stderr, "  L0 drain done: %.3f sec\n",
             (FLAGS_env->NowMicros() - drain_start) / 1e6);
+    auto l0_window_after_drain = db_impl->GetVirtualL0WindowStats();
+    fprintf(stderr,
+        "  L0 visible window final: queued=%" PRIu64
+        " registered=%" PRIu64 " consumed=%" PRIu64 " pending=%" PRIu64
+        " visible=%" PRIu64 " batches=%" PRIu64
+        " refill=%.3fs log_apply=%.3fs\n",
+        l0_window_after_drain.queued_files,
+        l0_window_after_drain.registered_files,
+        l0_window_after_drain.consumed_files,
+        l0_window_after_drain.pending_files,
+        l0_window_after_drain.visible_files,
+        l0_window_after_drain.register_batches,
+        l0_window_after_drain.refill_us / 1e6,
+        l0_window_after_drain.log_apply_us / 1e6);
 
     // Freeze BG compaction so Phase 2 sees a stable registry/version snapshot.
     // Without this, BG can re-fire virtual compactions during Phase 2's
@@ -5555,17 +5876,58 @@ class Benchmark {
       }
     }
 
-    // Intentionally leave any residual L0 virtual files alone. Matching
-    // baseline's natural end-of-load flow: the final memtable worth of data
-    // remains at L0, gets written to real L0 in Phase 2, and the subsequent
-    // load.sh `compact0,waitforcompaction` pushes it into L1. If that push
-    // takes L1 over `max_bytes_for_level_base`, a natural L1→L2 cascade
-    // creates the erosion gaps observed in baseline tree shapes.
+    // Residual virtual L0 should now be drained before Phase 2, so the
+    // follow-on load.sh `compact0,waitforcompaction` is only a safety net.
     auto wait_end = FLAGS_env->NowMicros();
     fprintf(stderr, "  Background compactions done: %.3f sec\n",
             (wait_end - wait_start) / 1e6);
+    auto bg_stats = db_impl->GetVirtualCompactionStats();
+    fprintf(stderr,
+        "  BG virtual compaction breakdown: jobs=%" PRIu64
+        " inputs=%" PRIu64 " outputs=%" PRIu64
+        " total=%.3fs gather=%.3fs merge=%.3fs split=%.3fs "
+        "mutex_wait=%.3fs edit_build=%.3fs log_apply=%.3fs avg=%.3fms\n",
+        bg_stats.jobs, bg_stats.input_files, bg_stats.output_files,
+        bg_stats.total_us / 1e6, bg_stats.gather_us / 1e6,
+        bg_stats.merge_us / 1e6, bg_stats.split_us / 1e6,
+        bg_stats.mutex_wait_us / 1e6, bg_stats.edit_build_us / 1e6,
+        bg_stats.log_apply_us / 1e6,
+        bg_stats.jobs > 0 ? bg_stats.total_us / 1000.0 / bg_stats.jobs
+                          : 0.0);
+    fprintf(stderr,
+            "  BG virtual commit batching: batches=%" PRIu64
+            " jobs=%" PRIu64 " avg_batch=%.2f queue_wait=%.3fs "
+            "leader_log_apply=%.3fs\n",
+            bg_stats.commit_batches, bg_stats.commit_jobs,
+            bg_stats.commit_batches > 0
+                ? static_cast<double>(bg_stats.commit_jobs) /
+                      bg_stats.commit_batches
+                : 0.0,
+            bg_stats.commit_queue_wait_us / 1e6,
+            bg_stats.commit_leader_log_apply_us / 1e6);
+    fprintf(stderr,
+            "  Virtual trivial moves: jobs=%" PRIu64 " files=%" PRIu64
+            " bytes=%" PRIu64 " total=%.3fs log_apply=%.3fs\n",
+            bg_stats.trivial_move_jobs, bg_stats.trivial_move_files,
+            bg_stats.trivial_move_bytes, bg_stats.trivial_move_total_us / 1e6,
+            bg_stats.trivial_move_log_apply_us / 1e6);
+    fprintf(stderr,
+            "  Version metadata breakdown: superversion_install=%.3fs "
+            "obsolete_collect=%.3fs obsolete_purge=%.3fs\n",
+            bg_stats.superversion_install_us / 1e6,
+            bg_stats.obsolete_collect_us / 1e6,
+            bg_stats.obsolete_purge_us / 1e6);
+    auto log_apply_after_wait = versions->GetLogAndApplyBreakdownStats();
+    print_log_apply_stats(
+        "bg_wait",
+        subtract_log_apply_stats(log_apply_after_wait, log_apply_phase1));
     fprintf(stderr, "  Virtual SSTs remaining in registry: %zu\n",
             registry->Size());
+
+    auto obsolete_cleanup_start = FLAGS_env->NowMicros();
+    db_impl->CleanupVirtualCompactionObsoleteFiles();
+    fprintf(stderr, "  Deferred obsolete cleanup: %.3f sec\n",
+            (FLAGS_env->NowMicros() - obsolete_cleanup_start) / 1e6);
 
     // ── Phase 2: Materialize each VirtualSST directly to a real SST file ──
     // BG compaction ensures L1+ files are non-overlapping, so each VirtualSST
@@ -5575,7 +5937,7 @@ class Benchmark {
 
     // Collect all virtual SSTs from registry, with actual levels from
     // VersionSet (files may have been compacted to different levels).
-    auto all_vssts = registry->GetAll();
+      auto all_vssts = registry->GetAllCopies();
 
     // Build file_number → actual_level map from current Version.
     std::unordered_map<uint64_t, int> file_level_map;
@@ -5596,11 +5958,11 @@ class Benchmark {
 
     // Collect level distribution for reporting.
     std::map<int, size_t> level_dist;
-    for (const auto& [fnum, vsst_ptr] : all_vssts) {
-      auto it = file_level_map.find(fnum);
-      int lvl = (it != file_level_map.end()) ? it->second : vsst_ptr->level;
-      level_dist[lvl]++;
-    }
+      for (const auto& [fnum, vsst] : all_vssts) {
+        auto it = file_level_map.find(fnum);
+        int lvl = (it != file_level_map.end()) ? it->second : vsst.level;
+        level_dist[lvl]++;
+      }
     fprintf(stderr, "  Virtual SSTs: %zu (", all_vssts.size());
     bool first = true;
     for (const auto& [lvl, cnt] : level_dist) {
@@ -5612,22 +5974,22 @@ class Benchmark {
 
     // Pre-allocate output file numbers (one real SST per VirtualSST).
     struct SSTTask {
-      uint64_t virtual_fnum;
-      uint64_t real_fnum;
-      int level;
-      const VirtualSST* vsst;
-    };
+        uint64_t virtual_fnum;
+        uint64_t real_fnum;
+        int level;
+        VirtualSST vsst;
+      };
     std::vector<SSTTask> tasks(all_vssts.size());
     {
       InstrumentedMutexLock l(db_impl->mutex());
       for (size_t i = 0; i < all_vssts.size(); i++) {
-        tasks[i].virtual_fnum = all_vssts[i].first;
-        tasks[i].vsst = all_vssts[i].second;
-        tasks[i].real_fnum = versions->NewFileNumber();
-        auto it = file_level_map.find(all_vssts[i].first);
-        tasks[i].level = (it != file_level_map.end())
-                             ? it->second
-                             : all_vssts[i].second->level;
+          tasks[i].virtual_fnum = all_vssts[i].first;
+          tasks[i].vsst = all_vssts[i].second;
+          tasks[i].real_fnum = versions->NewFileNumber();
+          auto it = file_level_map.find(all_vssts[i].first);
+          tasks[i].level = (it != file_level_map.end())
+                               ? it->second
+                               : all_vssts[i].second.level;
       }
     }
 
@@ -5670,7 +6032,7 @@ class Benchmark {
             res.ok = false;
 
             // Materialize keys from PLR model.
-            std::vector<uint64_t> keys = MaterializeKeys(*task.vsst);
+              std::vector<uint64_t> keys = MaterializeKeys(task.vsst);
             if (keys.empty()) continue;
 
             // Write SST file.
@@ -5736,17 +6098,32 @@ class Benchmark {
       }
       for (auto& t : threads) t.join();
     }
-    auto phase2a_end = FLAGS_env->NowMicros();
-    fprintf(stderr, "  Phase 2a (materialize + SST write): %.3f sec\n",
-            (phase2a_end - phase2a_start) / 1e6);
+      auto phase2a_end = FLAGS_env->NowMicros();
+      fprintf(stderr, "  Phase 2a (materialize + SST write): %.3f sec\n",
+              (phase2a_end - phase2a_start) / 1e6);
+      bool materialize_ok = true;
+      for (const auto& res : results) {
+        if (!res.ok) {
+          materialize_ok = false;
+          break;
+        }
+      }
+      if (!materialize_ok) {
+        fprintf(stderr, "Error: materialization failed; VersionEdit skipped\n");
+        Status resume_s = db_.db->ContinueBackgroundWork();
+        if (!resume_s.ok()) {
+          fprintf(stderr, "ContinueBackgroundWork error: %s\n",
+                  resume_s.ToString().c_str());
+        }
+        return;
+      }
 
     // Phase 2b: Delete virtual files + register real files in one VersionEdit.
     auto phase2b_start = FLAGS_env->NowMicros();
-    VersionEdit edit;
-    for (size_t i = 0; i < tasks.size(); i++) {
-      edit.DeleteFile(tasks[i].level, tasks[i].virtual_fnum);
-      registry->Remove(tasks[i].virtual_fnum);
-    }
+      VersionEdit edit;
+      for (size_t i = 0; i < tasks.size(); i++) {
+        edit.DeleteFile(tasks[i].level, tasks[i].virtual_fnum);
+      }
     for (const auto& res : results) {
       if (!res.ok) continue;
       // Match the seqno convention used by RegisterVirtualL0File: smallest
@@ -5773,13 +6150,17 @@ class Benchmark {
       ReadOptions ro;
       WriteOptions wo;
       InstrumentedMutexLock l(db_impl->mutex());
-      Status s = versions->LogAndApply(cfd, ro, wo, &edit,
-                                       db_impl->mutex(), nullptr);
-      if (!s.ok()) {
-        fprintf(stderr, "Error applying VersionEdit: %s\n",
-                s.ToString().c_str());
+        Status s = versions->LogAndApply(cfd, ro, wo, &edit,
+                                         db_impl->mutex(), nullptr);
+        if (!s.ok()) {
+          fprintf(stderr, "Error applying VersionEdit: %s\n",
+                  s.ToString().c_str());
+        } else {
+          for (const auto& task : tasks) {
+            registry->Remove(task.virtual_fnum);
+          }
+        }
       }
-    }
 
     // Resume BG compaction now that the version reflects only real SSTs.
     {
@@ -5798,6 +6179,12 @@ class Benchmark {
     int64_t tw = total_written.load();
     fprintf(stderr, "  Phase 2 breakdown: sst_write=%.3fs version_edit=%.3fs\n",
             phase2a_secs, phase2b_secs);
+    auto log_apply_after_phase2 = versions->GetLogAndApplyBreakdownStats();
+    print_log_apply_stats(
+        "phase2",
+        subtract_log_apply_stats(log_apply_after_phase2,
+                                 log_apply_after_wait));
+    print_log_apply_stats("total", log_apply_after_phase2);
     fprintf(stderr, "Phase 2 (materialization): %.3f sec, %" PRId64
                     " keys written\n",
             phase2_secs, tw);

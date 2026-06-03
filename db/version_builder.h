@@ -9,6 +9,7 @@
 //
 #pragma once
 
+#include <cstdint>
 #include <memory>
 
 #include "db/version_edit.h"
@@ -35,6 +36,15 @@ class CacheReservationManager;
 // Versions that contain full copies of the intermediate state.
 class VersionBuilder {
  public:
+  struct SaveToTimingStats {
+    uint64_t consistency_base_us = 0;
+    uint64_t consistency_new_us = 0;
+    uint64_t save_sst_us = 0;
+    uint64_t save_blob_us = 0;
+    uint64_t save_cursors_us = 0;
+    uint64_t consistency_final_us = 0;
+  };
+
   VersionBuilder(const FileOptions& file_options,
                  const ImmutableCFOptions* ioptions, TableCache* table_cache,
                  VersionStorageInfo* base_vstorage, VersionSet* version_set,
@@ -51,7 +61,9 @@ class VersionBuilder {
   Status Apply(const VersionEdit* edit);
 
   // Save the current Version to the provided `vstorage`.
-  Status SaveTo(VersionStorageInfo* vstorage) const;
+  Status SaveTo(VersionStorageInfo* vstorage,
+                SaveToTimingStats* timing_stats = nullptr) const;
+  void GetChangedLevels(std::vector<bool>* changed_levels) const;
 
   // Load all the table handlers for the current Version in the builder.
   Status LoadTableHandlers(InternalStats* internal_stats, int max_threads,

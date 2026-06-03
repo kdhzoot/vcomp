@@ -33,8 +33,8 @@ done
 }
 
 # ── Common parameters ──
-KEY_SIZE=24
-VALUE_SIZE=1000
+KEY_SIZE="${KEY_SIZE:-24}"
+VALUE_SIZE="${VALUE_SIZE:-1000}"
 KV_SIZE=$((KEY_SIZE + VALUE_SIZE))
 
 RUN_TS="$(date '+%y%m%d_%H%M')"

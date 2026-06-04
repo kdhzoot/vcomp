@@ -669,10 +669,6 @@ class VersionStorageInfo {
     uint64_t compensated_size = 0;
     uint64_t non_compacting_compensated_size = 0;
     int non_compacting_file_count = 0;
-    int l0_eligible_file_count = 0;
-    uint64_t l0_eligible_file_size = 0;
-    uint64_t l0_eligible_non_compacting_compensated_size = 0;
-    int l0_eligible_non_compacting_file_count = 0;
     bool first_file_being_compacted = false;
   };
 

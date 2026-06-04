@@ -5444,44 +5444,6 @@ Status DBImpl::RegisterVirtualL0File(
   return s;
 }
 
-Status DBImpl::MarkVirtualL0FilesCompactionEligible(
-    const std::vector<uint64_t>& file_numbers, uint64_t* changed) {
-  if (changed != nullptr) {
-    *changed = 0;
-  }
-  if (file_numbers.empty()) {
-    return Status::OK();
-  }
-
-  InstrumentedMutexLock l(&mutex_);
-  auto* cfd = static_cast<ColumnFamilyHandleImpl*>(DefaultColumnFamily())->cfd();
-  auto* vstorage = cfd->current()->storage_info();
-  uint64_t local_changed = 0;
-  uint64_t local_visible = 0;
-  for (uint64_t file_number : file_numbers) {
-    const auto location = vstorage->GetFileLocation(file_number);
-    if (!location.IsValid() || location.GetLevel() != 0) {
-      continue;
-    }
-    auto* file = vstorage->LevelFiles(0)[location.GetPosition()];
-    if (!file->virtual_compaction_eligible) {
-      file->virtual_compaction_eligible = true;
-      local_changed++;
-    }
-    local_visible++;
-  }
-  if (local_changed > 0) {
-    vstorage->ComputeCompactionScore(cfd->ioptions(),
-                                     cfd->GetLatestMutableCFOptions());
-    EnqueuePendingCompaction(cfd);
-    MaybeScheduleFlushOrCompaction();
-  }
-  if (changed != nullptr) {
-    *changed = local_visible;
-  }
-  return Status::OK();
-}
-
 Status DBImpl::CommitVirtualCompactionEdit(
     Compaction* c, ColumnFamilyData* cfd, VersionEdit* edit,
     const std::vector<VirtualCompactionPendingOutput>& pending_outputs,
@@ -5494,9 +5456,9 @@ Status DBImpl::CommitVirtualCompactionEdit(
   mutex_.AssertHeld();
   const size_t max_batch_size = static_cast<size_t>(
       std::max<uint64_t>(1, GetVcompEnvUInt64(
-                                "VCOMP_BG_COMMIT_BATCH_MAX", 64)));
+                                "VCOMP_BG_COMMIT_BATCH_MAX", 16)));
   const uint64_t batch_delay_us =
-      GetVcompEnvUInt64("VCOMP_BG_COMMIT_DELAY_US", 0);
+      GetVcompEnvUInt64("VCOMP_BG_COMMIT_DELAY_US", 100);
 
   auto release_request = [](VirtualCompactionCommitRequest* req,
                             const Status& s) {

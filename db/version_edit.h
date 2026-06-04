@@ -233,10 +233,6 @@ struct FileMetaData {
                                        // compact this file.
   Temperature temperature = Temperature::kUnknown;
 
-  // VComp-only transient state. A virtual L0 file can be present in VersionSet
-  // before it is allowed to participate in compaction selection.
-  bool virtual_compaction_eligible = true;
-
   // Used only in BlobDB. The file number of the oldest blob file this SST file
   // refers to. 0 is an invalid value; BlobDB numbers the files starting from 1.
   uint64_t oldest_blob_file_number = kInvalidBlobFileNumber;

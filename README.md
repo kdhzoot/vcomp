@@ -1,12 +1,12 @@
 # PLR-Based Virtual Compaction
 
-This document has two parts:
+This README is the current implementation spec for `fillvirtual` and the
+historical notebook for how the design got here.
 
-- **Part 1 — Specification** (§1–§7): algorithms, code structure, and
-  deferred TODOs of the current vcomp implementation.
-- **Part 2 — Changelog** (§8+): time-ordered narrative of what was
-  tried, decided, and discovered. Old entries are snapshots of the state
-  at the time, not the current state.
+- **Current implementation**: scope, run commands, defaults, architecture,
+  algorithms, correctness constraints, and open work.
+- **Historical changelog**: dated notes for past experiments. Treat old entries
+  as snapshots from that date, not as the current design.
 
 Measurement results (current best numbers) live in
 [../eval-vcomp/RESULTS.md](../eval-vcomp/RESULTS.md). Queued
@@ -15,7 +15,14 @@ experiments live in
 
 ---
 
-## 1. Overview
+## Current State
+
+As of 2026-06-03, this branch is focused on the synthetic metadata-only
+`fillvirtual` loader. Twitter/trace KV work is parked; the paper path is the
+synthetic loader plus final materialization.
+
+The goal is to produce a tree **structurally identical to baseline RocksDB**,
+not a "better" tree. Any structural divergence is treated as a bug.
 
 Virtual Compaction replaces RocksDB's I/O-intensive compaction with
 lightweight **Piecewise Linear Regression (PLR) model merging** during
@@ -27,7 +34,7 @@ Traditional:  Write keys → Memtable (SkipList)
               → Flush (write SST) → Compaction (read+merge+write SSTs)
 
 Virtual:      Generate keys → vector buffer → Radix sort → PLR Fit
-              → Queue/release virtual L0
+              → Queue/refill virtual L0
               → BG PLR Merge (concurrent)
               → Materialize + SST write (direct I/O)
 ```
@@ -37,24 +44,23 @@ accumulated in a flat `std::vector<uint64_t>` and bulk-sorted with radix
 sort before PLR fitting, trading the O(N log N) per-insert SkipList cost
 for O(N) batch radix sort.
 
-Goal of the project: produce a tree **structurally identical to baseline
-RocksDB**, not a "better" tree. Any structural divergence is treated as
-a bug to fix.
+Current implementation:
 
-### Current checkpoint (2026-06-03)
-
-Current branch focus is synthetic `fillvirtual` only. Twitter/trace KV work is
-parked; the paper path is the metadata-only synthetic loader.
-
-Current implementation state:
-
-- Build with `./make.sh`.
 - Phase 1 queues generated L0 VSSTs in an in-memory pending window.
 - `RefillVirtualL0Window()` registers only a bounded visible L0 window through
-  batched VersionEdits. Current experimental defaults are
-  `--vcomp_release_batch_max=256` and `--vcomp_visible_l0_batch_mb=4096`.
-- BG virtual compaction commits are batched through a commit queue. Current
-  best large-run setting is `VCOMP_BG_COMMIT_BATCH_MAX=16` and
+  batched VersionEdits. The refill condition is:
+
+  ```
+  virtual_l0_visible_bytes_ < target_bytes
+  ```
+
+- Registered virtual L0 files are immediately visible to RocksDB's regular L0
+  score and compaction picker. There is no hidden eligibility bit and no
+  separate visibility worker.
+- Code defaults are
+  `--vcomp_register_batch_max=256` and `--vcomp_visible_l0_batch_mb=4096`.
+- BG virtual compaction commits are batched through a commit queue. Code
+  defaults are `VCOMP_BG_COMMIT_BATCH_MAX=16` and
   `VCOMP_BG_COMMIT_DELAY_US=100`.
 - Virtual compaction successful jobs defer obsolete-file collection/purge;
   `fillvirtual` performs one `CleanupVirtualCompactionObsoleteFiles()` call
@@ -81,9 +87,75 @@ Current implementation state:
 
 ---
 
-## 2. PLR Model
+## Quick Start
 
-### 2.1 Core idea
+Build from this repository:
+
+```bash
+./make.sh
+```
+
+Run the standard eval wrapper from `../eval-vcomp`:
+
+```bash
+MODE=vcomp TARGET_DB_GB=1000 DB_ROOT=/work/vcomp bash ../eval-vcomp/load.sh
+```
+
+The wrapper defaults to the same current values as the code:
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `--vcomp_register_batch_max` / `VCOMP_REGISTER_BATCH_MAX` | `256` | Max pending virtual L0 files registered per VersionEdit |
+| `--vcomp_visible_l0_batch_mb` / `VCOMP_VISIBLE_L0_BATCH_MB` | `4096` | Visible virtual-L0 byte target in MiB |
+| `VCOMP_BG_COMMIT_BATCH_MAX` | `16` | Max virtual compaction commit requests grouped into one manifest write |
+| `VCOMP_BG_COMMIT_DELAY_US` | `100` | Leader wait before draining the virtual commit queue |
+| `--vcomp_log_apply_timing` / `VCOMP_LOG_APPLY_TIMING` | `true` | Collect detailed LogAndApply timing breakdowns |
+
+`--vcomp_visible_l0_batch_mb=0` is a special case: `db_bench` uses one
+memtable-flush worth of virtual SSTs as `target_bytes`.
+
+---
+
+## Runtime Design
+
+`fillvirtual` has three runtime phases:
+
+1. **Generate and register a bounded L0 window**
+   - Generate keys in flat vectors.
+   - Radix-sort each batch.
+   - Fit a PLR model and enqueue a virtual L0 file in memory.
+   - Register pending virtual L0 files only while
+     `virtual_l0_visible_bytes_ < target_bytes`.
+
+2. **Run background virtual compactions**
+   - Registered virtual L0 files are normal picker-visible RocksDB files from
+     the metadata path's point of view.
+   - If a picked compaction has at least one input in `VirtualSSTRegistry`,
+     `BackgroundCompaction` runs `RunVirtualCompaction()`.
+   - The virtual compaction merges PLR models, splits outputs using
+     RocksDB-like grandparent boundary rules, and commits the VersionEdit
+     through the virtual commit queue.
+
+3. **Materialize remaining virtual files**
+   - After BG compaction drain, each remaining VirtualSST is converted to real
+     keys by PLR inverse walking.
+   - Workers write real SST files with direct I/O.
+   - One final VersionEdit deletes virtual files and adds the materialized real
+     SSTs.
+
+Important current semantics:
+
+- Registered virtual L0 files are immediately visible. There is no
+  separate visibility or eligibility bit.
+- L0 refill is byte-targeted by `virtual_l0_visible_bytes_ < target_bytes`.
+- The real-vs-virtual dispatch decision is based on registry membership of
+  compaction inputs, not on file-level eligibility metadata.
+
+---
+
+## PLR Model
+
+### Core idea
 
 A sorted sequence of N keys $k_0 < k_1 < \cdots < k_{N-1}$ defines a
 cumulative distribution function (CDF):
@@ -105,7 +177,7 @@ struct PLRSegment {
 };
 ```
 
-### 2.2 Greedy-PLR fit (shrinking-cone algorithm)
+### Greedy-PLR fit (shrinking-cone algorithm)
 
 Given sorted keys and an error bound $\delta$, the algorithm greedily
 extends each segment as far as possible while keeping the prediction
@@ -143,7 +215,7 @@ while seg_start < N:
 - Output: S segments where $S \approx N / \delta$ for uniform input.
 - Guarantee: $|\text{pos}_{\text{predicted}}(k) - \text{pos}_{\text{actual}}(k)| \leq \delta$.
 
-### 2.3 PLR inverse
+### PLR inverse
 
 Given a rank, recover the estimated key:
 
@@ -169,9 +241,9 @@ uint64_t Inverse(double position) {
 
 ---
 
-## 3. N-Way PLR Merge
+## N-Way PLR Merge
 
-### 3.1 Mathematical foundation
+### Mathematical foundation
 
 When merging N sorted sequences each with its own PLR model
 $\text{pos}_i(k)$, the merged rank at key $k$ is:
@@ -184,7 +256,7 @@ Since each $\text{pos}_i$ is piecewise linear, the sum is also piecewise
 linear. The breakpoints of the merged model are the **union** of all
 input segment boundaries.
 
-### 3.2 Algorithm
+### Algorithm
 
 ```
 Input:  N PLR models with their key ranges
@@ -220,7 +292,7 @@ Output: merged PLR model
 5. Merge adjacent segments with identical (slope, intercept).
 ```
 
-### 3.3 Why slope/intercept addition works
+### Why slope/intercept addition works
 
 Consider two sorted sequences A and B merged into C. For any key k:
 
@@ -237,7 +309,7 @@ $$
 
 This is still linear, so slope and intercept simply add.
 
-### 3.4 Probabilistic dedup correction
+### Probabilistic dedup correction
 
 The naive merge counts every key from every input, including duplicates
 across levels. For random workloads, duplicate keys can be estimated
@@ -258,7 +330,7 @@ position-function continuity. The total `adjusted_entries` is capped to
 never exceed `naive_entries` (PLR approximation error at low densities
 can briefly cause `adjusted > naive`).
 
-### 3.5 Adjacent-segment merging
+### Adjacent-segment merging
 
 The breakpoint-based merge produces one segment per sub-interval; many
 adjacent segments end up with identical `(slope, intercept)` because
@@ -269,9 +341,9 @@ step, the segment count after N-way merge equals the breakpoint count
 
 ---
 
-## 4. Virtual SSTs
+## Virtual SSTs
 
-### 4.1 Structure
+### Structure
 
 A virtual SST stores no key/value data — only the PLR model and metadata:
 
@@ -290,7 +362,7 @@ The registry (`VirtualSSTRegistry`) maps `file_number → VirtualSST*`
 under a thread-safe map and is consulted by `RunVirtualCompaction` and
 the BG dispatch logic.
 
-### 4.2 SplitIntoSSTs — output sizing for virtual compaction
+### SplitIntoSSTs — output sizing for virtual compaction
 
 After a merged PLR model is computed, it is split into output virtual
 SSTs. The split logic mirrors RocksDB's
@@ -387,7 +459,7 @@ while next_size_cut < total_entries OR gp_idx < len(gp_positions):
   at L1+ since `plr.Inverse(pos_end)` for file `i` and
   `plr.Inverse(pos_start)` for file `i+1` map to the same key boundary.
 
-### 4.3 Materialization
+### Materialization
 
 Converting a VirtualSST back to actual keys uses sequential PLR inverse
 walking (segments scanned in order, O(N) total instead of O(N log S)
@@ -420,18 +492,18 @@ into a single parallel step using direct I/O.
 
 ---
 
-## 5. Architecture: integration with RocksDB
+## RocksDB Integration
 
-### 5.1 Components
+### Components
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  db_bench (FillVirtual)                                      │
 │    Main thread: keygen → radix sort → PLRFit                 │
-│    Pre-register hidden virtual L0 files in VersionSet         │
-│    Release thread: size-gated eligibility batches             │
+│    Queue generated virtual L0 files in a pending window       │
+│    Refill visible L0 through bounded VersionEdit batches      │
 └────────────────────────┬─────────────────────────────────────┘
-                         │ LogAndApply only for hidden registration
+                         │ LogAndApply for bounded visible registration
                          ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  RocksDB Core (concurrent with flush)                        │
@@ -458,26 +530,27 @@ into a single parallel step using direct I/O.
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### 5.2 Flow
+### Flow
 
-1. **Phase 1 — Generate + release L0**: radix sort each batch of keys →
-   `GreedyPLRFit` → create `VirtualSST` → register it in
-   `VirtualSSTRegistry` and VersionSet with `virtual_compaction_eligible=false`
-   → enqueue only its file number for release.
+1. **Phase 1 — Generate + refill L0**: radix sort each batch of keys →
+   `GreedyPLRFit` → create `VirtualSST` → enqueue it in an in-memory
+   pending L0 window.
 
-   Hidden virtual L0 files are ignored by L0 score and compaction input
-   selection. The release thread periodically checks visible eligible L0 state
-   and only exposes more files when both gates are open:
+   `RefillVirtualL0Window()` registers only a bounded amount of pending
+   virtual L0 through `VersionEdit` batches. Registered virtual L0 files
+   are immediately visible to RocksDB's regular L0 score and compaction
+   picker; there is no separate visibility bit or worker.
 
    ```
-   visible_l0_count < level0_file_num_compaction_trigger
-   visible_l0_bytes < vcomp_visible_l0_batch_mb
+   virtual_l0_visible_bytes_ < target_bytes
    ```
 
-   The release batch is built up to `vcomp_visible_l0_batch_mb` bytes. If that
-   flag is zero, the batch target defaults to one memtable-flush worth of
-   virtual SSTs. Release calls `MarkVirtualL0FilesCompactionEligible()` and
-   schedules BG work; it does not write another VersionEdit.
+   For `db_bench fillvirtual`, `target_bytes` comes from
+   `--vcomp_visible_l0_batch_mb` and defaults to 4096 MiB. If the flag is set
+   to zero, `db_bench` uses one memtable-flush worth of virtual SSTs. After
+   successful virtual compaction commits, the commit path accounts
+   consumed/output L0 bytes and refills the visible window from the pending
+   queue.
 
 2. **BG compactions (concurrent with Phase 1)**: `CompactionPicker`
    picks input files; if at least one input is still in the virtual
@@ -501,7 +574,7 @@ into a single parallel step using direct I/O.
    real files atomically. `compact0` and `waitforcompaction` after
    Phase 2 are kept as a safety net.
 
-### 5.3 BG compaction dispatch
+### BG compaction dispatch
 
 `DBImpl::BackgroundCompaction` routes each picked compaction:
 
@@ -521,47 +594,47 @@ into a single parallel step using direct I/O.
 
 Where `AnyInputIsVirtual` walks `c->num_input_levels()` × `c->input(lvl,
 i)->fd.GetNumber()` and checks `virtual_sst_registry_->Lookup(fnum) !=
-nullptr`. **This gate is essential**: after Phase 2 has materialized
+nullptr`. **This dispatch guard is essential**: after Phase 2 has materialized
 all virtual files into real SSTs, a subsequent `compact0` /
 `waitforcompaction` will pick a compaction whose inputs are now entirely
-real. Without the gate, dispatch would still call
+real. Without the guard, dispatch would still call
 `RunVirtualCompaction`, find no virtual inputs, return `OK` without
 making progress, and the picker would immediately re-pick the same
 compaction — an infinite spin that hangs `WaitForCompact`.
 
-### 5.4 Key modifications to RocksDB
+### Key implementation map
 
 | File | Change |
 |------|--------|
 | `include/rocksdb/options.h` | `use_virtual_compaction`, `plr_error_bound` options |
 | `options/db_options.{h,cc}` | `ImmutableDBOptions` mapping |
-| `db/db_impl/db_impl.h` | `VirtualSSTRegistry` member, `RegisterVirtualL0File()`, `RunVirtualCompaction()` |
+| `db/db_impl/db_impl.h` | `VirtualSSTRegistry`, pending L0 window state, refill/configuration APIs, virtual compaction commit queue |
 | `db/db_impl/db_impl.cc` | Initialize registry when `use_virtual_compaction` is enabled |
-| `db/db_impl/db_impl_compaction_flush.cc` | BG dispatch gating (real vs virtual path), `RegisterVirtualL0File()` impl, `RunVirtualCompaction()` impl with grandparent boundary extraction |
+| `db/db_impl/db_impl_compaction_flush.cc` | Real/virtual dispatch guard, `RegisterVirtualL0File()`, `RefillVirtualL0Window()`, `RunVirtualCompaction()`, commit batching, deferred obsolete cleanup |
 | `db/db_impl/db_impl_files.cc` | Skip disk deletion for virtual files |
-| `db/version_set.cc` | Skip `LoadTableHandlers` / `VerifyFileMetadata` for virtual files |
+| `db/version_set.cc` | Skip `LoadTableHandlers` / `VerifyFileMetadata` for virtual files; use per-level score inputs to avoid rescanning unchanged Version append paths |
+| `db/compaction/compaction_picker*.cc` | Use registered L0 files directly; no virtual eligibility filtering |
 | `db/virtual_compaction/virtual_sst.{h,cc}` | `SplitIntoSSTs` (dynamic threshold + GP), `MaterializeKeys`, `VirtualCompact` |
 | `db/virtual_compaction/virtual_sst_registry.h` | Thread-safe `file_number → VirtualSST` registry |
 | `db/virtual_compaction/plr_model.{h,cc}` | `GreedyPLRFit`, `NWayMergePLR` with optional dedup |
-| `tools/db_bench_tool.cc` | `fillvirtual` benchmark with hidden L0 registration and size-gated eligibility release, Phase 2 workers using direct I/O, `coverage` benchmark for per-level file-coverage probes; Phase 2b uses `kMaxSequenceNumber` for output `smallest` InternalKey to match `RegisterVirtualL0File`'s convention |
+| `tools/db_bench_tool.cc` | `fillvirtual` benchmark with pending-window L0 registration, Phase 2 workers using direct I/O, `coverage` benchmark for per-level file-coverage probes; Phase 2b uses `kMaxSequenceNumber` for output `smallest` InternalKey to match `RegisterVirtualL0File`'s convention |
 
-### 5.5 Key optimizations in FillVirtual
+### Key optimizations in FillVirtual
 
 | Optimization | Before | After | Effect |
 |--------------|--------|-------|--------|
 | Radix sort (uint64_t keys) | `std::sort` O(N log N) | 8-bit radix O(N) | sort step ~6× faster |
-| Hidden L0 registration | registration and compaction visibility coupled | LogAndApply hidden VSSTs first, then flip eligibility in memory | decouples metadata registration from picker visibility |
-| Size-gated L0 release | all registered L0 files immediately visible | expose only up to a visible count/byte budget | prevents unbounded L0 backlog |
+| Pending L0 window | all generated L0 files registered immediately | register only a bounded visible byte window | prevents unbounded L0 backlog |
 | Fused materialize+write | inverse → merge/dedup → SST write | inverse → SST write | eliminates cross-file merge step |
 | Direct I/O | buffered | `use_direct_writes`, `!use_mmap_writes` | sys CPU 66% → 9% |
 | Phase 2 workers | `max_background_jobs` (32) | `hardware_concurrency()` (48) | Phase 2 ~1.3× faster |
 
 ---
 
-## 6. Tree-shape considerations
+## Tree-Shape Invariants
 
-The split logic in §4.2 is the main mechanism for matching baseline's
-file count and per-level file-size distribution. Two structural
+The split logic in `SplitIntoSSTs` is the main mechanism for matching
+baseline's file count and per-level file-size distribution. Two structural
 properties that follow directly from the design:
 
 - **Per-level file count**: bounded above by `total_entries /
@@ -573,11 +646,11 @@ properties that follow directly from the design:
   means each VirtualSST's claimed key range covers its content but does
   not produce arbitrary gaps between adjacent files. (Erosion gaps —
   segments where no file in a level contains data — only appear when
-  some file gets removed by a later compaction; see §7.)
+  some file gets removed by a later compaction; see Open Work.)
 
 ---
 
-## 7. Deferred TODOs
+## Open Work
 
 The split logic implements 2 of the 4 cut conditions in baseline
 RocksDB's `CompactionOutputs::ShouldStopBefore`. The remaining two are
@@ -609,18 +682,16 @@ deferred until they are shown to drive a measurable structural gap:
   may be a side effect of how virtual L1→L2 compactions choose inputs
   vs how baseline's real picker does. Investigation pending.
 
-These TODOs are tracked in
-[db/virtual_compaction/TODO.md](db/virtual_compaction/TODO.md).
-
 ---
 ---
 
-# Part 2 — Changelog
+# Historical Changelog
 
 Time-ordered narrative of the vcomp project. Old entries are preserved
 as-is — they are snapshots of the state at the time, not current truth.
 For current measurements, see
 [../eval-vcomp/RESULTS.md](../eval-vcomp/RESULTS.md).
+
 ## Test environment
 
 - **CPU**: 48-core Intel Xeon Gold 6336Y @ 2.40 GHz (HT off, 96 logical offline)
@@ -753,7 +824,7 @@ v3 (radix+batch+fuse) ██ 21s
 v4 (direct I/O)       █ 16s
 ```
 
-### v5 — Probabilistic dedup correction (current)
+### v5 — Probabilistic dedup correction (historical)
 
 PLR-based cross-level dedup estimation using inclusion-exclusion principle.
 Per breakpoint interval: `adjusted_slope = 1 - Π(1 - slope_i)` where each
@@ -828,7 +899,7 @@ Attempted optimizations with no significant improvement:
 - 10MB write buffer (vs 1MB default): -9% Put time but +140% Finish/sync time
 - 2x thread oversubscription: context switch overhead negates I/O overlap
 
-**Current limit**: SST build cost (memcpy + checksum + bloom) is the bottleneck.
+**Then-current limit**: SST build cost (memcpy + checksum + bloom) was the bottleneck.
 HT (96 logical cores) would provide ~1.3x improvement.
 Kernel boot param `nosmt` prevents runtime HT enable; requires reboot.
 
@@ -1203,7 +1274,6 @@ is the next thing to investigate.
 - [vcomp/db/virtual_compaction/virtual_sst.cc](../vcomp/db/virtual_compaction/virtual_sst.cc) — dynamic threshold, 2× max, removed GP dedup
 - [vcomp/db/db_impl/db_impl_compaction_flush.cc](../vcomp/db/db_impl/db_impl_compaction_flush.cc) — virtual dispatch only when inputs are virtual
 - [vcomp/tools/db_bench_tool.cc](../vcomp/tools/db_bench_tool.cc) — Phase 2b seqno fix, `coverage` bench, removed L0 drain workaround
-- [vcomp/db/virtual_compaction/TODO.md](../vcomp/db/virtual_compaction/TODO.md) — deferred GP cut conditions (skippable, max-compaction-bytes)
 
 ---
 
@@ -1385,9 +1455,8 @@ wider). Carried over from the §6 open question in
 
 ### Fixes applied today
 
-Both unrelated to the deferred items in
-[db/virtual_compaction/TODO.md](db/virtual_compaction/TODO.md) (those
-still apply only at L1+).
+Both fixes were scoped to L0 behavior; deferred L1+ grandparent cut items
+remained out of scope.
 
 **Fix 1 — intra-L0 megafile output** ([db/virtual_compaction/virtual_sst.cc](db/virtual_compaction/virtual_sst.cc))
 
@@ -1591,8 +1660,7 @@ Box-plot artifact:
   + L3/L4 match we already have.
 - L4 file count: vcomp 2622 vs baseline 2809 (−6.7 %). vcomp's L4
   files are individually larger (less aggressive grandparent split
-  with the simpler split algorithm). The two deferred grandparent
-  cut conditions in [db/virtual_compaction/TODO.md](db/virtual_compaction/TODO.md)
+  with the simpler split algorithm). Deferred grandparent cut conditions
   remain the natural next lever if we ever need to close this.
 
 ### Loading time
@@ -1650,114 +1718,6 @@ Predicts vcomp_new will degrade to ~141 µs/block if remeasured in a
 month (matching aged-baseline today). Untested; would confirm
 "fresh-write" effect is purely a function of time-on-disk, not a
 vcomp property.
-
-## 2026-06-01 — Time-scaled L0 release with RocksDB backpressure
-
-Status: historical negative result. Superseded by the size-gated release
-checkpoint later in this changelog.
-
-Decision: reproduce baseline L0 dynamics instead of inventing a fixed L0
-byte gate. `fillvirtual` now creates VSSTs quickly into a hidden pending queue,
-then immediately registers them in VersionSet as compaction-ineligible virtual
-L0 files. A release thread later flips an in-memory eligibility bit one file at
-a time so the picker can select the file without another `LogAndApply`.
-
-Implemented behavior:
-
-- Removed the vcomp-only 4GB L0->Lbase picker gate.
-- Restored RocksDB's intra-L0 picker paths for virtual compaction.
-- Added `--vcomp_baseline_flush_interval_us`,
-  `--vcomp_baseline_compaction_sec`, and `--vcomp_reference_compaction_sec`.
-- Normal release interval is computed as
-  `baseline_flush_interval_us / (baseline_compaction_sec / vcomp_reference_compaction_sec)`.
-- Added a transient `FileMetaData::virtual_compaction_eligible` bit. Hidden
-  virtual L0 files are excluded from L0 score, L0 slowdown/stop count,
-  estimated compaction bytes, and compaction-picker inputs.
-- At `level0_slowdown_writes_trigger`, release switches to
-  `delayed_write_rate * speedup`; at `level0_stop_writes_trigger`, release
-  pauses until BG compaction drains visible L0.
-
-Parameter meaning after the per-job-duration correction:
-
-- `vcomp_baseline_compaction_sec` is a baseline single-compaction total
-  duration, not cumulative compaction time.
-- `vcomp_reference_compaction_sec` is a vcomp single virtual-compaction total
-  duration, not cumulative virtual-compaction time.
-- For L0 pacing, the intended reference is L0->L1 median/trimmed-mean total
-  duration unless another level transition is explicitly being modeled.
-
-Instrumentation smoke result:
-
-- Virtual compaction log lines now include per-job total duration and sub-steps
-  (`total`, `gather`, `merge`, `split`, `mutex_wait`, `edit`, `log_apply`,
-  `commit_queue`).
-- A 1 GB smoke run confirmed L0->L1 total median 1.028 ms. This is the right
-  reference form for single-compaction speedup.
-
-250 GB validation before the per-job-duration correction:
-
-- Inputs: `baseline_flush_interval_us=100564`,
-  `baseline_compaction_sec=4924.6`, initial `vcomp_reference_compaction_sec=26.218`.
-- Bootstrap run measured new BG virtual compaction total as 58.489 s.
-- Self-consistent rerun with `vcomp_reference_compaction_sec=58.489`:
-  total 16.347 s, Phase 1 12.057 s, BG wait 0.092 s, Phase 2 4.197 s.
-- Formula output: speedup 84.197x, normal interval 1.194 ms,
-  slowdown interval 95.015 ms.
-- Final level shape was close to baseline:
-  baseline `(L1=4, L2=43, L3=438, L4=2818)` vs
-  vcomp `(L1=4, L2=43, L3=417, L4=2627)`.
-- L0 dynamics are still not matched: vcomp had only 101 L0->L0 events and
-  816 L0->L1 events, while baseline had 1053 L0->L0 events and 82 L0->L1
-  events. Slowdown/stop never fired (`slowed=0`, `stop_events=0`), so this
-  pacing rule matches final shape better than it matches baseline's L0
-  compaction path.
-- This run used cumulative compaction seconds as pacing input. Keep it as a
-  negative result showing why cumulative compaction time is the wrong speedup
-  basis.
-
-250 GB validation with single-compaction speedup and batched release:
-
-- Inputs: `baseline_flush_interval_us=100564`,
-  `baseline_compaction_sec=7.010`, `vcomp_reference_compaction_sec=0.001028`.
-- Formula output: speedup 6819.066x, normal interval 0.014 ms,
-  slowdown interval 1.173 ms, batch window 2000 us, `target_batch=143`.
-- Run:
-  `/work/vcomp/log_loads/vcomp_batchrelease_250gb_260601_042246`,
-  DB `/work/vcomp/vcomp_batchrelease_250gb_260601_042246`.
-- Load-script wall clock 15 s; fillvirtual core total 10.685 s
-  (`phase1=6.404`, `wait=0.082`, `phase2=4.200`).
-- Phase 1 registration dropped from the one-by-one result
-  8.813 s / 4000 calls to 0.197 s / 112 calls.
-- Actual release behavior: 4000 files released, 112 batches,
-  `max_batch=36`, `max_pending=36`, stop wait 1.111 s.
-- Final shape is close to baseline:
-  baseline `(L1=4, L2=43, L3=438, L4=2818)` vs
-  vcomp `(L1=4, L2=45, L3=420, L4=2630)`.
-- L0 path is still not baseline-like: baseline has 1052 L0->L0 and 83 L0->L1
-  events; this run has 0 L0->L0 and 112 L0->L1 events. Batched release fixes
-  registration cost and final shape, but it bypasses baseline's intra-L0
-  consolidation pattern.
-
-250 GB validation with hidden registration + one-file eligibility release:
-
-- Run:
-  `/work/vcomp/log_loads/vcomp_eligrelease_250gb_260601_043727`,
-  DB `/work/vcomp/vcomp_eligrelease_250gb_260601_043727`.
-- Load-script wall clock 22 s; fillvirtual core total 17.012 s
-  (`phase1=12.804`, `wait=0.097`, `phase2=4.110`).
-- Phase 1 registration is back to 4000 `LogAndApply` calls, but release itself
-  is cheap and strictly one file at a time:
-  `register=6.035s / 4000 calls`, `released=4000`, `max_batch=1`.
-- Final shape remains close:
-  baseline `(L1=4, L2=43, L3=438, L4=2818)` vs
-  vcomp `(L1=4, L2=43, L3=414, L4=2618)`.
-- L0 path partially improves but still does not match baseline:
-  vcomp has 76 L0->L0 and 771 L0->L1 events vs baseline 1052 L0->L0 and
-  83 L0->L1 events.
-
-This became a negative result. It improved our understanding of hidden
-registration and release semantics, but was superseded by the size-gated
-release checkpoint later in this changelog.
 
 ## 2026-05-31 — Synthetic-only reset: L0 pacing and byte-based baseline targets
 
@@ -1889,38 +1849,6 @@ time up to 48 jobs because they expose more parallel PLR work and shorten the
 final BG wait. This is why cumulative wait alone is misleading; it must be
 read together with wall clock and per-thread work.
 
-### Closed-loop L0 release prototype
-
-We then changed Phase 1 to queue L0 VSSTs in memory and release them one at
-a time only while visible L0 count is below RocksDB's
-`level0_slowdown_writes_trigger` (20). This restored back-pressure semantics
-but made `LogAndApply` too expensive because every released VSST performs its
-own VersionEdit.
-
-| Scale | Wall-clock uptime | `fillvirtual` core | Phase 1 | Phase 2 | Released L0 | Max pending | Pause |
-|-------|-------------------|--------------------|---------|---------|-------------|-------------|-------|
-| 20 GB | 6.3 s | 1.268 s | 0.500 s | 0.760 s | 320 | 1 | 0.000 s |
-| 250 GB | 18.3 s | 13.333 s | 8.935 s | 4.287 s | 4,000 | 841 | 0.000 s |
-| 1 TB | 153.1 s | 148.116 s | 128.404 s | 19.243 s | 16,000 | 8,693 | 0.000 s |
-
-Detailed 1 TB closed-loop bottleneck:
-
-| Metric | Value |
-|--------|-------|
-| Phase 1 register | 126.736 s |
-| Register calls | 16,000 |
-| Register `log_apply` | 117.817 s |
-| BG virtual jobs | 52,714 |
-| BG virtual cumulative time | 1,161.198 s |
-| BG virtual `log_apply` | 1,003.144 s |
-| BG commit batching | 11,644 batches / 52,714 jobs / avg 4.53 jobs |
-| Total `LogAndApply` | 254.278 s / 29,912 calls |
-
-Conclusion: closed-loop pacing is conceptually closer to baseline, but
-one-at-a-time registration is too slow. The next design should keep the hidden
-pending queue but release a **byte-aware batch** under an L0 safety condition,
-instead of unconditional `REGISTER_BATCH=256` or one VersionEdit per VSST.
-
 ### Baseline L0 behavior must be parsed by bytes, not file count
 
 Important correction from today's discussion: intra-L0 compaction means a
@@ -1959,40 +1887,36 @@ Baseline LOG data source:
 | L0->L0 | 18,568 | 4.05 / 4 / 5 / 7 | 275.1 MB / 251.0 MB / 1,066.7 MB / 1.53 GB | same |
 | L0->L1 | 4,644 | 6.09 / 6 / 13 / 16 | 1,147.5 MB / 1,003.9 MB / 3,199.7 MB / 4.53 GB | 1,681.5 MB / 1,479.5 MB / 3,983.0 MB / 8.31 GB |
 
-This changes the design target. The old "4GB L0->L1 gate" roughly matches
-the 1 TB p99-ish behavior but is too high for the 5 TB median. A fixed byte
-gate is therefore not robust. We need either:
+This changes the design target. The current design keeps a bounded visible L0
+byte window and refills it while:
 
-- an online pacing rule that mimics baseline slowdown/stop exposure while
-  observing L0 bytes, or
-- a batch-release rule that admits pending VSSTs until the visible L0 byte
-  budget resembles baseline, then lets RocksDB's normal picker run.
+```
+virtual_l0_visible_bytes_ < target_bytes
+```
+
+Registered VSSTs are immediately visible to RocksDB's regular L0 score and
+compaction picker.
 
 Strict apples-to-apples note: the 1 TB and 5 TB baseline logs above were
 loaded with the same options but different git SHAs. For final paper numbers,
 rerun baseline and vcomp with the same binary and parse the same byte metrics.
 
-## 2026-06-01 — Current checkpoint: size-gated release, failed file-number experiments, intra-L0-off ablation
+## 2026-06-01 — Size-gated pending window, failed file-number experiments, intra-L0-off ablation
 
-This is the latest state after backing away from the closed-loop/time-scaled
-release design. The current active design is:
+This checkpoint finalized the bounded visible-L0 window design:
 
-- Pre-register hidden L0 VSSTs in VersionSet with
-  `virtual_compaction_eligible=false`.
-- Release hidden files by flipping the in-memory eligibility bit; release does
-  not call `LogAndApply`.
-- Use `--vcomp_release_batch_max=256` for hidden registration batches.
-- Use `--vcomp_visible_l0_batch_mb=4096` for visible release batch size.
-- Gate release while visible eligible L0 count is at least
-  `level0_file_num_compaction_trigger` or visible eligible L0 bytes are at
-  least `vcomp_visible_l0_batch_mb`.
+- Queue generated L0 VSSTs in memory.
+- Register bounded visible L0 batches through `RefillVirtualL0Window()`.
+- Use `--vcomp_register_batch_max=256` as the maximum files per registration
+  `VersionEdit`.
+- Use `--vcomp_visible_l0_batch_mb=4096` as the visible L0 byte target.
 
 Latest stable runs before the intra-L0-off patch:
 
 | Scale | Run | Total | Phase 1 | BG wait | Phase 2 | Final SSTs | Final size | Materialized keys |
 |-------|-----|-------|---------|---------|---------|------------|------------|-------------------|
-| 250 GB | `release_overlap_250gb_260601_072152` | 10.153 s | 6.460 s | 0.251 s | 3.442 s | 3,102 | 176.59 GB | 182,272,697 |
-| 1 TB | `release_overlap_1tb_260601_072600` | 57.248 s | 39.708 s | 1.307 s | 16.233 s | 12,849 | 769.26 GB | 794,002,100 |
+| 250 GB | `visible_window_250gb_260601_072152` | 10.153 s | 6.460 s | 0.251 s | 3.442 s | 3,102 | 176.59 GB | 182,272,697 |
+| 1 TB | `visible_window_1tb_260601_072600` | 57.248 s | 39.708 s | 1.307 s | 16.233 s | 12,849 | 769.26 GB | 794,002,100 |
 
 1 TB BG virtual compaction breakdown:
 
@@ -2033,7 +1957,7 @@ Before disabling intra-L0, vcomp intra-L0 was far below baseline:
 | vcomp 250 GB | 51 | 6.00 | 421.6 MiB | always 1 file |
 | vcomp 1 TB | 193 | 6.00 | 393.9 MiB | always 1 file |
 
-Interpretation: the next tuning target is visible L0 release size, not
+Interpretation: the next tuning target is the visible L0 byte target, not
 file-number allocation. The 4 GiB visible batch is larger than baseline's
 average L0->L1 total input, and much larger than baseline's average L0-only
 input.
@@ -2052,7 +1976,7 @@ LSM and materialized key count. They were reverted.
 
 | Run | Total | Phase 1 | BG wait | Phase 2 | Final SSTs | Final size | Final keys |
 |-----|-------|---------|---------|---------|------------|------------|------------|
-| Normal release-overlap | 57.248 s | 39.708 s | 1.307 s | 16.233 s | 12,849 | 769.26 GB | 794,002,100 |
+| Normal visible-window | 57.248 s | 39.708 s | 1.307 s | 16.233 s | 12,849 | 769.26 GB | 794,002,100 |
 | No-lock Phase 1 file numbers | 70.687 s | 24.777 s | 31.345 s | 14.566 s | 11,535 | 687.32 GB | 709,435,976 |
 | Reserved L0 file numbers | 70.024 s | 24.187 s | 30.418 s | 15.419 s | 11,545 | 672.08 GB | 693,698,022 |
 
@@ -2089,7 +2013,7 @@ Smoke validation:
 
 Next required validation: rerun 250 GB and 1 TB with intra-L0 disabled and
 compare L0->L1 input size, cumulative dedup, final keys, runtime, and final
-level shape against the normal release-overlap runs above.
+level shape against the normal visible-window runs above.
 
 ## 2026-06-02 - Metadata critical path and profiling plan
 
@@ -2141,8 +2065,8 @@ Profiling plan:
 5. If futex wait dominates, record lock/wakeup stacks:
    `perf record -g -e sched:sched_switch,sched:sched_wakeup -p <pid> -- sleep 30`.
 6. Classify wait sites by stack: idle BG condition variable, VersionSet writer
-   queue, DB mutex, virtual compaction commit condition variable, or release
-   gate.
+   queue, DB mutex, virtual compaction commit condition variable, or L0 refill
+   wait.
 7. Decision rule: one busy BG thread in VersionSet prepare plus many waiting
    followers means serialized CPU; many BG threads blocked in writer queue or
    DB mutex means lock/wait; many BG threads active in PLR merge/split means
@@ -2171,20 +2095,17 @@ Completed profiling run:
   `split=10.512`.
 - Commit batching: 10,126 batches / 41,560 jobs, average batch 4.10,
   queue wait 62.748 s.
-- L0 release still has a large non-compaction cost:
-  `visible_stats=21.896`, `gate_wait=12.388`.
 
 Interpretation: the low-CPU symptom is not Linux scheduler starvation.
 `perf sched latency` shows low scheduling delay for `rocksdb:low` threads.
 The current bottleneck is mixed, but the scalable problem is serialized
-VersionSet metadata work and release-thread full scans. PLR CPU is visible
+VersionSet metadata work and visible-window scans. PLR CPU is visible
 (`NWayMergePLR`, sort, `PLRModel::Inverse`, `SplitIntoSSTs`), but it is much
 smaller than cumulative `LogAndApply` and commit-queue wait.
 
 Next target:
 
-- Maintain visible L0 count/bytes incrementally instead of scanning L0 files
-  in the release thread.
+- Maintain visible L0 count/bytes incrementally instead of scanning L0 files.
 - Reduce VersionSet prepare cost, especially `GenerateLevelFilesBrief`,
   `GenerateLevel0NonOverlapping`, `GenerateFileLocationIndex`, and
   `CheckConsistencyDetails`.
@@ -2221,14 +2142,14 @@ BG commit batches, which increased `LogAndApply` calls from `77,006` to
 
 We added environment-controlled BG virtual compaction commit batching:
 
-- `VCOMP_BG_COMMIT_BATCH_MAX` (default `64`)
-- `VCOMP_BG_COMMIT_DELAY_US` (default `0`)
+- `VCOMP_BG_COMMIT_BATCH_MAX` (default `16`)
+- `VCOMP_BG_COMMIT_DELAY_US` (default `100`)
 
 The leader briefly releases the DB mutex and sleeps before draining the commit
 queue, allowing follower jobs that are already near commit-ready to join the
 same `LogAndApply` batch.
 
-Best current setting:
+Current defaults:
 
 ```bash
 VCOMP_BG_COMMIT_BATCH_MAX=16
@@ -2334,8 +2255,8 @@ We added a narrower `ComputeCompactionScore` optimization after the
 `SaveSSTFilesTo` fast path:
 
 - `ComputeCompensatedSizes()` now also collects per-level score inputs:
-  total file size, compensated size, non-compacting size/count, and L0
-  virtual-eligible size/count.
+  total file size, compensated size, and non-compacting size/count. L0 score
+  and compaction-needed estimates use the registered L0 files directly.
 - `ComputeCompactionScore()` and `EstimateCompactionBytesNeeded()` reuse those
   cached inputs on the Version append path instead of rescanning all SST files.
 - Finalized/current versions still fall back to live scanning, preserving

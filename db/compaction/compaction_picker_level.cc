@@ -659,9 +659,6 @@ bool LevelCompactionBuilder::TryPickL0TrivialMove() {
       CompactionInputFiles output_level_inputs;
       output_level_inputs.level = output_level_;
       FileMetaData* file = *it;
-      if (!file->virtual_compaction_eligible) {
-        continue;
-      }
       if (it == level_files.rbegin()) {
         my_smallest = file->smallest;
         my_largest = file->largest;
@@ -830,10 +827,6 @@ bool LevelCompactionBuilder::PickFileToCompact() {
     int index = file_scores[cmp_idx];
     auto* f = level_files[index];
 
-    if (!f->virtual_compaction_eligible) {
-      continue;
-    }
-
     // do not pick a file to compact if it is being compacted
     // from n-1 level.
     if (f->being_compacted) {
@@ -916,13 +909,7 @@ bool LevelCompactionBuilder::PickIntraL0Compaction() {
       vstorage_->LevelFiles(0 /* level */);
   const size_t max_num_file = static_cast<size_t>(
       mutable_cf_options_.level0_file_num_compaction_trigger + 2);
-  size_t eligible_files = 0;
-  for (const auto& file : level_files) {
-    if (file->virtual_compaction_eligible) {
-      eligible_files++;
-    }
-  }
-  if (eligible_files <
+  if (level_files.size() <
       static_cast<size_t>(
           mutable_cf_options_.level0_file_num_compaction_trigger + 2)) {
     // If L0 isn't accumulating much files beyond the regular trigger, don't
@@ -952,20 +939,11 @@ bool LevelCompactionBuilder::PickSizeBasedIntraL0Compaction() {
       min_num_file,
       static_cast<size_t>(
           mutable_cf_options_.level0_file_num_compaction_trigger + 2));
-  size_t eligible_files = 0;
-  for (const auto& file : l0_files) {
-    if (file->virtual_compaction_eligible) {
-      eligible_files++;
-    }
-  }
-  if (eligible_files < min_num_file) {
+  if (l0_files.size() < min_num_file) {
     return false;
   }
   uint64_t l0_size = 0;
   for (const auto& file : l0_files) {
-    if (!file->virtual_compaction_eligible) {
-      continue;
-    }
     assert(file->compensated_file_size >= file->fd.GetFileSize());
     // Compact down L0s with more deletions.
     l0_size += file->compensated_file_size;
@@ -992,9 +970,6 @@ bool LevelCompactionBuilder::PickSizeBasedIntraL0Compaction() {
   start_level_inputs_.clear();
   start_level_inputs_.level = 0;
   for (const auto& file : l0_files) {
-    if (!file->virtual_compaction_eligible) {
-      continue;
-    }
     if (file->being_compacted) {
       break;
     }

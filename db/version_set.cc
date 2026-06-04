@@ -3681,15 +3681,6 @@ void VersionStorageInfo::ComputeCompensatedSizes() {
             file_meta->compensated_file_size;
         stats.non_compacting_file_count++;
       }
-      if (level == 0 && file_meta->virtual_compaction_eligible) {
-        stats.l0_eligible_file_count++;
-        stats.l0_eligible_file_size += file_meta->fd.GetFileSize();
-        if (!file_meta->being_compacted) {
-          stats.l0_eligible_non_compacting_compensated_size +=
-              file_meta->compensated_file_size;
-          stats.l0_eligible_non_compacting_file_count++;
-        }
-      }
     }
   }
   level_compaction_stats_valid_ = true;
@@ -3712,15 +3703,6 @@ void VersionStorageInfo::CollectLevelCompactionStats(
         level_stats.non_compacting_compensated_size +=
             file_meta->compensated_file_size;
         level_stats.non_compacting_file_count++;
-      }
-      if (level == 0 && file_meta->virtual_compaction_eligible) {
-        level_stats.l0_eligible_file_count++;
-        level_stats.l0_eligible_file_size += file_meta->fd.GetFileSize();
-        if (!file_meta->being_compacted) {
-          level_stats.l0_eligible_non_compacting_compensated_size +=
-              file_meta->compensated_file_size;
-          level_stats.l0_eligible_non_compacting_file_count++;
-        }
       }
     }
   }
@@ -3772,11 +3754,11 @@ void VersionStorageInfo::EstimateCompactionBytesNeeded(
   }
 
   uint64_t bytes_compact_to_next_level = 0;
-  uint64_t level_size = (*level_stats)[0].l0_eligible_file_size;
-  int eligible_l0_count = (*level_stats)[0].l0_eligible_file_count;
+  uint64_t level_size = (*level_stats)[0].file_size;
+  int l0_count = static_cast<int>(files_[0].size());
   // Level 0
   bool level0_compact_triggered = false;
-  if (eligible_l0_count >= mutable_cf_options.level0_file_num_compaction_trigger ||
+  if (l0_count >= mutable_cf_options.level0_file_num_compaction_trigger ||
       level_size >= mutable_cf_options.max_bytes_for_level_base) {
     level0_compact_triggered = true;
     estimated_compaction_needed_bytes_ = level_size;
@@ -3939,10 +3921,9 @@ void VersionStorageInfo::ComputeCompactionScore(
       // setting, or very high compression ratios, or lots of
       // overwrites/deletions).
       const LevelCompactionStats& l0_stats = (*level_stats)[level];
-      int num_sorted_runs = l0_stats.l0_eligible_non_compacting_file_count;
-      uint64_t total_size = l0_stats.l0_eligible_non_compacting_compensated_size;
-      total_downcompact_bytes +=
-          static_cast<double>(l0_stats.l0_eligible_file_size);
+      int num_sorted_runs = l0_stats.non_compacting_file_count;
+      uint64_t total_size = l0_stats.non_compacting_compensated_size;
+      total_downcompact_bytes += static_cast<double>(l0_stats.file_size);
       if (compaction_style_ == kCompactionStyleUniversal) {
         // For universal compaction, we use level0 score to indicate
         // compaction score for the whole DB. Adding other levels as if
@@ -5223,12 +5204,7 @@ void VersionStorageInfo::CalculateBaseBytes(const ImmutableOptions& ioptions,
                                             const MutableCFOptions& options) {
   // Special logic to set number of sorted runs.
   // It is to match the previous behavior when all files are in L0.
-  int num_l0_count = 0;
-  for (auto* f : files_[0]) {
-    if (f->virtual_compaction_eligible) {
-      num_l0_count++;
-    }
-  }
+  int num_l0_count = static_cast<int>(files_[0].size());
   if (compaction_style_ == kCompactionStyleUniversal) {
     // For universal compaction, we use level0 score to indicate
     // compaction score for the whole DB. Adding other levels as if

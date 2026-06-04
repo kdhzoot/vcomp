@@ -960,18 +960,14 @@ DEFINE_int32(level0_file_num_compaction_trigger,
              ROCKSDB_NAMESPACE::Options().level0_file_num_compaction_trigger,
              "Number of files in level-0 when compactions start.");
 
-DEFINE_int32(level0_file_num_register_batch, 0,
-             "Deprecated for fillvirtual closed-loop L0 release; ignored.");
+DEFINE_uint64(vcomp_register_batch_max, 256,
+              "Maximum number of pending virtual L0 files to register in one "
+              "VersionEdit.");
 
-DEFINE_uint64(vcomp_release_batch_max, 256,
-              "Maximum number of shadow virtual L0 files to register in one "
-              "VersionEdit. Shadow files are not compaction-visible until "
-              "the size-gated release thread enables them.");
-
-DEFINE_uint64(vcomp_visible_l0_batch_mb, 0,
-              "Target total file size, in MiB, to make compaction-visible per "
-              "L0 release. If zero, one memtable flush worth of virtual SSTs "
-              "is released per batch.");
+DEFINE_uint64(vcomp_visible_l0_batch_mb, 4096,
+              "Target total registered virtual L0 size, in MiB. Set to zero "
+              "to register one memtable flush worth of virtual SSTs per "
+              "batch.");
 
 DEFINE_bool(vcomp_log_apply_timing, true,
             "Collect detailed LogAndApply timing breakdown for fillvirtual. "
@@ -5557,14 +5553,14 @@ class Benchmark {
 
     const uint64_t memtable_flush_bytes =
         static_cast<uint64_t>(FLAGS_memtable_flush_size) * 1024 * 1024;
-    const uint64_t release_batch_max =
-        std::max<uint64_t>(1, FLAGS_vcomp_release_batch_max);
+    const uint64_t register_batch_max =
+        std::max<uint64_t>(1, FLAGS_vcomp_register_batch_max);
     const uint64_t visible_l0_batch_bytes =
         FLAGS_vcomp_visible_l0_batch_mb > 0
             ? FLAGS_vcomp_visible_l0_batch_mb * 1024ULL * 1024ULL
             : memtable_flush_bytes;
     db_impl->ConfigureVirtualL0Window(visible_l0_batch_bytes,
-                                      release_batch_max);
+                                      register_batch_max);
     const uint64_t reserved_l0_file_base =
         versions->FetchAddFileNumber(total_flushes_expected);
     uint64_t next_reserved_l0_file = reserved_l0_file_base;
@@ -5595,7 +5591,7 @@ class Benchmark {
     }
 
     std::vector<DBImpl::VirtualL0WindowFile> l0_window_enqueue_batch;
-    l0_window_enqueue_batch.reserve(release_batch_max);
+    l0_window_enqueue_batch.reserve(register_batch_max);
 
     auto flush_l0_window_enqueue_batch = [&]() {
       if (l0_window_enqueue_batch.empty()) {
@@ -5604,7 +5600,7 @@ class Benchmark {
       Status s =
           enqueue_l0_window_batch(std::move(l0_window_enqueue_batch));
       l0_window_enqueue_batch.clear();
-      l0_window_enqueue_batch.reserve(release_batch_max);
+      l0_window_enqueue_batch.reserve(register_batch_max);
       if (!s.ok()) {
         l0_window_status = s;
         l0_window_failed.store(true, std::memory_order_relaxed);
@@ -5674,7 +5670,7 @@ class Benchmark {
       auto t5 = FLAGS_env->NowMicros();
 
       l0_window_enqueue_batch.push_back(std::move(pending_file));
-      if (l0_window_enqueue_batch.size() >= release_batch_max) {
+      if (l0_window_enqueue_batch.size() >= register_batch_max) {
         flush_l0_window_enqueue_batch();
       }
       auto t6 = FLAGS_env->NowMicros();
@@ -5727,7 +5723,7 @@ class Benchmark {
         flush_us / 1e6);
     fprintf(stderr,
         "  Phase 1 keygen detail: foreground=%.3fs accounted=%.3fs "
-        "rng_push_loop=%.3fs release_thread=0\n",
+        "rng_push_loop=%.3fs\n",
         phase1_total_us / 1e6, accounted_us / 1e6, keygen_us / 1e6);
     uint64_t register_accounted_us =
         register_stats.mutex_wait_us + register_stats.log_apply_us +

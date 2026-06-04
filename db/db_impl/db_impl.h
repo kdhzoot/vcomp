@@ -1118,8 +1118,6 @@ class DBImpl : public DB {
 
   Status RegisterVirtualL0File(VersionEdit* edit,
                                VirtualL0RegistrationStats* stats = nullptr);
-  Status MarkVirtualL0FilesCompactionEligible(
-      const std::vector<uint64_t>& file_numbers, uint64_t* changed = nullptr);
 
   struct VirtualL0WindowFile {
     uint64_t file_number = 0;

@@ -73,6 +73,19 @@ DB_DIR="${DB_DIR:-${DB_ROOT%/}/${RUN_NAME}}"
 RAW_DIR="${RUN_DIR}/raw"
 REP_FILE="${RUN_DIR}/report.rep"
 OUT_FILE="${RUN_DIR}/bench.out"
+IOSTAT_PID=""
+
+cleanup_iostat() {
+  if [[ -n "${IOSTAT_PID:-}" ]]; then
+    kill "${IOSTAT_PID}" 2>/dev/null || true
+    wait "${IOSTAT_PID}" 2>/dev/null || true
+    IOSTAT_PID=""
+  fi
+}
+
+trap cleanup_iostat EXIT
+trap 'cleanup_iostat; exit 130' INT
+trap 'cleanup_iostat; exit 143' TERM
 
 # ── PLR / vcomp parameters (only used in vcomp mode) ──
 PLR_ERROR_BOUND="${PLR_ERROR_BOUND:-8}"
@@ -103,6 +116,8 @@ cmd=(
   --num="${MAX_OPS}"
   --key_size="${KEY_SIZE_HINT}"
   --value_size="${RG_VALUE_SIZE}"
+  --threads=1
+  --memtablerep=vector
   --seed=12345678
   --db="${DB_DIR}"
   --use_direct_reads=true
@@ -158,9 +173,7 @@ echo "${start_ts}" > "${RAW_DIR}/start_epoch.txt"
 cat /proc/diskstats > "${RAW_DIR}/diskstats.start"
 cat /proc/stat > "${RAW_DIR}/procstat.start"
 if command -v iostat >/dev/null 2>&1; then
-  iostat -dx 1 > "${RAW_DIR}/iostat.log" & iostat_pid=$!
-else
-  iostat_pid=""
+  iostat -dx 1 > "${RAW_DIR}/iostat.log" & IOSTAT_PID=$!
 fi
 
 set +e
@@ -168,7 +181,7 @@ set +e
 exit_code=$?
 set -e
 
-[[ -z "${iostat_pid:-}" ]] || { kill "${iostat_pid}" 2>/dev/null || true; wait "${iostat_pid}" 2>/dev/null || true; }
+cleanup_iostat
 
 # ── Collect after-stats ──
 end_ts="$(date +%s)"
@@ -201,6 +214,8 @@ echo "Mode:      ${MODE}"
 echo "Trace:     ${TRACE_FILE}"
 echo "MAX_OPS:   ${MAX_OPS}"
 echo "DB Size:   ${db_size}"
+echo "Threads:   1"
+echo "Memtable:  vector"
 echo "Elapsed:   ${elapsed} sec (full db_bench command)"
 echo "Primary:   ${primary_bench:-NA} ${primary_sec:-NA} sec"
 echo "Remainder: ${non_primary_sec} sec (post-primary benchmarks + teardown)"

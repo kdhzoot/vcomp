@@ -6,10 +6,11 @@ MODE=baseline TARGET_DB_GB=10 DB_ROOT=/work/vcomp bash load.sh
 # Virtual compaction (fillvirtual + PLR-based compaction + materialization)
 MODE=vcomp TARGET_DB_GB=10 DB_ROOT=/work/vcomp bash load.sh
 
-# Explicit size-gated visible L0 release
+# Explicit bounded visible-L0 refill. The default value, 0, uses
+# RocksDB's max_compaction_bytes as the visible-L0 target.
 MODE=vcomp TARGET_DB_GB=10 DB_ROOT=/work/vcomp \
-  VCOMP_RELEASE_BATCH_MAX=256 \
-  VCOMP_VISIBLE_L0_BATCH_MB=4096 \
+  VCOMP_REGISTER_BATCH_MAX=256 \
+  VCOMP_VISIBLE_L0_BATCH_MB=0 \
   bash load.sh
 EXAMPLE
 
@@ -44,6 +45,19 @@ DB_DIR="${DB_DIR:-${DB_ROOT%/}/${MODE}_${TARGET_DB_GB}gb}"
 RAW_DIR="${RUN_DIR}/raw"
 REP_FILE="${RUN_DIR}/report.rep"
 OUT_FILE="${RUN_DIR}/bench.out"
+IOSTAT_PID=""
+
+cleanup_iostat() {
+  if [[ -n "${IOSTAT_PID:-}" ]]; then
+    kill "${IOSTAT_PID}" 2>/dev/null || true
+    wait "${IOSTAT_PID}" 2>/dev/null || true
+    IOSTAT_PID=""
+  fi
+}
+
+trap cleanup_iostat EXIT
+trap 'cleanup_iostat; exit 130' INT
+trap 'cleanup_iostat; exit 143' TERM
 
 # CACHE_BYTES=$((1024 * 1024 * 1024 * CACHE_SIZE_GB))
 NKEYS=$((TARGET_DB_GB * 1024 * 1024 * 1024 / KV_SIZE))
@@ -52,9 +66,10 @@ NKEYS=$((TARGET_DB_GB * 1024 * 1024 * 1024 / KV_SIZE))
 PLR_ERROR_BOUND="${PLR_ERROR_BOUND:-8}"
 MEMTABLE_FLUSH_MB="${MEMTABLE_FLUSH_MB:-64}"
 BG_JOBS="${BG_JOBS:-$(nproc)}"
-VCOMP_RELEASE_BATCH_MAX="${VCOMP_RELEASE_BATCH_MAX:-256}"
-VCOMP_VISIBLE_L0_BATCH_MB="${VCOMP_VISIBLE_L0_BATCH_MB:-4096}"
+VCOMP_REGISTER_BATCH_MAX="${VCOMP_REGISTER_BATCH_MAX:-256}"
+VCOMP_VISIBLE_L0_BATCH_MB="${VCOMP_VISIBLE_L0_BATCH_MB:-0}"
 VCOMP_LOG_APPLY_TIMING="${VCOMP_LOG_APPLY_TIMING:-true}"
+COMPRESSION_TYPE="${COMPRESSION_TYPE:-none}"
 
 [[ ! -d "${DB_DIR}" ]] || { echo "[ERROR] DB already exists: ${DB_DIR}" >&2; exit 1; }
 mkdir -p "${DB_DIR}" "${RAW_DIR}"
@@ -76,11 +91,13 @@ cmd=(
   --num="${NKEYS}"
   --key_size="${KEY_SIZE}"
   --value_size="${VALUE_SIZE}"
+  --threads=1
+  --memtablerep=vector
   --seed=12345678
   --db="${DB_DIR}"
   --use_direct_reads=true
   --use_direct_io_for_flush_and_compaction=true
-  --compression_type=none
+  --compression_type="${COMPRESSION_TYPE}"
 )
 
 if [[ "${MODE}" == "baseline" ]]; then
@@ -96,8 +113,8 @@ else
     --plr_error_bound="${PLR_ERROR_BOUND}"
     --memtable_flush_size="${MEMTABLE_FLUSH_MB}"
   )
-  [[ -z "${VCOMP_RELEASE_BATCH_MAX}" ]] || \
-    cmd+=(--vcomp_release_batch_max="${VCOMP_RELEASE_BATCH_MAX}")
+  [[ -z "${VCOMP_REGISTER_BATCH_MAX}" ]] || \
+    cmd+=(--vcomp_register_batch_max="${VCOMP_REGISTER_BATCH_MAX}")
   [[ -z "${VCOMP_VISIBLE_L0_BATCH_MB}" ]] || \
     cmd+=(--vcomp_visible_l0_batch_mb="${VCOMP_VISIBLE_L0_BATCH_MB}")
   cmd+=(--vcomp_log_apply_timing="${VCOMP_LOG_APPLY_TIMING}")
@@ -127,15 +144,15 @@ echo "${start_ts}" > "${RAW_DIR}/start_epoch.txt"
 cat /proc/diskstats > "${RAW_DIR}/diskstats.start"
 cat /proc/stat > "${RAW_DIR}/procstat.start"
 if command -v iostat >/dev/null 2>&1; then
-  iostat -dx 1 > "${RAW_DIR}/iostat.log" & iostat_pid=$!
-else
-  iostat_pid=""
+  iostat -dx 1 > "${RAW_DIR}/iostat.log" & IOSTAT_PID=$!
 fi
 
+set +e
 "${cmd[@]}" >> "${OUT_FILE}" 2>&1
 exit_code=$?
+set -e
 
-[[ -z "${iostat_pid:-}" ]] || { kill "${iostat_pid}" 2>/dev/null || true; wait "${iostat_pid}" 2>/dev/null || true; }
+cleanup_iostat
 
 # ── Collect after-stats ──
 end_ts="$(date +%s)"
@@ -152,6 +169,8 @@ echo "=== Summary ==="
 echo "Mode:      ${MODE}"
 echo "DB Size:   ${db_size}"
 echo "Keys:      ${NKEYS}"
+echo "Threads:   1"
+echo "Memtable:  vector"
 echo "Elapsed:   ${elapsed} sec"
 echo "Log:       ${RUN_DIR}"
 echo "DB:        ${DB_DIR}"

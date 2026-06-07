@@ -23,15 +23,11 @@ RUNS = [
     ("BG jobs 48", "vcomp_260531_1420_1000gb_bgjobs48_regbatch256_1tb_260531_140447"),
     ("Batch LogApply", "vcomp_260531_1503_1000gb_batchpatch_1tb_260531_150343"),
     ("L0 cap", "vcomp_260531_1555_1000gb_l0cap_1tb_260531_155557"),
-    ("Closed-loop", "vcomp_260531_1711_1000gb_closedloop_1000gb_260531_171108"),
     ("Size gate 4GB", "vcomp_260601_0605_1000gb_sizegate4gb_1tb_260601_060501"),
     ("Commit batch", "vcomp_260601_0651_1000gb_commitbatch_1tb_260601_065139"),
-    ("Release overlap", "vcomp_260601_0726_1000gb_release_overlap_1tb_260601_072600"),
     ("FNum no-lock", "vcomp_260601_0740_1000gb_fnum_nolock_phase1_1tb_260601_074000"),
     ("FNum reserve", "vcomp_260601_0749_1000gb_fnum_reserve_1tb_260601_074933"),
     ("Intra-L0 off", "vcomp_260601_1203_1000gb_intra_l0_off_1tb_260601_120348"),
-    ("Active release", "vcomp_260601_1231_1000gb_active_release_1tb_260601_123116"),
-    ("Reserve active", "vcomp_260601_1240_1000gb_reserve_active_1tb_260601_124051"),
     ("BG cap256/delay50", "vcomp_260601_1328_1000gb_bg256_1tb_260601_132851"),
     ("BG cap16/delay50", "vcomp_260601_1333_1000gb_bg16_1tb_260601_133318"),
     ("BG cap64/delay0", "vcomp_260601_1403_1000gb_bg64_delay0_1tb_260601_140316"),
@@ -221,14 +217,7 @@ def draw(rows):
         frameon=False,
         title="Component",
     )
-    fig.text(
-        0.01,
-        0.01,
-        "Note: L0 gate wait is not stacked because it overlaps foreground Phase 1 in the release thread.",
-        fontsize=10,
-        color="#555555",
-    )
-    fig.tight_layout(rect=(0, 0.055, 1, 1))
+    fig.tight_layout()
     fig.savefig(OUT_PNG, dpi=220)
 
 

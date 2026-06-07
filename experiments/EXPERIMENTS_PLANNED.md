@@ -1,211 +1,271 @@
 # Planned Experiments
 
-Experiments queued up for later. Each entry has enough detail to pick
-up without re-deriving the context.
+## 2026-06-04: Paper Experiment Plan
 
-## 2026-04-15: Fragmentation isolation (baseline 250GB) — RESOLVED (2026-05-13, different method)
+**Status**: Planned.
 
-**Status**: Resolved via a cleaner method on 2026-05-13. The original
-plan (re-load N times and measure fill_run_1 each time) was
-unnecessary once we realised the underlying variable is *NVMe
-physical state of the data being read*, not *fragmentation of free
-space around it*. The 2026-05-13 deep-copy experiment (
-[RESULTS.md §3.3](RESULTS.md#33-nvme-physical-state-effect--2026-05-13-isolation-experiment))
-isolated the effect: same DB content read at 141 µs/block from its
-April LBAs vs 106 µs/block from fresh-copied LBAs — independent of
-DB tree shape or surrounding load history.
+논문 experiment part는 no-compression track으로 정리한다. Compression은
+motivation에서 비용 차이를 확인하는 정도로만 남기고, 본 실험에서는
+`compression_type=none`만 사용한다.
 
-Quantified split: ~13 pp of the original §3.1 −18.2 % elapsed gap
-was NVMe state; ~5 pp was real tree-shape advantage.
+### Common Setup
 
-The plan below is kept for the record.
+- DB output root: `/work/vcomp/exp`
+- Log output root: `eval-vcomp/log_loads/exp_<RUN_ID>/`
+- Execution: sequential only. Do not run two loading/read jobs at once.
+- 1KB workload: 24B key + 1000B value
+- 91B workload: 48B key + 43B value
+- Write threads: 1
+- Memtable representation: `vector`
+- WAL: disabled
+- Direct I/O: enabled for reads, flushes, and compactions
+- Bloom bits: 10
+- Index compression: disabled
+- Baseline binary: `../rocksdb/db_bench`
+- Vcomp binary: `../vcomp/db_bench`
+- Profiling binary: `../vcomp-prof/db_bench` only when compaction breakdown is needed
 
----
+Directory convention:
 
-### Original plan (fragmentation isolation via N reloads)
-
-**Goal**: quantify how much of the 10~12% readrandom variance across our
-batch measurements is driven by disk fragmentation vs. actual DB shape
-differences. All current cross-DB comparisons have been contaminated by
-the fact that DBs loaded on different days see different underlying
-NVMe/md0 allocations.
-
-**Setup**
-
-- Mode: **baseline only** (fillrandom → compact0 → waitforcompaction,
-  the existing `load.sh` flow)
-- N = **20** fresh loads
-- Reads: **1M keys**, 1 thread, cache=0 (same as our standard readrandom
-  comparison)
-- For each iteration i (1..N):
-  1. `load.sh` creates `fill_run_i`
-  2. `run.sh` executes `readrandom` against **only `fill_run_1`**
-     (the first DB — the same logical content is read every time)
-
-So there are N readrandom measurements, all on the *same* DB, but with
-progressively more unrelated writes surrounding it on disk.
-
-**What we expect to see**
-
-- `filter_per_get`, `data_per_get`, `bloom_fpr` — should be constant
-  (same DB, same queries). Sanity check.
-- `elapsed_s`, `sst_read_p50`, `sst_read_p99`, `disk_read_MBs` — should
-  drift (probably upward in latency) as new writes fragment the NVMe
-  allocation around `fill_run_1`'s SSTs.
-- The shape of that drift quantifies the fragmentation effect and tells
-  us how to weight cross-DB comparisons.
-
-**Cost**
-
-- Loading dominates: 20 × ~15min = **~5 hours**
-- Readrandom: 20 × ~7min = **~2.3 hours**
-- Total: **~7.3 hours**, ~3.5 TB peak disk usage (20 × 177 GB)
-
-**Implementation sketch**
-
-New `fragmentation_exp.sh` orchestrating existing `load.sh` and `run.sh`:
-
-```bash
-BATCH_TS=$(date +%y%m%d_%H%M)
-BATCH_DB=/work/vcomp/${BATCH_TS}_frag_baseline_x20
-BATCH_LOG=log_batch/${BATCH_TS}_frag_baseline_x20
-mkdir -p "$BATCH_DB" "$BATCH_LOG"
-
-for i in $(seq 1 20); do
-  # Load i-th fill DB
-  LOG_DIR="$BATCH_LOG/loads/fill_run_${i}" \
-    DB_DIR="$BATCH_DB/fill_run_${i}" \
-    MODE=baseline TARGET_DB_GB=250 DB_ROOT="$BATCH_DB" \
-    bash load.sh
-
-  # Measure readrandom on fill_run_1 (always the same DB)
-  RESULT_DIR="$BATCH_LOG/reads/fill_run_1_after_load_${i}" \
-    WORKLOAD=readrandom DB_DIR="$BATCH_DB/fill_run_1" DB_SIZE_GB=250 \
-    CACHE_PCT=0 THREADS=1 DURATION=0 READS=1000000 \
-    bash run.sh
-done
+```text
+/work/vcomp/exp/
+  reality/
+    baseline_1tb_1kb_none_<RUN_ID>/
+    vcomp_1tb_1kb_none_<RUN_ID>/
+    baseline_1tb_91b_none_<RUN_ID>/
+    vcomp_1tb_91b_none_<RUN_ID>/
+  scaling/
+    baseline_<size>_<kv>_none_<RUN_ID>/
+    vcomp_<size>_<kv>_none_<RUN_ID>/
+  sweep/
+    zipf_alpha_<alpha>_<RUN_ID>/
+    unique_ratio_<ratio>_<RUN_ID>/
 ```
 
-Aggregate via the existing `parse_runs.py` (extend if needed) or a
-dedicated script that reads the per-iteration `summary.txt` + `stdout.txt`
-and plots elapsed/latency vs. iteration index.
+## A. Reality Ground Truth
 
-**Pre-flight checklist**
+Question:
 
-- [ ] `load.sh` accepts `DB_DIR` override (already true as of 2026-04-10).
-- [ ] `run.sh` accepts `RESULT_DIR` override (already true as of 2026-04-14).
-- [ ] Enough disk for 20 × 177 GB ≈ 3.5 TB (currently >40 TB free).
-- [ ] No other batch jobs running that would pollute the disk state
-      mid-experiment.
+`baseline RocksDB로 만든 DB와 vcomp로 만든 DB가 read/query 관점에서 충분히 같은가?`
 
-**Not in scope**
+Matrix:
 
-- vcomp loading — this experiment is about the baseline loading path
-  and its interaction with NVMe allocation.
-- Varying N by DB index (e.g. readrandom on fill_run_i as well) — we
-  tried that idea and settled on "only fill_run_1" to keep the matrix
-  small. One trajectory is enough to see the drift.
+| Scale | KV | Compression | Systems |
+| ---: | ---: | --- | --- |
+| 1TB | 1KB value | none | baseline, vcomp |
+| 1TB | 91B KV | none | baseline, vcomp |
+| 10TB | 1KB value | none | baseline, vcomp |
+| 10TB | 91B KV | none | baseline, vcomp |
 
-## 2026-05-12: Write-stall path in vcomp (continuation of 2026-05-11) — RESOLVED (different path)
+10TB는 1TB에서 관찰한 결론이 large scale에서도 유지되는지 확인하는
+comparison point다. 실행 비용이 너무 크면 10TB 1KB를 먼저 수행하고,
+10TB 91B는 best-effort로 둔다.
 
-**Status**: Tree-shape gap closed 2026-05-12, but **not via the write-stall
-path proposed here**. The original premise — that the missing mechanism
-was foreground stall driving L0 accumulation → bigger L0→L1 picks — was
-discarded once we re-checked the numbers: vcomp's BG drains L0 fast
-enough that a stall trigger basically never fires, so adding stall
-wouldn't change anything.
+Metrics:
 
-What actually closed the gap was a different patch in
-`db/compaction/compaction_picker_level.cc`: a vcomp-only **L0→L1 size
-gate** at the picker (4 GB ≈ baseline's measured per-event L0→L1
-input volume), combined with an end-of-load **L0 drain** in
-`FillVirtual` that lowers the gate to 0 and lets BG fully empty L0 as
-virtual compactions before Phase 2. After the drain, `compact0`
-reports "found 0 files to compact" and the load is back to ~18 s.
+- Loading time
+- Final DB size
+- Total device write GB
+- LSM tree shape: level별 file count, level size, compaction count
+- Read throughput / latency
+- Level-hit distribution
+- Filter/index/data read count
+- Level coverage or key-range overlap stats
 
-Result: L2/L3/L4 file counts within 3 % of baseline (n=30 each), L3
-cov within 1 pp of baseline, L4 cov identical. Full narrative in
-[README.md §"2026-05-12"](../vcomp/README.md);
-measurements in [RESULTS.md §2](RESULTS.md#2-tree-shape--3030-coverage-comparison).
+Expected outputs:
 
-Kept below for the record of what was originally planned and why we
-chose a different path.
+- `reality_summary.tsv`
+- `reality_shape.tsv`
+- `reality_read_summary.tsv`
+- `reality_coverage.tsv`
 
----
+## B. DB-Size Scaling
 
-### Original plan (write-stall path)
+Question:
 
-**Context.** 2026-05-11 narrowed the tree-shape gap to two missing
-mechanisms in vcomp:
+`dataset size가 커질 때 baseline과 vcomp의 loading time, total write, tree shape가 어떻게 증가하는가?`
 
-1. **intra-L0 megafile output** — fixed today
-   (`SplitIntoSSTs` early-returns one VirtualSST when `target_level==0`).
-2. **forced intra-L0 firing** — fixed today
-   (`PickFileToCompact` tries `FindIntraL0Compaction` at the top when
-   `use_virtual_compaction`).
+Matrix:
 
-After both fixes, intra-L0 frequency matched baseline (996 vs 1054
-events/run), but L0→L1 input fell to 4.84 (baseline 27.5) and L1
-coverage moved from 65% → 61% (baseline 35%) — partial. The remaining
-gap is L0→L1 input size, controlled by how much L0 accumulates before
-the picker fires. Baseline gets natural L0 accumulation from RocksDB's
-write stall (47.8% of write time is stalled). vcomp's
-`RegisterVirtualL0File` bypasses `WriteController` and never stalls.
+| KV | Compression | Sizes |
+| ---: | --- | --- |
+| 1KB value | none | 500GB, 1TB, 2TB, 4TB, 8TB |
+| 91B KV | none | 500GB, 1TB, 2TB, 4TB, 8TB |
 
-**Goal**: make vcomp's foreground respect RocksDB's natural write
-stall so L0 accumulates baseline-like, intra-L0 cascade absorbs the
-buildup, and L0→L1 picks larger batches.
+Systems:
 
-**Implementation sketch**
+- baseline
+- vcomp
 
-- In `db/db_impl/db_impl_compaction_flush.cc` `DBImpl::RegisterVirtualL0File`,
-  check the column family's stall conditions before applying the edit.
-  RocksDB's normal write path calls
-  `ColumnFamilyData::RecalculateWriteStallConditions` and uses
-  `WriteController::WaitOnCV()` / `GetDelay()` to throttle the writer.
-  vcomp needs to do the equivalent: either invoke `WriteController`
-  directly or implement an explicit wait when
-  `vstorage->NumLevelFiles(0) >= level0_slowdown_writes_trigger`.
-- Default triggers: slowdown at 20, stop at 36. Worth re-testing with
-  baseline's actual settings (the load.sh `L0_TRIGGER` env scales these
-  proportionally; coupled mode = same as L0 trigger × 5 / × 9 — see
-  load.sh:90–98).
-- Don't apply the stall in Phase 2 materialization (which writes real
-  SSTs and shouldn't be paced like virtual L0 registrations).
+Metrics:
 
-**Measurements after the fix (250 GB single load each)**
+- Elapsed loading time
+- `fillrandom` or `fillvirtual` time
+- Total device write GB
+- Final DB size
+- Compaction write GB
+- Compaction count by level
+- LSM shape by level
 
-Compare against:
-- baseline reference: 30-run batch at `260415_0635_250gb_x30/`
-- vcomp default reference: 30-run batch at `260414_1710_250gb_x30/`
-- vcomp w/ Fix 1+2 (today): `vcomp_250gb_forceintraL0` (preserved on
-  disk)
+Important comparison points:
 
-Per-pair compaction summary (use `/tmp/compaction_summary.py`) and
-coverage (use `dump_coverage.sh` + `parse_coverage.py`). Compare
-specifically:
-- L0→L1 events per run (target: ~76, currently 497)
-- L0→L1 input mean (target: ~27.5, currently 4.84)
-- L1 cov % (target: ~35%, currently 61%)
-- L1 file widths (target: ~7 M, currently ~31 M)
-- L1 → L2 events (target: 1418, currently 4369)
+- 1TB: detailed realism comparison point.
+- 8TB: scaling limit for the size-scaling sweep.
 
-**Pre-flight checklist**
+Expected outputs:
 
-- [ ] Decide between calling `WriteController` directly vs adding an
-      explicit L0-count wait in `RegisterVirtualL0File`. The former is
-      more faithful to baseline but more invasive; the latter is a
-      narrow patch.
-- [ ] Verify Phase 2 materialization is not affected by whatever stall
-      we add (it shouldn't go through `RegisterVirtualL0File`).
-- [ ] After fix, sanity-check `Write Stall (count)` in the load's
-      `bench.out` shows non-zero values comparable to baseline.
+- `scaling_summary.tsv`
+- `scaling_compactions.tsv`
+- `scaling_shape.tsv`
 
-**Not in scope (yet)**
+## B2. Vcomp Motivation-Config Speedup
 
-- N-run batch (30×) — finalize after a single load shows the metrics
-  converged.
-- L2/L3/L4 cov regressions — if the L0/L1 stall fix alone closes the
-  full coverage gap, no further work is needed.
-- Adjusting the `level0_slowdown_writes_trigger` / `stop_writes_trigger`
-  defaults — only if the stock RocksDB values give the wrong shape.
+Question:
+
+`motivation scaling/config에서 baseline real loading 대비 vcomp synthetic construction이 얼마나 빠른가?`
+
+Interpretation:
+
+- no-KV vcomp 결과는 KV-preserving loading이 아니라 LSM-tree construction
+  speedup으로 해석한다.
+- compression on/off matrix에서 vcomp compression 효과를 직접 비교하는 것은
+  조심해야 한다. no-KV path는 실제 block compression 비용을 수행하지 않기
+  때문이다.
+
+Primary matrix:
+
+| KV | Compression | Sizes | Systems |
+| ---: | --- | --- | --- |
+| 1KB value | none | 500GB, 1TB, 2TB, 4TB, 8TB | baseline, vcomp |
+| 91B KV | none | 500GB, 1TB, 2TB, 4TB | baseline, vcomp |
+
+Current baseline source:
+
+- 1KB: `log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv`
+- 91B: `log_loads/exp_260604_exp91b_baseline/scaling_91b_none/scaling_91b_summary.tsv`
+
+Next runs:
+
+1. Run vcomp 1KB/no-compression at 500GB, 1TB, 2TB, 4TB, 8TB.
+2. Run vcomp 91B/no-compression at 500GB, 1TB, 2TB, 4TB.
+3. Compare elapsed time and final LSM shape against the baseline summaries above.
+
+Expected outputs:
+
+- `motivation_vcomp_speedup_summary.tsv`
+- `motivation_vcomp_shape.tsv`
+- `motivation_vcomp_speedup.png`
+
+## B3. Motivation KV/Compression Matrix
+
+Question:
+
+`value size와 compression 여부가 baseline loading time과 compaction cost를 어떻게 바꾸는가?`
+
+Completed baseline/profiling run:
+
+`log_loads/motivation_kv_compression_260604_kv500_matrix/summary.tsv`
+
+Current loading-time matrix:
+
+| Case | Target | Key size | Value size | Compression | Elapsed |
+| --- | ---: | ---: | ---: | --- | ---: |
+| `kv1000_nocompress` | 500GB | 24B | 1000B | none | 1,820s |
+| `kv1000_snappy` | 500GB | 24B | 1000B | snappy | 2,485s |
+| `kv91_nocompress` | 500GB | 48B | 43B | none | 9,842s |
+| `kv91_snappy` | 500GB | 48B | 43B | snappy | 10,177s |
+
+Note:
+
+- `summary.tsv` has been updated to the corrected true-91B loading results.
+- The old `key_size=24,value_size=91` breakdown rows were removed because they
+  are not true 91B.
+- Corrected true-91B breakdown still needs a profiling rerun with `vcomp-prof`.
+
+Planned true-91B breakdown rerun:
+
+```bash
+cd eval-vcomp
+./run_true91b_breakdown_matrix.sh
+```
+
+Expected outputs:
+
+- `log_loads/motivation_kv_compression_true91b_breakdown_<timestamp>/summary.tsv`
+- `compaction_breakdown_all.tsv`
+- `compaction_breakdown_representative.tsv`
+- case-level `raw/compaction_breakdown.tsv`
+
+First execution target:
+
+- Start with 91B/no-compression because 1KB/no-compression already has
+  motivation measurements that cover the first scaling trend.
+- Script: `./run_exp_91b_scaling.sh`
+- Default sizes: `500GB, 1TB, 2TB, 4TB, 8TB`
+- Default systems: `baseline` only
+- Later vcomp run: pass `SYSTEMS=vcomp` with the same `SIZES_GB`
+- DB output root: `/work/vcomp/exp/scaling`
+- Summary output: `log_loads/exp_<RUN_ID>/scaling_91b_none/scaling_91b_summary.tsv`
+
+## C. Flexibility Sweep
+
+Question:
+
+`vcomp가 fixed fillrandom뿐 아니라 workload parameter 변화에도 적용 가능한가?`
+
+Base setting:
+
+- Logical DB size: 250GB
+- Value size: 1000B
+- Compression: none
+- Systems: baseline, vcomp
+
+Zipfian alpha sweep:
+
+| Parameter | Candidate values |
+| --- | --- |
+| `zipf_alpha` | 0.0, 0.5, 0.8, 0.99, 1.2 |
+
+Unique key ratio sweep:
+
+| Parameter | Candidate values |
+| --- | --- |
+| `unique_key_ratio` | 1.0, 0.75, 0.5, 0.25 |
+
+Metrics:
+
+- Loading time
+- Final unique key count
+- Final DB size
+- LSM tree shape
+- Read throughput / latency
+- Level-hit distribution
+- Filter/index/data read count
+
+Expected outputs:
+
+- `zipf_alpha_sweep.tsv`
+- `unique_ratio_sweep.tsv`
+- Per-run `read_summary.tsv`
+- Per-run `shape.tsv`
+
+## Execution Order
+
+1. Run A at 1TB for both KV sizes.
+2. Run B baseline for 91B sizes from 500GB to 8TB.
+3. Run B vcomp for 91B sizes from 500GB to 8TB in one later batch.
+4. Reuse motivation 1KB results where sufficient; rerun only missing 1KB points if needed.
+5. Run A at 10TB for final scale sanity.
+6. Run C sweeps at 250GB.
+
+Rationale:
+
+- A/1TB gives the main correctness and realism anchor.
+- B establishes scaling trend and exposes pathological size effects early.
+- A/10TB validates that the 1TB conclusions still hold at large scale.
+- C is cheaper and should run after the main loading path is stable.
+
+Open decisions:
+
+- 10TB 91B can be mandatory or best-effort depending on runtime and disk pressure.
+- Flexibility sweep may not need full baseline for every point. Decide after the first alpha/ratio points.

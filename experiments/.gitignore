@@ -2,8 +2,8 @@
 __pycache__/
 *.py[cod]
 
-# Raw experiment directories are large and regenerated from scripts.
-log_loads/*/
+# Raw experiment outputs are large and regenerated from scripts.
+log_loads/*
 log_batch/*/
 log_runs/*/
 log_runs/.last_*
@@ -11,6 +11,7 @@ coverage_dumps/*/
 compaction_logs/*/
 
 # Generated figures and tabular summaries.
+figures/
 *.csv
 *.tsv
 *.png

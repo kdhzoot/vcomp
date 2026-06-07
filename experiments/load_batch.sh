@@ -31,6 +31,8 @@ echo "  Batch Loading Benchmark"
 echo "  Runs:      ${RUNS} per mode"
 echo "  Modes:     ${MODES}"
 echo "  DB Size:   ${TARGET_DB_GB} GB"
+echo "  Threads:   1"
+echo "  Memtable:  vector"
 echo "  DB Dir:    ${BATCH_DB_DIR}"
 echo "  Log Dir:   ${SUMMARY_DIR}"
 echo "=========================================="
@@ -70,11 +72,11 @@ run_one() {
   echo "[${label}] Done: ${elapsed}s, ${db_size}"
 
   # Append to CSV
-  echo "${mode},${run_id},${elapsed},${db_size}" >> "${SUMMARY_DIR}/results.csv"
+  echo "${mode},${run_id},1,vector,${elapsed},${db_size}" >> "${SUMMARY_DIR}/results.csv"
 }
 
 # ── CSV header ──
-echo "mode,run_id,elapsed_sec,db_size" > "${SUMMARY_DIR}/results.csv"
+echo "mode,run_id,threads,memtable,elapsed_sec,db_size" > "${SUMMARY_DIR}/results.csv"
 
 # ── Main loop ──
 IFS=',' read -ra mode_arr <<< "${MODES}"
@@ -95,7 +97,7 @@ echo "=========================================="
 for mode in "${mode_arr[@]}"; do
   echo ""
   echo "--- ${mode} ---"
-  times=$(grep "^${mode}," "${SUMMARY_DIR}/results.csv" | awk -F',' '{print $3}')
+  times=$(grep "^${mode}," "${SUMMARY_DIR}/results.csv" | awk -F',' '{print $5}')
   count=$(echo "$times" | wc -l)
   if [[ "$count" -gt 0 && -n "$times" ]]; then
     echo "$times" | awk '{

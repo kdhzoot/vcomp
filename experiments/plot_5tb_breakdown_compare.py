@@ -112,9 +112,6 @@ def parse_run(label, run_dir):
         ),
         "bg_avg_batch": maybe_float(r"BG virtual commit batching: .* avg_batch=([0-9.]+)", text),
         "bg_queue_wait": maybe_float(r"BG virtual commit batching: .* queue_wait=([0-9.]+)s", text),
-        "release_visible_stats": maybe_float(
-            r"L0 release thread breakdown: .* visible_stats=([0-9.]+)s", text
-        ),
     }
 
 
@@ -140,7 +137,6 @@ def write_csv(rows):
         "bg_avg_ms",
         "bg_avg_batch",
         "bg_queue_wait",
-        "release_visible_stats",
     ] + [key for key, _, _ in COMPONENTS]
     with open(OUT_CSV, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)

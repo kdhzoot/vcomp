@@ -174,9 +174,7 @@ Box plot: [coverage_dumps/coverage_box_drain.png](coverage_dumps/coverage_box_dr
   file-count + L3/L4 match already achieved.
 - L4 file count: vcomp 2622 vs baseline 2809 (−6.7 %). vcomp's L4
   files are individually larger, reflecting the simpler
-  grandparent-split heuristic in `SplitIntoSSTs`. Not pursued —
-  TODO entry preserved in
-  [db/virtual_compaction/TODO.md](../vcomp/db/virtual_compaction/TODO.md).
+  grandparent-split heuristic in `SplitIntoSSTs`. Not pursued further.
 
 **Earlier snapshot (2026-04-15, pre-fix), kept here only as a
 reference point for the gap that has since been closed**:

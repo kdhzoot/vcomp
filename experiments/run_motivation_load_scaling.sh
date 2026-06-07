@@ -35,7 +35,7 @@ if [[ ! -x "${DB_BENCH}" ]]; then
   exit 1
 fi
 
-printf 'size_gb\tstatus\telapsed_sec\tbench_sec\tdb_size\tdiskstat_dev\ttotal_write_gb\tingest_gb\tcompaction_write_gb\tcompaction_wamp\tlog_dir\tdb_dir\n' > "${SUMMARY_FILE}"
+printf 'size_gb\tthreads\tmemtable\tstatus\telapsed_sec\tbench_sec\tdb_size\tdiskstat_dev\ttotal_write_gb\tingest_gb\tcompaction_write_gb\tcompaction_wamp\tlog_dir\tdb_dir\n' > "${SUMMARY_FILE}"
 
 extract_metric() {
   local bench_out="$1"
@@ -81,8 +81,8 @@ append_summary() {
     compaction_wamp="$(grep -E '^ Sum[[:space:]]' "${bench_out}" | tail -1 | awk '{print $13}')"
   fi
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "${size_gb}" "${status}" "${elapsed_sec}" "${bench_sec}" "${db_size}" \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "${size_gb}" "1" "vector" "${status}" "${elapsed_sec}" "${bench_sec}" "${db_size}" \
     "${DISKSTAT_DEV}" "${total_write_gb}" "${ingest_gb}" \
     "${compaction_write_gb}" "${compaction_wamp}" "${run_dir}" "${db_dir}" >> "${SUMMARY_FILE}"
 }
@@ -92,6 +92,8 @@ log "RUN_ID=${RUN_ID}"
 log "DB_ROOT=${DB_ROOT}"
 log "SIZES_GB=${SIZES_GB_STR}"
 log "BG_JOBS=${BG_JOBS}"
+log "THREADS=1"
+log "MEMTABLE_REP=vector"
 log "DB_BENCH=${DB_BENCH}"
 log "DISKSTAT_DEV=${DISKSTAT_DEV}"
 

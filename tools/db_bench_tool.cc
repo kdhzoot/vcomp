@@ -180,6 +180,8 @@ DEFINE_string(
     " key order and keep the shape of the LSM tree\n"
     "\tfillrandom    -- write N values in random key order in async"
     " mode\n"
+    "\tbaseload      -- replay a VLOADTR1 key-id trace through the same"
+    " write path as fillrandom\n"
     "\ttwitterload   -- replay a vcomp binary trace (see "
     "--twitter_trace_file) via the same write path as fillrandom, using "
     "keys and value sizes from the trace\n"
@@ -902,6 +904,16 @@ DEFINE_string(compaction_trace_dir, "",
               "If not empty, write per-compaction trace log files to this "
               "directory with detailed key-level information.");
 
+DEFINE_string(vcomp_accuracy_trace_dir, "",
+              "If not empty, run virtual compaction prediction alongside real "
+              "compactions and write per-job accuracy records to this directory.");
+
+DEFINE_string(load_trace_file, "",
+              "Path to a VLOADTR1 binary key-id trace for baseload.");
+DEFINE_int64(load_trace_max_ops, 0,
+             "Stop baseload after N records (0 = read records declared by the "
+             "trace header).");
+
 DEFINE_string(twitter_trace_file, "",
               "Path to a binary trace produced by "
               "vcomp/tools/twitter_trace_convert.py. Required when running "
@@ -964,10 +976,9 @@ DEFINE_uint64(vcomp_register_batch_max, 256,
               "Maximum number of pending virtual L0 files to register in one "
               "VersionEdit.");
 
-DEFINE_uint64(vcomp_visible_l0_batch_mb, 4096,
+DEFINE_uint64(vcomp_visible_l0_batch_mb, 0,
               "Target total registered virtual L0 size, in MiB. Set to zero "
-              "to register one memtable flush worth of virtual SSTs per "
-              "batch.");
+              "to use the column family's max_compaction_bytes.");
 
 DEFINE_bool(vcomp_log_apply_timing, true,
             "Collect detailed LogAndApply timing breakdown for fillvirtual. "
@@ -3725,6 +3736,9 @@ class Benchmark {
       } else if (name == "fillrandom") {
         fresh_db = true;
         method = &Benchmark::WriteRandom;
+      } else if (name == "baseload") {
+        fresh_db = true;
+        method = &Benchmark::WriteFromLoadTrace;
       } else if (name == "twitterload") {
         fresh_db = true;
         method = &Benchmark::WriteFromTwitterTrace;
@@ -4408,6 +4422,7 @@ class Benchmark {
     options.env = FLAGS_env;
     options.wal_dir = FLAGS_wal_dir;
     options.compaction_trace_dir = FLAGS_compaction_trace_dir;
+    options.vcomp_accuracy_trace_dir = FLAGS_vcomp_accuracy_trace_dir;
     options.dump_malloc_stats = FLAGS_dump_malloc_stats;
     options.stats_dump_period_sec =
         static_cast<unsigned int>(FLAGS_stats_dump_period_sec);
@@ -5305,7 +5320,122 @@ class Benchmark {
     registry->SetTargetSSTSize(target_sst_size);
 
     double plr_error_bound = FLAGS_plr_error_bound;
-    const int64_t num_ops = num_;
+    const bool use_load_trace = !FLAGS_load_trace_file.empty();
+    FILE* load_trace_fp = nullptr;
+    uint64_t load_trace_records = 0;
+    uint64_t load_trace_key_domain = static_cast<uint64_t>(num_);
+    uint64_t load_trace_unique_count = 0;
+    double load_trace_unique_ratio = 0.0;
+    double load_trace_zipf_alpha = 0.0;
+
+    if (use_load_trace) {
+      if (FLAGS_num_column_families > 1) {
+        fprintf(stderr,
+                "fillvirtual trace mode does not support "
+                "--num_column_families > 1.\n");
+        return;
+      }
+      if (use_blob_db_) {
+        fprintf(stderr,
+                "fillvirtual trace mode does not support stacked BlobDB.\n");
+        return;
+      }
+      load_trace_fp = fopen(FLAGS_load_trace_file.c_str(), "rb");
+      if (load_trace_fp == nullptr) {
+        fprintf(stderr, "fillvirtual: failed to open load trace %s: %s\n",
+                FLAGS_load_trace_file.c_str(), strerror(errno));
+        return;
+      }
+      auto close_trace = [&]() {
+        if (load_trace_fp != nullptr) {
+          fclose(load_trace_fp);
+          load_trace_fp = nullptr;
+        }
+      };
+      auto read_exact = [&](void* dst, size_t n) {
+        return fread(dst, 1, n, load_trace_fp) == n;
+      };
+
+      char magic[8];
+      uint32_t version = 0;
+      uint32_t header_size = 0;
+      uint32_t trace_key_size = 0;
+      uint32_t trace_value_size = 0;
+      uint64_t trace_seed = 0;
+      uint64_t flags = 0;
+      uint64_t reserved = 0;
+
+      constexpr uint32_t kVLoadTraceHeaderBytes = 88;
+      if (!read_exact(magic, sizeof(magic)) ||
+          memcmp(magic, "VLOADTR1", 8) != 0 ||
+          !read_exact(&version, sizeof(version)) ||
+          !read_exact(&header_size, sizeof(header_size)) ||
+          !read_exact(&load_trace_records, sizeof(load_trace_records)) ||
+          !read_exact(&load_trace_key_domain, sizeof(load_trace_key_domain)) ||
+          !read_exact(&load_trace_unique_count,
+                      sizeof(load_trace_unique_count)) ||
+          !read_exact(&trace_key_size, sizeof(trace_key_size)) ||
+          !read_exact(&trace_value_size, sizeof(trace_value_size)) ||
+          !read_exact(&load_trace_unique_ratio,
+                      sizeof(load_trace_unique_ratio)) ||
+          !read_exact(&load_trace_zipf_alpha,
+                      sizeof(load_trace_zipf_alpha)) ||
+          !read_exact(&trace_seed, sizeof(trace_seed)) ||
+          !read_exact(&flags, sizeof(flags)) ||
+          !read_exact(&reserved, sizeof(reserved))) {
+        fprintf(stderr, "fillvirtual: malformed VLOADTR1 header in %s\n",
+                FLAGS_load_trace_file.c_str());
+        close_trace();
+        return;
+      }
+      if (version != 1 || header_size < kVLoadTraceHeaderBytes) {
+        fprintf(stderr,
+                "fillvirtual: unsupported trace header version=%u size=%u\n",
+                version, header_size);
+        close_trace();
+        return;
+      }
+      if (header_size > kVLoadTraceHeaderBytes &&
+          fseek(load_trace_fp, header_size - kVLoadTraceHeaderBytes,
+                SEEK_CUR) != 0) {
+        fprintf(stderr, "fillvirtual: failed to skip extended trace header\n");
+        close_trace();
+        return;
+      }
+      if (trace_key_size != static_cast<uint32_t>(key_size_) ||
+          trace_value_size != static_cast<uint32_t>(value_size)) {
+        fprintf(stderr,
+                "fillvirtual: trace key/value size mismatch. trace=%u/%u "
+                "flags=%d/%u\n",
+                trace_key_size, trace_value_size, key_size_, value_size);
+        close_trace();
+        return;
+      }
+      if (load_trace_key_domain == 0 ||
+          load_trace_unique_count > load_trace_records ||
+          load_trace_unique_count > load_trace_key_domain) {
+        fprintf(stderr,
+                "fillvirtual: invalid trace cardinality records=%" PRIu64
+                " domain=%" PRIu64 " unique=%" PRIu64 "\n",
+                load_trace_records, load_trace_key_domain,
+                load_trace_unique_count);
+        close_trace();
+        return;
+      }
+    }
+
+    const int64_t num_ops =
+        use_load_trace
+            ? (FLAGS_load_trace_max_ops > 0
+                   ? FLAGS_load_trace_max_ops
+                   : static_cast<int64_t>(std::min<uint64_t>(
+                         load_trace_records,
+                         static_cast<uint64_t>(
+                             std::numeric_limits<int64_t>::max()))))
+            : num_;
+    const uint64_t key_domain_for_keys = use_load_trace
+                                             ? load_trace_key_domain
+                                             : static_cast<uint64_t>(FLAGS_num);
     const uint64_t memtable_capacity =
         static_cast<uint64_t>(FLAGS_memtable_flush_size) * 1024 * 1024 /
         avg_entry_size;
@@ -5528,9 +5658,20 @@ class Benchmark {
                   s.writer_callback_us / 1e6, other / 1e6);
         };
 
-    // ── Phase 1: Generate keys → sort → PLR fit → register as virtual L0 ──
+    // ── Phase 1: Generate/replay keys → sort → PLR fit → register as virtual L0 ──
     // Compaction is handled asynchronously by RocksDB's background threads.
-    fprintf(stderr, "FillVirtual: generating %" PRId64 " keys...\n", num_ops);
+    if (use_load_trace) {
+      fprintf(stderr,
+              "FillVirtual: replaying VLOADTR1 trace %s (%" PRId64
+              " ops, domain=%" PRIu64 ", unique=%" PRIu64
+              ", ratio=%.6f, zipf=%.3f)...\n",
+              FLAGS_load_trace_file.c_str(), num_ops, key_domain_for_keys,
+              load_trace_unique_count, load_trace_unique_ratio,
+              load_trace_zipf_alpha);
+    } else {
+      fprintf(stderr, "FillVirtual: generating %" PRId64 " keys...\n",
+              num_ops);
+    }
     fprintf(stderr, "LogAndApply timing: %s\n",
             FLAGS_vcomp_log_apply_timing ? "on" : "off");
     auto phase1_start = FLAGS_env->NowMicros();
@@ -5551,14 +5692,13 @@ class Benchmark {
     Status l0_window_status;
     DBImpl::VirtualL0RegistrationStats register_stats;
 
-    const uint64_t memtable_flush_bytes =
-        static_cast<uint64_t>(FLAGS_memtable_flush_size) * 1024 * 1024;
     const uint64_t register_batch_max =
         std::max<uint64_t>(1, FLAGS_vcomp_register_batch_max);
     const uint64_t visible_l0_batch_bytes =
         FLAGS_vcomp_visible_l0_batch_mb > 0
             ? FLAGS_vcomp_visible_l0_batch_mb * 1024ULL * 1024ULL
-            : memtable_flush_bytes;
+            : std::max<uint64_t>(
+                  1, cfd->GetLatestMutableCFOptions().max_compaction_bytes);
     db_impl->ConfigureVirtualL0Window(visible_l0_batch_bytes,
                                       register_batch_max);
     const uint64_t reserved_l0_file_base =
@@ -5585,7 +5725,7 @@ class Benchmark {
     radix_tmp.reserve(memtable_capacity);
     int radix_passes = 0;
     {
-      uint64_t max_val = static_cast<uint64_t>(FLAGS_num);
+      uint64_t max_val = key_domain_for_keys;
       while (max_val > 0) { radix_passes++; max_val >>= 8; }
       if (radix_passes == 0) radix_passes = 1;
     }
@@ -5683,12 +5823,35 @@ class Benchmark {
       memtable_buf.clear();
     };
 
+    int64_t trace_records_read = 0;
+    bool load_trace_eof = false;
     for (int64_t i = 0; i < num_ops; i++) {
       if (l0_window_failed.load(std::memory_order_relaxed)) {
         break;
       }
-      uint64_t rand_num = rng.Next() % FLAGS_num;
-      memtable_buf.push_back(rand_num);
+      uint64_t key_id = 0;
+      if (use_load_trace) {
+        size_t n = fread(&key_id, sizeof(key_id), 1, load_trace_fp);
+        if (n == 0) {
+          load_trace_eof = true;
+          break;
+        }
+        if (key_id >= key_domain_for_keys) {
+          fprintf(stderr,
+                  "fillvirtual: key_id=%" PRIu64
+                  " outside key_domain=%" PRIu64 "\n",
+                  key_id, key_domain_for_keys);
+          if (load_trace_fp != nullptr) {
+            fclose(load_trace_fp);
+            load_trace_fp = nullptr;
+          }
+          return;
+        }
+        trace_records_read++;
+      } else {
+        key_id = rng.Next() % key_domain_for_keys;
+      }
+      memtable_buf.push_back(key_id);
 
       if (memtable_buf.size() >= memtable_capacity) {
         do_flush();
@@ -5697,6 +5860,10 @@ class Benchmark {
     if (!l0_window_failed.load(std::memory_order_relaxed) &&
         !memtable_buf.empty()) {
       do_flush();
+    }
+    if (load_trace_fp != nullptr) {
+      fclose(load_trace_fp);
+      load_trace_fp = nullptr;
     }
     if (!l0_window_failed.load(std::memory_order_relaxed)) {
       flush_l0_window_enqueue_batch();
@@ -5722,9 +5889,11 @@ class Benchmark {
         mutex_us / 1e6, regbuild_us / 1e6, addfile_us / 1e6,
         flush_us / 1e6);
     fprintf(stderr,
-        "  Phase 1 keygen detail: foreground=%.3fs accounted=%.3fs "
-        "rng_push_loop=%.3fs\n",
-        phase1_total_us / 1e6, accounted_us / 1e6, keygen_us / 1e6);
+            "  Phase 1 keygen detail: foreground=%.3fs accounted=%.3fs "
+            "%s=%.3fs\n",
+            phase1_total_us / 1e6, accounted_us / 1e6,
+            use_load_trace ? "trace_read_push_loop" : "rng_push_loop",
+            keygen_us / 1e6);
     uint64_t register_accounted_us =
         register_stats.mutex_wait_us + register_stats.log_apply_us +
         register_stats.install_schedule_us + register_stats.cleanup_us;
@@ -5760,6 +5929,10 @@ class Benchmark {
             total_keys_before_dedup > 0
                 ? 100.0 * (total_keys_before_dedup - total_keys_after_dedup) / total_keys_before_dedup
                 : 0.0);
+    if (use_load_trace) {
+      fprintf(stderr, "  Load trace consumed: %" PRId64 " records%s\n",
+              trace_records_read, load_trace_eof ? " (EOF)" : "");
+    }
     fprintf(stderr, "Phase 1 (flush + bg compaction started): %.3f sec\n\n",
             phase1_secs);
 
@@ -6056,7 +6229,7 @@ class Benchmark {
             uint64_t keys_in_file = 0;
 
             for (const auto& k : keys) {
-              GenerateKeyFromInt(k, FLAGS_num, &local_key);
+              GenerateKeyFromInt(k, key_domain_for_keys, &local_key);
               std::string cur(local_key.data(), local_key.size());
               if (cur <= prev_key_str) continue;
               s = sst_writer.Put(local_key, local_gen.Generate());
@@ -6899,6 +7072,232 @@ class Benchmark {
                 << std::endl;
     }
     thread->stats.AddBytes(bytes);
+  }
+
+  // Replays a VLOADTR1 key-id trace through the same write path as
+  // fillrandom. The trace stores only uint64 key ids; values are generated
+  // locally by RandomGenerator just like DoWrite/fillrandom.
+  void WriteFromLoadTrace(ThreadState* thread) {
+    if (FLAGS_load_trace_file.empty()) {
+      fprintf(stderr, "baseload requires --load_trace_file=<path>\n");
+      ErrorExit();
+    }
+    if (FLAGS_num_column_families > 1) {
+      fprintf(stderr,
+              "baseload does not support --num_column_families > 1.\n");
+      ErrorExit();
+    }
+    if (use_blob_db_) {
+      fprintf(stderr, "baseload does not support stacked BlobDB.\n");
+      ErrorExit();
+    }
+
+    FILE* tf = fopen(FLAGS_load_trace_file.c_str(), "rb");
+    if (tf == nullptr) {
+      fprintf(stderr, "baseload: failed to open %s: %s\n",
+              FLAGS_load_trace_file.c_str(), strerror(errno));
+      ErrorExit();
+    }
+
+    auto read_exact = [&](void* dst, size_t n) {
+      return fread(dst, 1, n, tf) == n;
+    };
+
+    char magic[8];
+    uint32_t version = 0;
+    uint32_t header_size = 0;
+    uint64_t trace_records = 0;
+    uint64_t key_domain = 0;
+    uint64_t unique_count = 0;
+    uint32_t trace_key_size = 0;
+    uint32_t trace_value_size = 0;
+    double unique_ratio = 0.0;
+    double zipf_alpha = 0.0;
+    uint64_t trace_seed = 0;
+    uint64_t flags = 0;
+    uint64_t reserved = 0;
+
+    constexpr uint32_t kVLoadTraceHeaderBytes = 88;
+    if (!read_exact(magic, sizeof(magic)) ||
+        memcmp(magic, "VLOADTR1", 8) != 0 ||
+        !read_exact(&version, sizeof(version)) ||
+        !read_exact(&header_size, sizeof(header_size)) ||
+        !read_exact(&trace_records, sizeof(trace_records)) ||
+        !read_exact(&key_domain, sizeof(key_domain)) ||
+        !read_exact(&unique_count, sizeof(unique_count)) ||
+        !read_exact(&trace_key_size, sizeof(trace_key_size)) ||
+        !read_exact(&trace_value_size, sizeof(trace_value_size)) ||
+        !read_exact(&unique_ratio, sizeof(unique_ratio)) ||
+        !read_exact(&zipf_alpha, sizeof(zipf_alpha)) ||
+        !read_exact(&trace_seed, sizeof(trace_seed)) ||
+        !read_exact(&flags, sizeof(flags)) ||
+        !read_exact(&reserved, sizeof(reserved))) {
+      fprintf(stderr, "baseload: malformed VLOADTR1 header in %s\n",
+              FLAGS_load_trace_file.c_str());
+      fclose(tf);
+      ErrorExit();
+    }
+    if (version != 1 || header_size < kVLoadTraceHeaderBytes) {
+      fprintf(stderr,
+              "baseload: unsupported trace header version=%u size=%u\n",
+              version, header_size);
+      fclose(tf);
+      ErrorExit();
+    }
+    if (header_size > kVLoadTraceHeaderBytes &&
+        fseek(tf, header_size - kVLoadTraceHeaderBytes, SEEK_CUR) != 0) {
+      fprintf(stderr, "baseload: failed to skip extended trace header\n");
+      fclose(tf);
+      ErrorExit();
+    }
+    if (trace_key_size != static_cast<uint32_t>(key_size_) ||
+        trace_value_size != static_cast<uint32_t>(value_size)) {
+      fprintf(stderr,
+              "baseload: trace key/value size mismatch. trace=%u/%u "
+              "flags=%d/%u\n",
+              trace_key_size, trace_value_size, key_size_, value_size);
+      fclose(tf);
+      ErrorExit();
+    }
+    if (key_domain == 0 || unique_count > trace_records ||
+        unique_count > key_domain) {
+      fprintf(stderr,
+              "baseload: invalid trace cardinality records=%" PRIu64
+              " domain=%" PRIu64 " unique=%" PRIu64 "\n",
+              trace_records, key_domain, unique_count);
+      fclose(tf);
+      ErrorExit();
+    }
+
+    const int64_t max_ops =
+        FLAGS_load_trace_max_ops > 0
+            ? FLAGS_load_trace_max_ops
+            : static_cast<int64_t>(std::min<uint64_t>(
+                  trace_records, static_cast<uint64_t>(
+                                     std::numeric_limits<int64_t>::max())));
+    Duration duration(/*max_seconds=*/0, max_ops, /*ops_per_stage=*/max_ops);
+
+    RandomGenerator gen;
+    WriteBatch batch(/*reserved_bytes=*/0, /*max_bytes=*/0,
+                     FLAGS_write_batch_protection_bytes_per_key,
+                     user_timestamp_size_);
+    Status s;
+    int64_t bytes = 0;
+
+    std::unique_ptr<const char[]> key_guard;
+    Slice key = AllocateKey(&key_guard);
+    std::unique_ptr<char[]> ts_guard;
+    if (user_timestamp_size_ > 0) {
+      ts_guard.reset(new char[user_timestamp_size_]);
+    }
+
+    const int effective_max_size =
+        (FLAGS_value_size_distribution_type_e == kFixed)
+            ? FLAGS_value_size
+            : FLAGS_value_size_max;
+    const uint32_t rg_bound =
+        static_cast<uint32_t>(std::max(1048576, effective_max_size));
+    if (trace_value_size > rg_bound) {
+      fprintf(stderr,
+              "baseload: trace value_size=%u exceeds RandomGenerator bound %u\n",
+              trace_value_size, rg_bound);
+      fclose(tf);
+      ErrorExit();
+    }
+
+    int64_t num_written = 0;
+    int64_t num_malformed = 0;
+    bool eof = false;
+
+    while (!eof && !duration.Done(entries_per_batch_)) {
+      DBWithColumnFamilies* db_with_cfh =
+          SelectDBWithCfh(static_cast<uint64_t>(0));
+
+      batch.Clear();
+      int64_t batch_bytes = 0;
+      int64_t batch_ops = 0;
+
+      for (int64_t j = 0; j < entries_per_batch_; j++) {
+        uint64_t key_id = 0;
+        size_t n = fread(&key_id, sizeof(key_id), 1, tf);
+        if (n == 0) {
+          eof = true;
+          break;
+        }
+        if (key_id >= key_domain) {
+          fprintf(stderr,
+                  "baseload: key_id=%" PRIu64
+                  " outside key_domain=%" PRIu64 "\n",
+                  key_id, key_domain);
+          fclose(tf);
+          ErrorExit();
+        }
+
+        GenerateKeyFromInt(key_id, key_domain, &key);
+        Slice val = gen.Generate(trace_value_size);
+        batch.Put(key, val);
+
+        batch_bytes += val.size() + key.size() + user_timestamp_size_;
+        bytes += val.size() + key.size() + user_timestamp_size_;
+        batch_ops++;
+        num_written++;
+
+        if (num_written >= max_ops) {
+          eof = true;
+          break;
+        }
+      }
+
+      if (batch_ops == 0) {
+        break;
+      }
+
+      if (thread->shared->write_rate_limiter.get() != nullptr) {
+        thread->shared->write_rate_limiter->Request(
+            batch_bytes, Env::IO_HIGH, nullptr /* stats */,
+            RateLimiter::OpType::kWrite);
+        thread->stats.ResetLastOpTime();
+      }
+
+      if (user_timestamp_size_ > 0) {
+        Slice user_ts = mock_app_clock_->Allocate(ts_guard.get());
+        s = batch.UpdateTimestamps(
+            user_ts, [this](uint32_t) { return user_timestamp_size_; });
+        if (!s.ok()) {
+          fprintf(stderr, "baseload: assign timestamp: %s\n",
+                  s.ToString().c_str());
+          fclose(tf);
+          ErrorExit();
+        }
+      }
+
+      s = db_with_cfh->db->Write(write_options_, &batch);
+      thread->stats.FinishedOps(db_with_cfh, db_with_cfh->db, batch_ops,
+                                kWrite);
+
+      if (!s.ok()) {
+        s = listener_->WaitForRecovery(600000000) ? Status::OK() : s;
+      }
+      if (!s.ok()) {
+        fprintf(stderr, "baseload put error: %s\n", s.ToString().c_str());
+        fclose(tf);
+        ErrorExit();
+      }
+    }
+
+    if (!eof && num_written < static_cast<int64_t>(trace_records)) {
+      num_malformed++;
+    }
+    fclose(tf);
+    thread->stats.AddBytes(bytes);
+
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "(baseload: %" PRId64 " records, malformed=%" PRId64
+             ", unique=%" PRIu64 ", ratio=%.6f, zipf=%.3f)",
+             num_written, num_malformed, unique_count, unique_ratio,
+             zipf_alpha);
+    thread->stats.AddMessage(msg);
   }
 
   // Replays a vcomp binary trace produced by

@@ -192,7 +192,7 @@ virtual_l0_visible_bytes_ < target_bytes
 
 | Parameter | Default | Meaning |
 |-----------|---------|---------|
-| `--vcomp_visible_l0_batch_mb` | `4096` | Visible L0 byte target |
+| `--vcomp_visible_l0_batch_mb` | `0` | Visible L0 byte target; zero uses `max_compaction_bytes` |
 | `--vcomp_register_batch_max` | `256` | Max files per registration VersionEdit |
 
 ### 논문에서 주의할 표현
@@ -427,4 +427,3 @@ logical content와 LSM tree structure를 현실적으로 유지한다.
 8. **RocksDB implementation**: loader, metadata, compaction integration.
 9. **Optimizations**: metadata bottleneck 완화.
 10. **Scope and realism**: preserved semantics와 fast-forwarded cost 구분.
-

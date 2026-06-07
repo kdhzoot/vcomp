@@ -58,7 +58,9 @@ Current implementation:
   score and compaction picker. There is no hidden eligibility bit and no
   separate visibility worker.
 - Code defaults are
-  `--vcomp_register_batch_max=256` and `--vcomp_visible_l0_batch_mb=4096`.
+  `--vcomp_register_batch_max=256` and `--vcomp_visible_l0_batch_mb=0`;
+  zero means use the column family's `max_compaction_bytes` as the visible L0
+  byte target.
 - BG virtual compaction commits are batched through a commit queue. Code
   defaults are `VCOMP_BG_COMMIT_BATCH_MAX=16` and
   `VCOMP_BG_COMMIT_DELAY_US=100`.
@@ -106,13 +108,13 @@ The wrapper defaults to the same current values as the code:
 | Setting | Default | Meaning |
 |---------|---------|---------|
 | `--vcomp_register_batch_max` / `VCOMP_REGISTER_BATCH_MAX` | `256` | Max pending virtual L0 files registered per VersionEdit |
-| `--vcomp_visible_l0_batch_mb` / `VCOMP_VISIBLE_L0_BATCH_MB` | `4096` | Visible virtual-L0 byte target in MiB |
+| `--vcomp_visible_l0_batch_mb` / `VCOMP_VISIBLE_L0_BATCH_MB` | `0` | Visible virtual-L0 byte target in MiB; zero uses `max_compaction_bytes` |
 | `VCOMP_BG_COMMIT_BATCH_MAX` | `16` | Max virtual compaction commit requests grouped into one manifest write |
 | `VCOMP_BG_COMMIT_DELAY_US` | `100` | Leader wait before draining the virtual commit queue |
 | `--vcomp_log_apply_timing` / `VCOMP_LOG_APPLY_TIMING` | `true` | Collect detailed LogAndApply timing breakdowns |
 
-`--vcomp_visible_l0_batch_mb=0` is a special case: `db_bench` uses one
-memtable-flush worth of virtual SSTs as `target_bytes`.
+`--vcomp_visible_l0_batch_mb=0` is the default: `db_bench` uses the effective
+column-family `max_compaction_bytes` as `target_bytes`.
 
 ---
 
@@ -546,8 +548,8 @@ into a single parallel step using direct I/O.
    ```
 
    For `db_bench fillvirtual`, `target_bytes` comes from
-   `--vcomp_visible_l0_batch_mb` and defaults to 4096 MiB. If the flag is set
-   to zero, `db_bench` uses one memtable-flush worth of virtual SSTs. After
+   `--vcomp_visible_l0_batch_mb`. The default flag value is zero, which maps to
+   the effective column-family `max_compaction_bytes`. After
    successful virtual compaction commits, the commit path accounts
    consumed/output L0 bytes and refills the visible window from the pending
    queue.

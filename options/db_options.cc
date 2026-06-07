@@ -311,6 +311,10 @@ static std::unordered_map<std::string, OptionTypeInfo>
          {offsetof(struct ImmutableDBOptions, compaction_trace_dir),
           OptionType::kString, OptionVerificationType::kNormal,
           OptionTypeFlags::kNone}},
+        {"vcomp_accuracy_trace_dir",
+         {offsetof(struct ImmutableDBOptions, vcomp_accuracy_trace_dir),
+          OptionType::kString, OptionVerificationType::kNormal,
+          OptionTypeFlags::kNone}},
         {"wal_dir",
          {offsetof(struct ImmutableDBOptions, wal_dir), OptionType::kString,
           OptionVerificationType::kNormal, OptionTypeFlags::kNone}},
@@ -741,6 +745,7 @@ ImmutableDBOptions::ImmutableDBOptions(const DBOptions& options)
       db_paths(options.db_paths),
       db_log_dir(options.db_log_dir),
       compaction_trace_dir(options.compaction_trace_dir),
+      vcomp_accuracy_trace_dir(options.vcomp_accuracy_trace_dir),
       wal_dir(options.wal_dir),
       max_log_file_size(options.max_log_file_size),
       log_file_time_to_roll(options.log_file_time_to_roll),
@@ -887,6 +892,9 @@ void ImmutableDBOptions::Dump(Logger* log) const {
   ROCKS_LOG_HEADER(log,
                    "                    Options.compaction_trace_dir: %s",
                    compaction_trace_dir.c_str());
+  ROCKS_LOG_HEADER(log,
+                   "              Options.vcomp_accuracy_trace_dir: %s",
+                   vcomp_accuracy_trace_dir.c_str());
   ROCKS_LOG_HEADER(log, "                                Options.wal_dir: %s",
                    wal_dir.c_str());
   ROCKS_LOG_HEADER(log, "               Options.table_cache_numshardbits: %d",

@@ -144,6 +144,15 @@ struct VCompAccuracyFile {
   uint64_t key_max = 0;
 };
 
+struct VCompKMVStats {
+  uint64_t inputs = 0;
+  uint64_t empty = 0;
+  uint64_t complete = 0;
+  uint64_t sample_min = 0;
+  uint64_t sample_max = 0;
+  long double sample_mean = 0;
+};
+
 uint64_t ExtractPrefix64(const Slice& user_key) {
   uint64_t key = 0;
   size_t n = std::min<size_t>(8, user_key.size());
@@ -185,6 +194,55 @@ uint64_t SumAccuracyBytes(const std::vector<VCompAccuracyFile>& files) {
   uint64_t total = 0;
   for (const auto& f : files) total += f.size_bytes;
   return total;
+}
+
+uint64_t SumAccuracyEntries(const std::vector<VCompAccuracyFile>& files) {
+  uint64_t total = 0;
+  for (const auto& f : files) total += f.entries;
+  return total;
+}
+
+VCompKMVStats ComputeKMVStats(const std::vector<const VirtualSST*>& vssts) {
+  VCompKMVStats stats;
+  stats.inputs = vssts.size();
+  bool have_samples = false;
+  uint64_t sample_sum = 0;
+  for (const auto* vsst : vssts) {
+    if (vsst == nullptr) {
+      stats.empty++;
+      continue;
+    }
+    const uint64_t samples = vsst->kmv_sketch.samples.size();
+    if (samples == 0) {
+      stats.empty++;
+    }
+    if (vsst->kmv_sketch.complete) {
+      stats.complete++;
+    }
+    if (!have_samples) {
+      stats.sample_min = samples;
+      stats.sample_max = samples;
+      have_samples = true;
+    } else {
+      stats.sample_min = std::min(stats.sample_min, samples);
+      stats.sample_max = std::max(stats.sample_max, samples);
+    }
+    sample_sum += samples;
+  }
+  if (stats.inputs > 0) {
+    stats.sample_mean = static_cast<long double>(sample_sum) /
+                        static_cast<long double>(stats.inputs);
+  }
+  return stats;
+}
+
+VCompKMVStats ComputeKMVStats(const std::vector<VirtualSST>& vssts) {
+  std::vector<const VirtualSST*> ptrs;
+  ptrs.reserve(vssts.size());
+  for (const auto& vsst : vssts) {
+    ptrs.push_back(&vsst);
+  }
+  return ComputeKMVStats(ptrs);
 }
 
 }  // namespace
@@ -1130,6 +1188,8 @@ void CompactionJob::MaybeRecordVCompAccuracy() {
 
       VirtualSST vsst;
       vsst.plr_model = GreedyPLRFit(keys, db_options_.plr_error_bound);
+      vsst.kmv_sketch = BuildKMVSketchFromSortedKeys(keys);
+      vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(keys);
       vsst.key_min = finfo.key_min;
       vsst.key_max = finfo.key_max;
       vsst.num_entries = finfo.entries;
@@ -1147,14 +1207,8 @@ void CompactionJob::MaybeRecordVCompAccuracy() {
   }
   if (input_vssts.empty()) return;
 
-  std::vector<const PLRModel*> models;
-  std::vector<uint64_t> num_entries_vec;
-  std::vector<uint64_t> key_mins_vec;
-  std::vector<uint64_t> key_maxs_vec;
-  models.reserve(input_vssts.size());
-  num_entries_vec.reserve(input_vssts.size());
-  key_mins_vec.reserve(input_vssts.size());
-  key_maxs_vec.reserve(input_vssts.size());
+  std::vector<const VirtualSST*> input_vsst_ptrs;
+  input_vsst_ptrs.reserve(input_vssts.size());
 
   uint64_t naive_entries = 0;
   uint64_t global_min = std::numeric_limits<uint64_t>::max();
@@ -1162,10 +1216,7 @@ void CompactionJob::MaybeRecordVCompAccuracy() {
   uint64_t input_segments = 0;
   uint64_t input_bytes = 0;
   for (const auto& vsst : input_vssts) {
-    models.push_back(&vsst.plr_model);
-    num_entries_vec.push_back(vsst.num_entries);
-    key_mins_vec.push_back(vsst.key_min);
-    key_maxs_vec.push_back(vsst.key_max);
+    input_vsst_ptrs.push_back(&vsst);
     naive_entries += vsst.num_entries;
     global_min = std::min(global_min, vsst.key_min);
     global_max = std::max(global_max, vsst.key_max);
@@ -1175,14 +1226,18 @@ void CompactionJob::MaybeRecordVCompAccuracy() {
   if (naive_entries == 0) return;
 
   uint64_t predict_t0 = db_options_.clock->NowMicros();
-  uint64_t adjusted_entries = 0;
-  PLRModel merged = NWayMergePLR(models, num_entries_vec, key_mins_vec,
-                                  key_maxs_vec, /*dedup=*/true,
-                                  &adjusted_entries);
-  uint64_t total_entries =
-      (adjusted_entries > 0 && adjusted_entries <= naive_entries)
-          ? adjusted_entries
-          : naive_entries;
+  uint64_t plr_entries = 0;  // PLR is not used for dedup cardinality.
+  uint64_t kmv_entries = 0;
+  PLRModel merged = NWayMergeKMVRangeAware(input_vsst_ptrs, &kmv_entries);
+  if (kmv_entries > naive_entries) {
+    const double scale = static_cast<double>(naive_entries) /
+                         static_cast<double>(kmv_entries);
+    merged = ScalePLRPositions(merged, scale);
+    kmv_entries = naive_entries;
+  }
+  uint64_t total_entries = kmv_entries;
+  long double kmv_rank_scale = 1.0L;
+  VCompKMVStats input_kmv_stats = ComputeKMVStats(input_vsst_ptrs);
 
   std::vector<uint64_t> gp_boundaries;
   const auto& grandparents = compaction->grandparents();
@@ -1205,7 +1260,8 @@ void CompactionJob::MaybeRecordVCompAccuracy() {
   std::vector<VirtualSST> predicted_vssts =
       SplitIntoSSTs(merged, total_entries, target_sst_size, avg_entry_size,
                     global_min, global_max, compaction->output_level(),
-                    gp_boundaries);
+                    gp_boundaries, &input_vsst_ptrs);
+  VCompKMVStats output_kmv_stats = ComputeKMVStats(predicted_vssts);
   uint64_t predict_us = db_options_.clock->NowMicros() - predict_t0;
 
   std::vector<VCompAccuracyFile> predicted_files;
@@ -1273,6 +1329,7 @@ void CompactionJob::MaybeRecordVCompAccuracy() {
 
   uint64_t predicted_bytes = SumAccuracyBytes(predicted_files);
   uint64_t actual_bytes = SumAccuracyBytes(actual_files);
+  uint64_t actual_entries = SumAccuracyEntries(actual_files);
   int64_t count_error = static_cast<int64_t>(predicted_files.size()) -
                         static_cast<int64_t>(actual_files.size());
   long double byte_error_pct =
@@ -1296,7 +1353,7 @@ void CompactionJob::MaybeRecordVCompAccuracy() {
     return;
   }
 
-  char metrics[1024];
+  char metrics[2048];
   snprintf(metrics, sizeof(metrics),
            "{\"job\":%u,\"cf\":\"%s\",\"reason\":\"%s\","
            "\"start_level\":%d,\"output_level\":%d,"
@@ -1304,6 +1361,18 @@ void CompactionJob::MaybeRecordVCompAccuracy() {
            ",\"input_bytes\":%" PRIu64 ",\"input_segments\":%" PRIu64
            ",\"target_sst_size\":%" PRIu64 ",\"avg_entry_size\":%" PRIu64
            ",\"naive_entries\":%" PRIu64 ",\"predicted_entries\":%" PRIu64
+           ",\"plr_entries\":%" PRIu64 ",\"kmv_entries\":%" PRIu64
+           ",\"actual_entries\":%" PRIu64 ",\"kmv_rank_scale\":%.9Lf"
+           ",\"input_kmv_empty\":%" PRIu64
+           ",\"input_kmv_complete\":%" PRIu64
+           ",\"input_kmv_sample_min\":%" PRIu64
+           ",\"input_kmv_sample_mean\":%.3Lf"
+           ",\"input_kmv_sample_max\":%" PRIu64
+           ",\"output_kmv_empty\":%" PRIu64
+           ",\"output_kmv_complete\":%" PRIu64
+           ",\"output_kmv_sample_min\":%" PRIu64
+           ",\"output_kmv_sample_mean\":%.3Lf"
+           ",\"output_kmv_sample_max\":%" PRIu64
            ",\"predicted_outputs\":%zu,\"actual_outputs\":%zu,"
            "\"count_error\":%" PRId64 ",\"predicted_bytes\":%" PRIu64
            ",\"actual_bytes\":%" PRIu64 ",\"byte_error_pct\":%.6Lf,"
@@ -1314,6 +1383,12 @@ void CompactionJob::MaybeRecordVCompAccuracy() {
            compaction->start_level(), compaction->output_level(),
            input_files.size(), input_keys_total, input_bytes, input_segments,
            target_sst_size, avg_entry_size, naive_entries, total_entries,
+           plr_entries, kmv_entries, actual_entries, kmv_rank_scale,
+           input_kmv_stats.empty, input_kmv_stats.complete,
+           input_kmv_stats.sample_min, input_kmv_stats.sample_mean,
+           input_kmv_stats.sample_max, output_kmv_stats.empty,
+           output_kmv_stats.complete, output_kmv_stats.sample_min,
+           output_kmv_stats.sample_mean, output_kmv_stats.sample_max,
            predicted_files.size(), actual_files.size(), count_error,
            predicted_bytes, actual_bytes, byte_error_pct, boundary_error_mean,
            boundary_error_max, input_scan_us, predict_us);

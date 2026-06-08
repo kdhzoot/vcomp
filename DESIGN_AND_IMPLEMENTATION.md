@@ -78,6 +78,8 @@ Input sequence
 | `num_entries` | Logical key-value pair count |
 | `size_bytes` | Level size, compaction score 계산에 사용 |
 | `plr_model` | Key -> local rank mapping |
+| `kmv_sketch` | Cross-SST dedup/cardinality 추정을 위한 작은 key fingerprint sample |
+| `kmv_ranges` | Key-range별 KMV sketch; local dedup/cardinality 추정에 사용 |
 
 ### 논문에서 강조할 점
 
@@ -86,7 +88,9 @@ Input sequence
 - `key_min/key_max`와 `level`은 compaction picker가 overlap과 level structure를
   판단하는 데 필요하다.
 - `plr_model`은 나중에 materialization할 때 key sequence를 복원하고, virtual
-  compaction에서 merged key distribution을 계산하는 데 사용된다.
+  compaction에서 merged key distribution shape를 계산하는 데 사용된다.
+- `kmv_sketch`는 PLR이 보존하지 못하는 key identity 정보를 작은 sample로
+  보존하여, cross-SST duplicate cardinality를 추정하는 데 사용된다.
 
 ## 3. Modeling a Sorted Run with PLR
 
@@ -152,14 +156,18 @@ pos_j(k) = a_j k + b_j, for k in [l_j, r_j]
 3. Radix-sort the vector.
 4. Remove intra-batch duplicates.
 5. Fit a PLR model.
-6. Create a virtual L0 SST descriptor.
-7. Enqueue it into the pending L0 window.
+6. Build global and range-local KMV sketches from the sorted unique keys.
+7. Create a virtual L0 SST descriptor.
+8. Enqueue it into the pending L0 window.
 
 ### 구현 세부사항으로 적을 것
 
 - `db_bench fillvirtual` path에 구현되어 있다.
 - Random key generation과 sorting은 foreground Phase 1에서 수행된다.
 - vSST의 estimated size는 `num_entries * average_entry_size`로 계산된다.
+- KMV sketch는 sorted unique key vector에서 가장 작은 hash sample을 유지한다.
+  현재 기본 total budget은 `VCOMP_KMV_SAMPLES=512`이며, range-local sketch 수는
+  `VCOMP_KMV_RANGE_BUCKETS=8`이다.
 
 ## 5. Visible L0 Window
 
@@ -245,14 +253,86 @@ rank_C(k) = (a_A + a_B) k + (b_A + b_B)
 따라서 compaction merge는 input PLR segments의 boundary union을 만들고, 각
 interval에서 active model들의 slope/intercept를 합산하는 방식으로 수행된다.
 
+### KMV-based dedup cardinality
+
+PLR merge만으로는 output key distribution의 shape는 만들 수 있지만, duplicate
+key cardinality를 안전하게 알 수 없다. 이전 구현은 active PLR segment의 slope를
+key density로 보고 다음 inclusion-exclusion 식으로 cross-SST dedup을 추정했다.
+
+```
+dedup slope = 1 - Π(1 - slope_i)
+```
+
+이 방식은 실제 key identity를 보지 않기 때문에, unique workload에서도 같은 key
+range 안에 density가 겹치면 duplicate가 있다고 오판할 수 있다. 특히 여러 번
+merge된 deep-level vSST에서는 작은 오차가 누적되어 final materialized key count가
+줄어드는 문제가 발생했다.
+
+현재 구현은 PLR을 shape/interval construction에만 사용하고, dedup cardinality는
+KMV만으로 결정한다.
+
+| Component | Role |
+|-----------|------|
+| PLR model | merged key->rank shape 및 key interval boundary 구성 |
+| Global KMV sketch | output logical entry count 및 total dedup cardinality 추정 |
+| Range-local KMV sketch | interval-local mass distribution 추정 |
+
+KMV(K-Minimum Values)는 key를 hash한 뒤 가장 작은 hash sample과 `theta_hash`를
+저장한다. 현재 구현은 vSST 전체 sketch와 함께 `kmv_ranges`를 유지한다. L0 vSST는
+sorted key sequence를 여러 key range로 나누고, total KMV sample budget을 range에
+분배한다. Compaction output vSST도 input range sketches를 해당 output key range로
+merge하여 다시 range-local sketch를 가진다.
+
+Compaction 시 PLR segment boundaries로 key interval을 만들되, dedup cardinality는
+PLR slope를 사용하지 않는다. 전체 output entry 수는 input vSST들의 global KMV
+union으로 먼저 결정한다. 이후 각 interval에서는 겹치는 input range sketch만 union해
+raw interval mass를 추정하고, 모든 interval mass의 합이 global KMV total과 맞도록
+rescale한다.
+
+```
+naive_entries = Σ input.num_entries
+kmv_total_entries ~= KMVUnion(input.global_kmv)
+
+for each interval I:
+  active = {vSST | vSST overlaps I}
+  ranges = {r | r in active.kmv_ranges and r overlaps I}
+  raw_interval_entries[I] ~= KMVUnion(ranges filtered to I)
+
+scale = kmv_total_entries / Σ raw_interval_entries
+interval_entries[I] = raw_interval_entries[I] * scale
+dedup_entries = naive_entries - kmv_total_entries
+```
+
+PLR slope inclusion-exclusion은 dedup cardinality에 사용하지 않는다. Interval 안의
+rank shape는 input PLR slope를 사용해 유지하지만, total mass는 global KMV estimate에
+맞추고 range-local KMV는 그 mass를 key interval에 분배하는 데만 사용한다.
+
+### KMV implementation details
+
+- L0 vSST 생성 시 sorted unique key vector에서 global KMV와 range-local KMV를
+  함께 만든다.
+- Sketch sample은 `(key, hash)`를 저장한다. `key`를 함께 저장하는 이유는 output
+  vSST split 후 각 output range에 속한 sample만 전파하기 위해서이다.
+- 기본 sample count는 `512`이며 `VCOMP_KMV_SAMPLES` 환경변수로 조절할 수 있다.
+- 기본 range bucket 수는 `8`이며 `VCOMP_KMV_RANGE_BUCKETS` 환경변수로 조절할 수
+  있다. sample budget은 vSST 전체 기준으로 유지하고 bucket들이 나눠 쓴다.
+- `theta_hash`를 함께 유지해 range-filtered sample을 bottom-K로 오해하지 않도록
+  한다.
+- Global KMV union estimate가 output logical entry count를 직접 결정한다.
+- Output vSST는 input range sketches를 key range로 filter/merge한 global sketch와
+  range-local sketches를 다시 가진다.
+- PLR 기반 dedup fallback은 없다. 어떤 interval에서 KMV sample이 없으면 PLR
+  density로 보정하지 않는다.
+
 ### Virtual compaction 단계
 
 1. Input file numbers로 vSST descriptor 조회.
 2. Input PLR boundaries를 union하여 merged intervals 구성.
-3. 각 interval에서 active model들의 slope/intercept 합산.
-4. Merged PLR model의 total entries와 key range 계산.
-5. Merged model을 output vSST들로 split.
-6. VersionEdit으로 input vSST 삭제, output vSST 추가.
+3. Input vSST들의 global KMV union으로 output logical entry count 계산.
+4. 각 interval에서 active vSST들의 range-local KMV sample로 raw interval mass 추정.
+5. Raw interval mass를 global KMV total에 맞게 rescale하고 merged PLR rank function 구성.
+6. Merged model을 output vSST들로 split하고 output KMV/range sketches 전파.
+7. VersionEdit으로 input vSST 삭제, output vSST 추가.
 
 ## 7. Preserving LSM Tree Shape
 

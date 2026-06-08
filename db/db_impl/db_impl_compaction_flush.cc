@@ -5738,21 +5738,19 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
     return Status::OK();
   }
 
+  std::vector<const VirtualSST*> input_vsst_ptrs;
+  input_vsst_ptrs.reserve(input_vssts.size());
+  for (const auto& vsst : input_vssts) {
+    input_vsst_ptrs.push_back(&vsst);
+  }
+
   // Release mutex during PLR merge (CPU-intensive, no shared state).
   mutex_.Unlock();
 
-  // N-way PLR merge with probabilistic dedup correction.
+  // N-way PLR shape merge with range-aware KMV-only dedup. PLR is used for
+  // shape/interval boundaries, not for dedup cardinality.
   uint64_t input_segments_total = 0;
   for (const auto* m : models) input_segments_total += m->NumSegments();
-  uint64_t merge_t0 = immutable_db_options_.clock->NowMicros();
-  uint64_t adjusted_entries = 0;
-  PLRModel merged = NWayMergePLR(models, num_entries_vec,
-                                  key_mins_vec, key_maxs_vec,
-                                  /*dedup=*/true, &adjusted_entries);
-  uint64_t merge_us = immutable_db_options_.clock->NowMicros() - merge_t0;
-
-  uint64_t split_t0 = immutable_db_options_.clock->NowMicros();
-  // Compute naive total entries and global key range.
   uint64_t naive_entries = 0;
   uint64_t global_min = std::numeric_limits<uint64_t>::max();
   uint64_t global_max = 0;
@@ -5761,14 +5759,19 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
     global_min = std::min(global_min, key_mins_vec[i]);
     global_max = std::max(global_max, key_maxs_vec[i]);
   }
-  // Dedup path: use adjusted_entries from inclusion-exclusion estimate.
-  // When density is very low, PLR integration error can exceed the dedup
-  // signal, causing adjusted > naive. Cap to avoid underflow.
-  // Naive path: uint64_t total_entries = naive_entries;
-  uint64_t total_entries =
-      (adjusted_entries > 0 && adjusted_entries <= naive_entries)
-          ? adjusted_entries
-          : naive_entries;
+
+  uint64_t merge_t0 = immutable_db_options_.clock->NowMicros();
+  uint64_t total_entries = 0;
+  PLRModel merged = NWayMergeKMVRangeAware(input_vsst_ptrs, &total_entries);
+  uint64_t merge_us = immutable_db_options_.clock->NowMicros() - merge_t0;
+
+  uint64_t split_t0 = immutable_db_options_.clock->NowMicros();
+  if (total_entries > naive_entries && total_entries > 0) {
+    const double scale = static_cast<double>(naive_entries) /
+                         static_cast<double>(total_entries);
+    merged = ScalePLRPositions(merged, scale);
+    total_entries = naive_entries;
+  }
   uint64_t dedup_estimate = naive_entries - total_entries;
 
   uint64_t target_sst_size = virtual_sst_registry_->GetTargetSSTSize();
@@ -5811,7 +5814,7 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   // Split into output VirtualSSTs.
   std::vector<VirtualSST> output_vssts = SplitIntoSSTs(
       merged, total_entries, target_sst_size, avg_entry_size, global_min,
-      global_max, output_level, gp_boundaries);
+      global_max, output_level, gp_boundaries, &input_vsst_ptrs);
   uint64_t split_us = immutable_db_options_.clock->NowMicros() - split_t0;
 
   auto key_width = [](uint64_t key_min, uint64_t key_max) -> uint64_t {

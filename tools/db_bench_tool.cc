@@ -33,6 +33,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <deque>
+#include <future>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -983,6 +984,19 @@ DEFINE_uint64(vcomp_visible_l0_batch_mb, 0,
 DEFINE_bool(vcomp_log_apply_timing, true,
             "Collect detailed LogAndApply timing breakdown for fillvirtual. "
             "Disable to measure instrumentation overhead.");
+
+DEFINE_bool(vcomp_sort_detail_timing, false,
+            "Collect detailed radix-sort timing breakdown for fillvirtual. "
+            "Keep disabled for end-to-end performance measurements.");
+
+DEFINE_uint64(vcomp_phase1_shards, 1,
+              "Number of concurrent fillvirtual Phase 1 workers for "
+              "synthetic key generation, sorting, PLR fitting, and KMV build. "
+              "Trace replay keeps the single-threaded path.");
+
+DEFINE_uint64(vcomp_materialize_workers, 48,
+              "Number of Phase 2 materialization workers. 0 means one worker "
+              "per hardware thread.");
 
 DEFINE_uint64(periodic_compaction_seconds,
               ROCKSDB_NAMESPACE::Options().periodic_compaction_seconds,
@@ -5674,14 +5688,27 @@ class Benchmark {
     }
     fprintf(stderr, "LogAndApply timing: %s\n",
             FLAGS_vcomp_log_apply_timing ? "on" : "off");
+    fprintf(stderr, "Sort detail timing: %s\n",
+            FLAGS_vcomp_sort_detail_timing ? "on" : "off");
+    fprintf(stderr, "Phase 1 shards: %" PRIu64 "%s\n",
+            FLAGS_vcomp_phase1_shards,
+            use_load_trace && FLAGS_vcomp_phase1_shards > 1
+                ? " (trace replay uses serial path)"
+                : "");
     auto phase1_start = FLAGS_env->NowMicros();
 
     uint64_t sort_us = 0, flush_us = 0, plr_fit_us = 0;
+    uint64_t keygen_measured_us = 0;
+    uint64_t sort_resize_us = 0, sort_count_us = 0, sort_offset_us = 0;
+    uint64_t sort_scatter_us = 0, sort_copy_us = 0, sort_unique_us = 0;
+    uint64_t sort_count_pass_us[8] = {};
+    uint64_t sort_scatter_pass_us[8] = {};
     uint64_t mutex_us = 0, regbuild_us = 0, addfile_us = 0;
     uint64_t total_flushes = 0;
     uint64_t register_calls = 0;
     uint64_t total_keys_before_dedup = 0, total_keys_after_dedup = 0;
     uint64_t total_segments = 0;
+    uint64_t max_flush_input_keys = 0, max_flush_output_keys = 0;
     uint64_t next_epoch = 1;
 
     Random64& rng = thread->rand;
@@ -5747,30 +5774,257 @@ class Benchmark {
       }
     };
 
+    struct Phase1BatchResult {
+      DBImpl::VirtualL0WindowFile pending_file;
+      uint64_t sort_us = 0;
+      uint64_t keygen_us = 0;
+      uint64_t plr_fit_us = 0;
+      uint64_t regbuild_us = 0;
+      uint64_t keys_before_dedup = 0;
+      uint64_t keys_after_dedup = 0;
+      uint64_t segments = 0;
+      uint64_t sort_resize_us = 0;
+      uint64_t sort_count_us = 0;
+      uint64_t sort_offset_us = 0;
+      uint64_t sort_scatter_us = 0;
+      uint64_t sort_copy_us = 0;
+      uint64_t sort_unique_us = 0;
+      uint64_t sort_count_pass_us[8] = {};
+      uint64_t sort_scatter_pass_us[8] = {};
+    };
+
+    auto accumulate_phase1_batch_stats =
+        [&](const Phase1BatchResult& result) {
+          sort_us += result.sort_us;
+          keygen_measured_us += result.keygen_us;
+          plr_fit_us += result.plr_fit_us;
+          regbuild_us += result.regbuild_us;
+          total_keys_before_dedup += result.keys_before_dedup;
+          total_keys_after_dedup += result.keys_after_dedup;
+          total_segments += result.segments;
+          if (FLAGS_vcomp_sort_detail_timing) {
+            sort_resize_us += result.sort_resize_us;
+            sort_count_us += result.sort_count_us;
+            sort_offset_us += result.sort_offset_us;
+            sort_scatter_us += result.sort_scatter_us;
+            sort_copy_us += result.sort_copy_us;
+            sort_unique_us += result.sort_unique_us;
+            for (size_t i = 0; i < 8; ++i) {
+              sort_count_pass_us[i] += result.sort_count_pass_us[i];
+              sort_scatter_pass_us[i] += result.sort_scatter_pass_us[i];
+            }
+            max_flush_input_keys =
+                std::max<uint64_t>(max_flush_input_keys,
+                                   result.keys_before_dedup);
+            max_flush_output_keys =
+                std::max<uint64_t>(max_flush_output_keys,
+                                   result.keys_after_dedup);
+          }
+        };
+
+    auto enqueue_phase1_batch_result = [&](Phase1BatchResult result) {
+      accumulate_phase1_batch_stats(result);
+
+      auto t5 = FLAGS_env->NowMicros();
+      l0_window_enqueue_batch.push_back(std::move(result.pending_file));
+      if (l0_window_enqueue_batch.size() >= register_batch_max) {
+        flush_l0_window_enqueue_batch();
+      }
+      auto t6 = FLAGS_env->NowMicros();
+
+      addfile_us += (t6 - t5);
+      total_flushes++;
+    };
+
+    auto process_synthetic_batch =
+        [&](uint64_t batch_id, uint64_t batch_keys) {
+          Phase1BatchResult result;
+          result.pending_file.file_number = reserved_l0_file_base + batch_id;
+          result.pending_file.epoch_number = batch_id + 1;
+
+          std::vector<uint64_t> keys;
+          keys.reserve(static_cast<size_t>(batch_keys));
+
+          auto keygen_t0 = FLAGS_env->NowMicros();
+          // Parallel mode intentionally uses deterministic per-batch streams.
+          // This preserves the uniform-random workload while avoiding a shared
+          // RNG bottleneck and keeping batch/file order deterministic.
+          const uint64_t seed =
+              static_cast<uint64_t>(*seed_base) ^
+              (0x9e3779b97f4a7c15ULL + batch_id * 0xbf58476d1ce4e5b9ULL);
+          Random64 local_rng(seed);
+          for (uint64_t i = 0; i < batch_keys; ++i) {
+            keys.push_back(local_rng.Next() % key_domain_for_keys);
+          }
+          auto keygen_t1 = FLAGS_env->NowMicros();
+
+          auto sort_t0 = keygen_t1;
+
+          std::vector<uint64_t> local_radix_tmp;
+          uint64_t resize_t0 = 0;
+          if (FLAGS_vcomp_sort_detail_timing) {
+            resize_t0 = FLAGS_env->NowMicros();
+          }
+          local_radix_tmp.resize(keys.size());
+          if (FLAGS_vcomp_sort_detail_timing) {
+            result.sort_resize_us += FLAGS_env->NowMicros() - resize_t0;
+          }
+
+          uint64_t* src = keys.data();
+          uint64_t* dst = local_radix_tmp.data();
+          const size_t n = keys.size();
+          for (int pass = 0; pass < radix_passes; ++pass) {
+            const int shift = pass * 8;
+            size_t count[256] = {};
+            uint64_t count_t0 = 0;
+            if (FLAGS_vcomp_sort_detail_timing) {
+              count_t0 = FLAGS_env->NowMicros();
+            }
+            for (size_t i = 0; i < n; ++i) {
+              count[(src[i] >> shift) & 0xFF]++;
+            }
+            uint64_t count_t1 = 0;
+            if (FLAGS_vcomp_sort_detail_timing) {
+              count_t1 = FLAGS_env->NowMicros();
+            }
+            size_t offset[256];
+            offset[0] = 0;
+            for (int b = 1; b < 256; ++b) {
+              offset[b] = offset[b - 1] + count[b - 1];
+            }
+            uint64_t offset_t1 = 0;
+            if (FLAGS_vcomp_sort_detail_timing) {
+              offset_t1 = FLAGS_env->NowMicros();
+            }
+            for (size_t i = 0; i < n; ++i) {
+              dst[offset[(src[i] >> shift) & 0xFF]++] = src[i];
+            }
+            if (FLAGS_vcomp_sort_detail_timing) {
+              auto scatter_t1 = FLAGS_env->NowMicros();
+              result.sort_count_us += count_t1 - count_t0;
+              result.sort_offset_us += offset_t1 - count_t1;
+              result.sort_scatter_us += scatter_t1 - offset_t1;
+              if (pass < 8) {
+                result.sort_count_pass_us[pass] += count_t1 - count_t0;
+                result.sort_scatter_pass_us[pass] += scatter_t1 - offset_t1;
+              }
+            }
+            std::swap(src, dst);
+          }
+          if (src != keys.data()) {
+            uint64_t copy_t0 = 0;
+            if (FLAGS_vcomp_sort_detail_timing) {
+              copy_t0 = FLAGS_env->NowMicros();
+            }
+            memcpy(keys.data(), src, n * sizeof(uint64_t));
+            if (FLAGS_vcomp_sort_detail_timing) {
+              result.sort_copy_us += FLAGS_env->NowMicros() - copy_t0;
+            }
+          }
+
+          uint64_t unique_t0 = 0;
+          if (FLAGS_vcomp_sort_detail_timing) {
+            unique_t0 = FLAGS_env->NowMicros();
+          }
+          keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+          auto sort_t1 = FLAGS_env->NowMicros();
+          if (FLAGS_vcomp_sort_detail_timing) {
+            result.sort_unique_us += sort_t1 - unique_t0;
+          }
+
+          auto plr_t0 = sort_t1;
+          PLRModel plr = GreedyPLRFit(keys, plr_error_bound);
+          auto plr_t1 = FLAGS_env->NowMicros();
+
+          result.keygen_us = keygen_t1 - keygen_t0;
+          result.sort_us = sort_t1 - sort_t0;
+          result.plr_fit_us = plr_t1 - plr_t0;
+          result.keys_before_dedup = batch_keys;
+          result.keys_after_dedup = keys.size();
+          result.segments = plr.NumSegments();
+
+          VirtualSST vsst;
+          vsst.plr_model = std::move(plr);
+          vsst.kmv_sketch = BuildKMVSketchFromSortedKeys(keys);
+          vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(keys);
+          vsst.key_min = keys.front();
+          vsst.key_max = keys.back();
+          vsst.num_entries = keys.size();
+          vsst.level = 0;
+          vsst.size_bytes =
+              VirtualSST::EstimateSize(keys.size(), avg_entry_size);
+
+          auto regbuild_t0 = FLAGS_env->NowMicros();
+          result.pending_file.file_size = vsst.size_bytes;
+          result.pending_file.vsst = std::move(vsst);
+          result.regbuild_us += FLAGS_env->NowMicros() - regbuild_t0;
+          return result;
+        };
+
     auto do_flush = [&]() {
       auto t0 = FLAGS_env->NowMicros();
 
       // Radix sort: 8-bit radix, only the bytes needed to cover [0, FLAGS_num).
       const size_t n = memtable_buf.size();
+      uint64_t t_resize0 = 0;
+      if (FLAGS_vcomp_sort_detail_timing) {
+        t_resize0 = FLAGS_env->NowMicros();
+      }
       radix_tmp.resize(n);
+      if (FLAGS_vcomp_sort_detail_timing) {
+        sort_resize_us += FLAGS_env->NowMicros() - t_resize0;
+      }
       uint64_t* src = memtable_buf.data();
       uint64_t* dst = radix_tmp.data();
 
       for (int pass = 0; pass < radix_passes; pass++) {
         const int shift = pass * 8;
         size_t count[256] = {};
+        uint64_t t_count0 = 0;
+        if (FLAGS_vcomp_sort_detail_timing) {
+          t_count0 = FLAGS_env->NowMicros();
+        }
         for (size_t i = 0; i < n; i++)
           count[(src[i] >> shift) & 0xFF]++;
+        uint64_t t_count1 = 0;
+        if (FLAGS_vcomp_sort_detail_timing) {
+          t_count1 = FLAGS_env->NowMicros();
+        }
         size_t offset[256];
         offset[0] = 0;
         for (int b = 1; b < 256; b++)
           offset[b] = offset[b - 1] + count[b - 1];
+        uint64_t t_offset1 = 0;
+        if (FLAGS_vcomp_sort_detail_timing) {
+          t_offset1 = FLAGS_env->NowMicros();
+        }
         for (size_t i = 0; i < n; i++)
           dst[offset[(src[i] >> shift) & 0xFF]++] = src[i];
+        if (FLAGS_vcomp_sort_detail_timing) {
+          auto t_scatter1 = FLAGS_env->NowMicros();
+          sort_count_us += (t_count1 - t_count0);
+          sort_offset_us += (t_offset1 - t_count1);
+          sort_scatter_us += (t_scatter1 - t_offset1);
+          if (pass < 8) {
+            sort_count_pass_us[pass] += (t_count1 - t_count0);
+            sort_scatter_pass_us[pass] += (t_scatter1 - t_offset1);
+          }
+        }
         std::swap(src, dst);
       }
       if (src != memtable_buf.data()) {
+        uint64_t t_copy0 = 0;
+        if (FLAGS_vcomp_sort_detail_timing) {
+          t_copy0 = FLAGS_env->NowMicros();
+        }
         memcpy(memtable_buf.data(), src, n * sizeof(uint64_t));
+        if (FLAGS_vcomp_sort_detail_timing) {
+          sort_copy_us += FLAGS_env->NowMicros() - t_copy0;
+        }
+      }
+      uint64_t t_unique0 = 0;
+      if (FLAGS_vcomp_sort_detail_timing) {
+        t_unique0 = FLAGS_env->NowMicros();
       }
       // Remove intra-batch duplicates (sorted, so duplicates are adjacent).
       memtable_buf.erase(
@@ -5782,14 +6036,24 @@ class Benchmark {
       auto t2 = FLAGS_env->NowMicros();
 
       sort_us += (t1 - t0);
+      if (FLAGS_vcomp_sort_detail_timing) {
+        sort_unique_us += (t1 - t_unique0);
+      }
       plr_fit_us += (t2 - t1);
       total_keys_before_dedup += n;
       total_keys_after_dedup += memtable_buf.size();
+      if (FLAGS_vcomp_sort_detail_timing) {
+        max_flush_input_keys = std::max<uint64_t>(max_flush_input_keys, n);
+        max_flush_output_keys =
+            std::max<uint64_t>(max_flush_output_keys, memtable_buf.size());
+      }
       total_segments += plr.NumSegments();
 
       // Build VirtualSST.
       VirtualSST vsst;
       vsst.plr_model = std::move(plr);
+      vsst.kmv_sketch = BuildKMVSketchFromSortedKeys(memtable_buf);
+      vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(memtable_buf);
       vsst.key_min = memtable_buf.front();
       vsst.key_max = memtable_buf.back();
       vsst.num_entries = memtable_buf.size();
@@ -5825,36 +6089,98 @@ class Benchmark {
 
     int64_t trace_records_read = 0;
     bool load_trace_eof = false;
-    for (int64_t i = 0; i < num_ops; i++) {
-      if (l0_window_failed.load(std::memory_order_relaxed)) {
-        break;
-      }
-      uint64_t key_id = 0;
-      if (use_load_trace) {
-        size_t n = fread(&key_id, sizeof(key_id), 1, load_trace_fp);
-        if (n == 0) {
+    if (use_load_trace) {
+      constexpr size_t kTraceReadBatchRecords = 4ULL * 1024ULL * 1024ULL;
+      std::vector<uint64_t> trace_read_buf(kTraceReadBatchRecords);
+      while (trace_records_read < num_ops &&
+             !l0_window_failed.load(std::memory_order_relaxed)) {
+        const uint64_t remaining =
+            static_cast<uint64_t>(num_ops - trace_records_read);
+        const size_t want = static_cast<size_t>(std::min<uint64_t>(
+            kTraceReadBatchRecords, remaining));
+        const size_t got =
+            fread(trace_read_buf.data(), sizeof(uint64_t), want,
+                  load_trace_fp);
+        if (got == 0) {
           load_trace_eof = true;
           break;
         }
-        if (key_id >= key_domain_for_keys) {
-          fprintf(stderr,
-                  "fillvirtual: key_id=%" PRIu64
-                  " outside key_domain=%" PRIu64 "\n",
-                  key_id, key_domain_for_keys);
-          if (load_trace_fp != nullptr) {
-            fclose(load_trace_fp);
-            load_trace_fp = nullptr;
-          }
-          return;
-        }
-        trace_records_read++;
-      } else {
-        key_id = rng.Next() % key_domain_for_keys;
-      }
-      memtable_buf.push_back(key_id);
 
-      if (memtable_buf.size() >= memtable_capacity) {
-        do_flush();
+        size_t pos = 0;
+        while (pos < got &&
+               !l0_window_failed.load(std::memory_order_relaxed)) {
+          if (memtable_buf.size() >= memtable_capacity) {
+            do_flush();
+            continue;
+          }
+          const size_t space = static_cast<size_t>(
+              memtable_capacity - memtable_buf.size());
+          const size_t take = std::min(space, got - pos);
+          const size_t old_size = memtable_buf.size();
+          memtable_buf.resize(old_size + take);
+          memcpy(memtable_buf.data() + old_size, trace_read_buf.data() + pos,
+                 take * sizeof(uint64_t));
+          pos += take;
+          trace_records_read += static_cast<int64_t>(take);
+
+          if (memtable_buf.size() >= memtable_capacity) {
+            do_flush();
+          }
+        }
+        if (got < want) {
+          load_trace_eof = true;
+          break;
+        }
+      }
+    } else {
+      const uint64_t phase1_shards =
+          std::max<uint64_t>(1, FLAGS_vcomp_phase1_shards);
+      if (phase1_shards > 1) {
+        fprintf(stderr,
+                "FillVirtual: parallel synthetic Phase 1 enabled "
+                "(shards=%" PRIu64 ", batches=%" PRIu64 ")\n",
+                phase1_shards, total_flushes_expected);
+        std::deque<std::future<Phase1BatchResult>> in_flight;
+
+        auto drain_one_parallel_batch = [&]() {
+          Phase1BatchResult result = in_flight.front().get();
+          in_flight.pop_front();
+          enqueue_phase1_batch_result(std::move(result));
+        };
+
+        for (uint64_t batch_id = 0; batch_id < total_flushes_expected;
+             ++batch_id) {
+          if (l0_window_failed.load(std::memory_order_relaxed)) {
+            break;
+          }
+          const uint64_t batch_start = batch_id * memtable_capacity;
+          const uint64_t remaining =
+              static_cast<uint64_t>(num_ops) - batch_start;
+          const uint64_t batch_keys = std::min(memtable_capacity, remaining);
+          in_flight.emplace_back(std::async(std::launch::async,
+                                            process_synthetic_batch, batch_id,
+                                            batch_keys));
+          if (in_flight.size() >= phase1_shards) {
+            drain_one_parallel_batch();
+          }
+        }
+
+        while (!in_flight.empty() &&
+               !l0_window_failed.load(std::memory_order_relaxed)) {
+          drain_one_parallel_batch();
+        }
+      } else {
+        for (int64_t i = 0; i < num_ops; i++) {
+          if (l0_window_failed.load(std::memory_order_relaxed)) {
+            break;
+          }
+          uint64_t key_id = rng.Next() % key_domain_for_keys;
+          memtable_buf.push_back(key_id);
+
+          if (memtable_buf.size() >= memtable_capacity) {
+            do_flush();
+          }
+        }
       }
     }
     if (!l0_window_failed.load(std::memory_order_relaxed) &&
@@ -5878,16 +6204,62 @@ class Benchmark {
     auto phase1_end = foreground_end;
     uint64_t phase1_total_us = phase1_end - phase1_start;
     double phase1_secs = phase1_total_us / 1e6;
-    uint64_t accounted_us = sort_us + plr_fit_us + mutex_us + regbuild_us +
-                            addfile_us + flush_us;
-    uint64_t keygen_us =
-        phase1_total_us > accounted_us ? phase1_total_us - accounted_us : 0;
+    uint64_t non_keygen_accounted_us =
+        sort_us + plr_fit_us + mutex_us + regbuild_us + addfile_us + flush_us;
+    uint64_t keygen_us = keygen_measured_us > 0
+                             ? keygen_measured_us
+                             : (phase1_total_us > non_keygen_accounted_us
+                                    ? phase1_total_us -
+                                          non_keygen_accounted_us
+                                    : 0);
+    uint64_t accounted_us = non_keygen_accounted_us + keygen_us;
     fprintf(stderr,
         "  Phase 1 breakdown: keygen=%.3fs sort=%.3fs plr_fit=%.3fs "
         "mutex=%.3fs regbuild=%.3fs addfile=%.3fs register=%.3fs\n",
         keygen_us / 1e6, sort_us / 1e6, plr_fit_us / 1e6,
         mutex_us / 1e6, regbuild_us / 1e6, addfile_us / 1e6,
         flush_us / 1e6);
+    if (FLAGS_vcomp_sort_detail_timing) {
+      uint64_t sort_detail_accounted = sort_resize_us + sort_count_us +
+                                       sort_offset_us + sort_scatter_us +
+                                       sort_copy_us + sort_unique_us;
+      uint64_t sort_other_us =
+          sort_us > sort_detail_accounted ? sort_us - sort_detail_accounted : 0;
+      fprintf(stderr,
+              "  Phase 1 sort detail: passes=%d flushes=%" PRIu64
+              " in_keys=%" PRIu64 " out_keys=%" PRIu64
+              " avg_in=%.1f avg_out=%.1f max_in=%" PRIu64
+              " max_out=%" PRIu64 "\n",
+              radix_passes, total_flushes, total_keys_before_dedup,
+              total_keys_after_dedup,
+              total_flushes > 0
+                  ? static_cast<double>(total_keys_before_dedup) / total_flushes
+                  : 0.0,
+              total_flushes > 0
+                  ? static_cast<double>(total_keys_after_dedup) / total_flushes
+                  : 0.0,
+              max_flush_input_keys, max_flush_output_keys);
+      fprintf(stderr,
+              "  Phase 1 sort time detail: resize=%.3fs count=%.3fs "
+              "offset=%.3fs scatter=%.3fs copy=%.3fs unique=%.3fs "
+              "other=%.3fs\n",
+              sort_resize_us / 1e6, sort_count_us / 1e6,
+              sort_offset_us / 1e6, sort_scatter_us / 1e6,
+              sort_copy_us / 1e6, sort_unique_us / 1e6,
+              sort_other_us / 1e6);
+      std::string sort_pass_detail;
+      for (int pass = 0; pass < radix_passes && pass < 8; ++pass) {
+        char buf[96];
+        snprintf(buf, sizeof(buf), " p%d_count=%.3fs p%d_scatter=%.3fs",
+                 pass, sort_count_pass_us[pass] / 1e6, pass,
+                 sort_scatter_pass_us[pass] / 1e6);
+        sort_pass_detail.append(buf);
+      }
+      if (!sort_pass_detail.empty()) {
+        fprintf(stderr, "  Phase 1 sort pass detail:%s\n",
+                sort_pass_detail.c_str());
+      }
+    }
     fprintf(stderr,
             "  Phase 1 keygen detail: foreground=%.3fs accounted=%.3fs "
             "%s=%.3fs\n",
@@ -6178,9 +6550,15 @@ class Benchmark {
     auto phase2a_start = FLAGS_env->NowMicros();
     {
       std::vector<std::thread> threads;
-      const size_t num_workers = std::min(
-          static_cast<size_t>(std::thread::hardware_concurrency()),
-          tasks.size());
+      const size_t hw_workers = std::max<size_t>(
+          1, static_cast<size_t>(std::thread::hardware_concurrency()));
+      const size_t requested_workers =
+          FLAGS_vcomp_materialize_workers == 0
+              ? hw_workers
+              : static_cast<size_t>(FLAGS_vcomp_materialize_workers);
+      const size_t num_workers =
+          std::min(std::max<size_t>(1, requested_workers), tasks.size());
+      fprintf(stderr, "  Phase 2 materialize workers: %zu\n", num_workers);
       std::atomic<size_t> next_task{0};
 
       for (size_t w = 0; w < num_workers; w++) {
@@ -6200,9 +6578,10 @@ class Benchmark {
             res.level = task.level;
             res.ok = false;
 
-            // Materialize keys from PLR model.
-              std::vector<uint64_t> keys = MaterializeKeys(task.vsst);
-            if (keys.empty()) continue;
+            if (task.vsst.num_entries == 0 ||
+                task.vsst.plr_model.Empty()) {
+              continue;
+            }
 
             // Write SST file.
             std::string sst_path = TableFileName(
@@ -6225,13 +6604,52 @@ class Benchmark {
               continue;
             }
 
+            // Stream materialized keys directly into the SST writer. This
+            // avoids allocating and rereading a uint64_t vector per VSST.
+            const auto& segments = task.vsst.plr_model.Segments();
+            size_t seg_idx = 0;
+            uint64_t prev_materialized_key = 0;
+            bool has_prev_materialized_key = false;
             std::string prev_key_str;
             uint64_t keys_in_file = 0;
 
-            for (const auto& k : keys) {
+            for (uint64_t pos = 0; pos < task.vsst.num_entries; pos++) {
+              double position = static_cast<double>(pos);
+
+              while (seg_idx + 1 < segments.size()) {
+                double pos_end =
+                    segments[seg_idx].slope *
+                        static_cast<double>(segments[seg_idx].key_end) +
+                    segments[seg_idx].intercept;
+                if (position <= pos_end) break;
+                seg_idx++;
+              }
+
+              const auto& seg = segments[seg_idx];
+              uint64_t k;
+              if (std::abs(seg.slope) < 1e-15) {
+                k = (seg.key_start + seg.key_end) / 2;
+              } else {
+                double key_d = (position - seg.intercept) / seg.slope;
+                key_d = std::max(key_d, static_cast<double>(seg.key_start));
+                key_d = std::min(key_d, static_cast<double>(seg.key_end));
+                k = static_cast<uint64_t>(std::round(key_d));
+              }
+              k = std::max(k, task.vsst.key_min);
+              k = std::min(k, task.vsst.key_max);
+              if (has_prev_materialized_key && k <= prev_materialized_key) {
+                if (prev_materialized_key == UINT64_MAX) break;
+                k = prev_materialized_key + 1;
+              }
+              if (k > task.vsst.key_max) break;
+
               GenerateKeyFromInt(k, key_domain_for_keys, &local_key);
-              std::string cur(local_key.data(), local_key.size());
-              if (cur <= prev_key_str) continue;
+              if (!prev_key_str.empty() &&
+                  memcmp(local_key.data(), prev_key_str.data(), key_size_) <= 0) {
+                prev_materialized_key = k;
+                has_prev_materialized_key = true;
+                continue;
+              }
               s = sst_writer.Put(local_key, local_gen.Generate());
               if (!s.ok()) {
                 static std::atomic<int> put_err_count{0};
@@ -6240,9 +6658,13 @@ class Benchmark {
                 }
                 break;
               }
-              if (res.first_key.empty()) res.first_key = cur;
-              res.last_key = cur;
-              prev_key_str = cur;
+              if (res.first_key.empty()) {
+                res.first_key.assign(local_key.data(), local_key.size());
+              }
+              res.last_key.assign(local_key.data(), local_key.size());
+              prev_key_str = res.last_key;
+              prev_materialized_key = k;
+              has_prev_materialized_key = true;
               keys_in_file++;
             }
 

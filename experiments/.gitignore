@@ -1,24 +1,10 @@
-# Python/cache artifacts
+# Raw experiment outputs. Curated tables and figures belong in results/.
+/artifacts/
+
+# Python/cache artifacts.
 __pycache__/
 *.py[cod]
 
-# Raw experiment outputs are large and regenerated from scripts.
-log_loads/*
-log_batch/*/
-log_runs/*/
-log_runs/.last_*
-coverage_dumps/*/
-compaction_logs/*/
-
-# Generated figures and tabular summaries.
-figures/
-*.csv
-*.tsv
-*.png
-*.jpg
-*.jpeg
-*.log
-
-# Local/editor noise
+# Local/editor noise.
 .DS_Store
 *.swp

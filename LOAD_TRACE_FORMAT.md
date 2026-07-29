@@ -37,7 +37,7 @@ python3 tools/generate_load_trace.py /work/vcomp/load_traces/trace_500gb_91b_u63
 num_records = target_db_gb * 1024^3 / (key_size + value_size)
 ```
 
-This matches `eval-vcomp/load.sh`.
+This matches `experiments/scripts/load/load.sh`.
 
 ## Binary Layout
 

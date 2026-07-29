@@ -9,15 +9,15 @@ historical notebook for how the design got here.
   as snapshots from that date, not as the current design.
 
 Measurement results (current best numbers) live in
-[../eval-vcomp/RESULTS.md](../eval-vcomp/RESULTS.md). Queued
+[experiments/docs/RESULTS.md](experiments/docs/RESULTS.md). Queued
 experiments live in
-[../eval-vcomp/EXPERIMENTS_PLANNED.md](../eval-vcomp/EXPERIMENTS_PLANNED.md).
+[experiments/docs/EXPERIMENTS_PLANNED.md](experiments/docs/EXPERIMENTS_PLANNED.md).
 
 ---
 
 ## Current State
 
-As of 2026-06-03, this branch is focused on the synthetic metadata-only
+As of 2026-07-29, this branch is focused on the synthetic metadata-only
 `fillvirtual` loader. Twitter/trace KV work is parked; the paper path is the
 synthetic loader plus final materialization.
 
@@ -82,10 +82,12 @@ Current implementation:
   `LogAndApply`, especially `SaveSSTFilesTo`, compaction priority rebuild, and
   level-file brief/index rebuild.
 - Motivation baseline scaling experiment setup lives in
-  `../eval-vcomp/MOTIVATION_LOAD_SCALING.md` and
-  `../eval-vcomp/run_motivation_load_scaling.sh`.
+  `experiments/docs/MOTIVATION_LOAD_SCALING.md` and
+  `experiments/scripts/load/run_motivation_load_scaling.sh`.
 - Latest baseline/vcomp-version comparison CSV:
-  `../eval-vcomp/log_loads/load_comparison_versions.csv`.
+  `experiments/artifacts/log_loads/load_comparison_versions.csv`.
+- Experiment runners, analysis code, documentation, curated results, and raw
+  artifacts are managed together under [experiments/](experiments/README.md).
 
 ---
 
@@ -97,10 +99,11 @@ Build from this repository:
 ./make.sh
 ```
 
-Run the standard eval wrapper from `../eval-vcomp`:
+Run the standard experiment wrapper from this repository:
 
 ```bash
-MODE=vcomp TARGET_DB_GB=1000 DB_ROOT=/work/vcomp bash ../eval-vcomp/load.sh
+MODE=vcomp TARGET_DB_GB=1000 DB_ROOT=/work/vcomp \
+  experiments/scripts/load/load.sh
 ```
 
 The wrapper defaults to the same current values as the code:
@@ -692,7 +695,7 @@ deferred until they are shown to drive a measurable structural gap:
 Time-ordered narrative of the vcomp project. Old entries are preserved
 as-is — they are snapshots of the state at the time, not current truth.
 For current measurements, see
-[../eval-vcomp/RESULTS.md](../eval-vcomp/RESULTS.md).
+[experiments/docs/RESULTS.md](experiments/docs/RESULTS.md).
 
 ## Test environment
 
@@ -712,7 +715,7 @@ For current measurements, see
 Baseline = `fillrandom,waitforcompaction,stats,levelstats`,
 `max_background_jobs=32`, `seed=12345678`. These were the first single-load
 values used as a target during early optimization. Current 30-load
-batch numbers are in [RESULTS.md §1.1](RESULTS.md#11-250-gb--30-run-batch).
+batch numbers are in [RESULTS.md §1.1](experiments/docs/RESULTS.md#11-250-gb--30-run-batch).
 
 ---
 
@@ -911,7 +914,7 @@ Kernel boot param `nosmt` prevents runtime HT enable; requires reboot.
 
 The first-pass v0~v5 numbers above were measured on single loads. At
 the v5 point the structural snapshot looked like this. Treat as
-historical — current values are in [RESULTS.md](RESULTS.md).
+historical — current values are in [RESULTS.md](experiments/docs/RESULTS.md).
 
 **1 TB structure (v5 vs baseline, single load each)**
 
@@ -1015,7 +1018,7 @@ At this point we compared **one** vcomp 250GB load against one baseline
 once we had the 30×30 numbers — see the 2026-04-14/15 entries below.
 The early 250GB and 1TB single-DB tables are kept here as the snapshot
 that motivated the next round of work, but the **current** tree shape
-comparison lives in [RESULTS.md §2](RESULTS.md#2-tree-shape--3030-coverage-comparison).
+comparison lives in [RESULTS.md §2](experiments/docs/RESULTS.md#2-tree-shape--3030-coverage-comparison).
 
 Single-load early snapshot (baseline n=30 mean ± std, vcomp n=1):
 
@@ -1037,7 +1040,7 @@ The first batch readrandom comparison. `cache=1 byte` forces every
 block access through the block cache without caching anything,
 enabling block-level stats while keeping disk I/O equivalent to
 cold-cache. **Single-DB-pair only**; later 30×30 numbers in
-[RESULTS.md §3.1](RESULTS.md#31-250-gb--3030-readrandom-1m-reads-1-thread-cache0)
+[RESULTS.md §3.1](experiments/docs/RESULTS.md#31-250-gb--3030-readrandom-1m-reads-1-thread-cache0)
 supersede these.
 
 Highlight rows from this snapshot:
@@ -1053,7 +1056,7 @@ artifact, not a real loading-path benefit. The next round (2026-04-14)
 fixed the split logic, and a follow-up 60-run comparison showed the
 gap is mostly **disk fragmentation skew** between freshly loaded vcomp
 and 5-day-old baseline DBs. Investigation pending in
-[EXPERIMENTS_PLANNED.md](EXPERIMENTS_PLANNED.md).
+[EXPERIMENTS_PLANNED.md](experiments/docs/EXPERIMENTS_PLANNED.md).
 
 ### Data block cache anomaly (investigated, resolved as transient)
 
@@ -1079,10 +1082,12 @@ as `phase1_total − sort − plr − flush`. Safe to disable for vcomp because
 virtual metadata is generated deterministically by our code.
 
 ### Tooling
-- [eval-vcomp/load.sh](load.sh), [eval-vcomp/run.sh](run.sh),
-  [eval-vcomp/load_batch.sh](load_batch.sh)
-- [eval-vcomp/parse_runs.py](parse_runs.py) → `log_runs/runs_summary.csv`
-- [eval-vcomp/log_batch/260410_0339_250gb_x30/](log_batch/260410_0339_250gb_x30/) — 30x baseline 250GB batch
+- [load.sh](experiments/scripts/load/load.sh),
+  [run.sh](experiments/scripts/read/run.sh),
+  [load_batch.sh](experiments/scripts/load/load_batch.sh)
+- [parse_runs.py](experiments/analysis/parse_runs.py) →
+  `experiments/artifacts/log_runs/runs_summary.csv`
+- `experiments/artifacts/log_batch/260410_0339_250gb_x30/` — 30x baseline 250GB batch
 
 ---
 
@@ -1232,7 +1237,7 @@ same `load.sh` benchmark order. `baseline_250gb_x30` was loaded
 2026-04-10, `vcomp_250gb_x30` was loaded 2026-04-14.
 
 Highlights of this round (full table now in
-[RESULTS.md §2](RESULTS.md#2-tree-shape--3030-coverage-comparison)):
+[RESULTS.md §2](experiments/docs/RESULTS.md#2-tree-shape--3030-coverage-comparison)):
 
 - File counts match baseline within ≤7% at every level.
 - L1 has wide variance in both modes (baseline 7–100%, vcomp 27–100%);
@@ -1290,14 +1295,14 @@ of `filter_per_get`, `bloom_fpr`, and `sst_p99`.
 ### Tooling additions
 - `run.sh` learned to honour an external `RESULT_DIR` env var (instead
   of always picking its own timestamped path).
-- New [run_batch.sh](run_batch.sh) walks
+- New [run_batch.sh](experiments/scripts/read/run_batch.sh) walks
   `${BATCH_DB_DIR}/{mode}_run{1..N}/` and invokes `run.sh` with that
   DB and `RESULT_DIR=log_batch/${BATCH}/${WORKLOAD}_*/${mode}_run${i}`,
   appending an aggregate `results.csv` per batch.
 
 ### Results — clean structural metrics
 Full table in
-[RESULTS.md §3.1](RESULTS.md#31-250-gb--3030-readrandom-1m-reads-1-thread-cache0).
+[RESULTS.md §3.1](experiments/docs/RESULTS.md#31-250-gb--3030-readrandom-1m-reads-1-thread-cache0).
 Block-level stats came out exactly as predicted by the coverage gap:
 
 ```
@@ -1338,7 +1343,7 @@ clearly in the direction we suspected.
 ### Decisions that came out of this round
 1. The fragmentation effect deserves an isolated experiment to be
    queued and run later (without polluting our current measurements).
-   Recorded in [EXPERIMENTS_PLANNED.md](EXPERIMENTS_PLANNED.md): N=20
+   Recorded in [EXPERIMENTS_PLANNED.md](experiments/docs/EXPERIMENTS_PLANNED.md): N=20
    baseline-only loads, readrandom on `fill_run_1` after each new
    load, ~7.3 hours.
 2. Reload baseline 30× from scratch *now*, alongside the 4/14 vcomp
@@ -1348,13 +1353,13 @@ clearly in the direction we suspected.
 3. Documentation reorganisation:
    - `vcomp/README.md` is now a pure spec of the
      current code, no time-ordered narrative or measurement tables.
-   - `eval-vcomp/RESULTS.md` (new) collects only the current best
+   - `experiments/docs/RESULTS.md` collects only the current best
      measurements with caveats.
-   - This file (`eval-vcomp/CHANGELOG.md`, formerly
+   - This README's historical changelog (formerly
      `BENCHMARK_HISTORY.md`) keeps the time-ordered narrative; old
      measurement tables are summarised inline as historical snapshots,
      full numbers live in RESULTS.md.
-   - `eval-vcomp/EXPERIMENTS_PLANNED.md` (new) holds queued experiments.
+   - `experiments/docs/EXPERIMENTS_PLANNED.md` holds queued experiments.
 
 ### Open at the end of this round
 - L2 erosion gap (vcomp 86% ± 3pp vs baseline 70% ± 9pp).
@@ -1370,7 +1375,7 @@ clearly in the direction we suspected.
 Pin down *why* vcomp produces a structurally different tree from
 baseline (L1/L2/L3 coverage all shifted upward, end-state L1 files 6×
 wider). Carried over from the §6 open question in
-[RESULTS.md](../eval-vcomp/RESULTS.md).
+[RESULTS.md](experiments/docs/RESULTS.md).
 
 ### Investigation chain (in the order it actually happened)
 
@@ -1378,7 +1383,7 @@ wider). Carried over from the §6 open question in
    per-level coverage for fresh baseline (260415) and vcomp (260414)
    batches via `coverage` bench. Stable picture: vcomp ↑ at every
    non-bottom level. Side-by-side box plot:
-   [coverage_dumps/coverage_box.png](../eval-vcomp/coverage_dumps/coverage_box.png).
+   [coverage_box_sg_final.png](experiments/results/coverage/coverage_box_sg_final.png).
 
 2. **Coverage → filter_per_get is direct and quantitative.** For a
    uniform query workload, expected `filter_per_get` at level L equals
@@ -1536,7 +1541,7 @@ accumulation, which is driven by write stall.
 Next: implement write stall in vcomp's `RegisterVirtualL0File` path
 so the foreground sees baseline-like back-pressure
 (`l0-file-count-limit-delays`, `pending-compaction-bytes-delays`).
-Plan recorded in [EXPERIMENTS_PLANNED.md](../eval-vcomp/EXPERIMENTS_PLANNED.md).
+Plan recorded in [EXPERIMENTS_PLANNED.md](experiments/docs/EXPERIMENTS_PLANNED.md).
 
 ### Files changed (uncommitted)
 - `db/virtual_compaction/virtual_sst.cc` — `SplitIntoSSTs` early
@@ -1588,7 +1593,7 @@ structurally match baseline.
    L0 files. RocksDB's `level0_slowdown_writes_trigger=20` /
    `stop_writes_trigger=36` defaults trigger write stall, and the
    subsequent `flush` step's `WaitUntilFlushWouldNotStallWrites`
-   blocks indefinitely. Fix in `eval-vcomp/load.sh`: set both
+   blocks indefinitely. Fix in `experiments/scripts/load/load.sh`: set both
    triggers to 10000 in vcomp mode (`RegisterVirtualL0File` already
    bypasses `WriteController`, so disabling stall has no effect on
    foreground pacing).
@@ -1620,7 +1625,7 @@ structurally match baseline.
   (defined in the picker), insert end-of-load drain block in
   `FillVirtual` between the first `WaitForCompact` and
   `PauseBackgroundWork`.
-- **`eval-vcomp/load.sh`** — set
+- **`experiments/scripts/load/load.sh`** — set
   `--level0_slowdown_writes_trigger=10000` and
   `--level0_stop_writes_trigger=10000` unconditionally in vcomp mode
   (was previously only set when `L0_TRIGGER` env was passed).
@@ -1653,7 +1658,7 @@ and L2 cov sit in the lower half of baseline's distribution (vcomp's
 trees are slightly sparser there) but inside baseline's range.
 
 Box-plot artifact:
-[eval-vcomp/coverage_dumps/coverage_box_drain.png](../eval-vcomp/coverage_dumps/coverage_box_drain.png).
+[coverage_box_sg_final.png](experiments/results/coverage/coverage_box_sg_final.png).
 
 ### What is *still* slightly off
 - L1/L2 coverage medians sit lower than baseline's (19.6 vs 34.6 for
@@ -1676,7 +1681,7 @@ The L0_TRIGGER=60 30-batch (`260512_0445_250gb_x30`) and the size-gate
 @ 3 GB 30-batch (`260512_0457_250gb_x30`) both kept on disk but are
 strictly worse than the drain version — useful only for the
 methodology trail. Coverage dumps under
-`eval-vcomp/coverage_dumps/vcomp_260512_l0t60/`,
+`experiments/artifacts/coverage_dumps/vcomp_260512_l0t60/`,
 `vcomp_260512_sg3000/`, `vcomp_260512_sg4000/`.
 
 ## 2026-05-13 — Postscript: read-side gap is mostly NVMe state, not tree
@@ -1712,7 +1717,7 @@ Trustworthy structural metrics (independent of NVMe state): all
 `*_per_get` counts, bloom FPR, per-level hits, bytes_per_sst_read.
 These show the tree-shape parity goal achieved (§"Result" table
 above). The throughput / latency numbers in
-[../eval-vcomp/RESULTS.md §3.1](../eval-vcomp/RESULTS.md) should be
+[experiments/docs/RESULTS.md §3.1](experiments/docs/RESULTS.md) should be
 read as "vcomp_new vs aged-baseline"; §3.3 there gives the
 decomposition.
 
@@ -1734,7 +1739,7 @@ the current paper path.
 
 The clean no-KV synthetic result is still the 250 GB pre-KV-preservation
 measurement in
-[RESULTS.md §1.3](../eval-vcomp/RESULTS.md#13-250-gb-pre-kv-preservation-vcomp-breakdown).
+[RESULTS.md §1.3](experiments/docs/RESULTS.md#13-250-gb-pre-kv-preservation-vcomp-breakdown).
 This is the focused phase-breakdown run; the broader scaling table below uses
 the full load-script wall-clock numbers from separate single-load runs.
 
@@ -1759,7 +1764,7 @@ the full load-script wall-clock numbers from separate single-load runs.
 | VersionEdit | 0.78 s |
 | Total | 12.59 s |
 
-Large-load write-amplification result from [RESULTS.md §1.2](../eval-vcomp/RESULTS.md#12-single-load-scaling):
+Large-load write-amplification result from [RESULTS.md §1.2](experiments/docs/RESULTS.md#12-single-load-scaling):
 
 | Scale | Baseline elapsed | vcomp elapsed | Load speedup | Baseline compaction I/O | vcomp compaction I/O |
 |-------|------------------|---------------|--------------|--------------------------|----------------------|
@@ -1776,7 +1781,7 @@ compaction, followed by Phase 2 routing of real keys into final VSST ranges.
 The trace implementation reached exact found-key parity, but Phase 2
 materialization was the bottleneck.
 
-Exactness checks from [RESULTS.md §4.2](../eval-vcomp/RESULTS.md#42-found-key-exactness):
+Exactness checks from [RESULTS.md §4.2](experiments/docs/RESULTS.md#42-found-key-exactness):
 
 | Load | Read window | Baseline misses | vcomp misses |
 |------|-------------|-----------------|--------------|
@@ -2007,7 +2012,7 @@ For the next ablation, vcomp-mode intra-L0 compaction is disabled:
 
 Smoke validation:
 
-- Run: `/home/smrc/virtual_compaction/eval-vcomp/log_loads/intra_l0_off_smoke_260601_115612/bench.out`
+- Run: `/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/intra_l0_off_smoke_260601_115612/bench.out`
 - Size: 20 GiB (`num=20,971,520`)
 - Result transitions: `L0->L1 = 5`, `L1->L2 = 21`, `L2->L3 = 40`,
   `L0->L0 = 0`
@@ -2074,7 +2079,7 @@ Profiling plan:
    DB mutex means lock/wait; many BG threads active in PLR merge/split means
    CPU parallel work is the bottleneck.
 
-Next action: add a small profiling runner under `eval-vcomp` so the 1 TB load
+Next action: add a small profiling runner under `experiments/` so the 1 TB load
 starts, captures PID/TIDs, records both on-CPU and off-CPU profiles, and stores
 reports next to the benchmark log.
 
@@ -2083,7 +2088,7 @@ Completed profiling run:
 - Run folder:
   `/work/vcomp/profile_runs/vcomp_profile_1000gb_260602_051634_cpuwait`
 - Runner:
-  `../eval-vcomp/profile_vcomp_load.sh`
+  `experiments/scripts/profile/profile_vcomp_load.sh`
 - Profiles collected: on-CPU task-clock, scheduler latency, sched
   switch/wakeup, futex syscalls, and 2-second thread snapshots.
 - Result: `fillvirtual` 63.089 s
@@ -2202,10 +2207,10 @@ followers.
 ### Motivation experiment setup
 
 The paper motivation experiment for baseline dataset-size scaling was added
-under `eval-vcomp`:
+under `experiments/`:
 
-- `../eval-vcomp/MOTIVATION_LOAD_SCALING.md`
-- `../eval-vcomp/run_motivation_load_scaling.sh`
+- `experiments/docs/MOTIVATION_LOAD_SCALING.md`
+- `experiments/scripts/load/run_motivation_load_scaling.sh`
 
 It runs baseline `fillrandom` sequentially for `500 GB, 1 TB, 2 TB, 4 TB,
 8 TB`, records elapsed time and WAF-related summary metrics in `summary.tsv`,

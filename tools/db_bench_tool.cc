@@ -6485,7 +6485,7 @@ class Benchmark {
 
     // Collect all virtual SSTs from registry, with actual levels from
     // VersionSet (files may have been compacted to different levels).
-      auto all_vssts = registry->GetAllCopies();
+    auto all_vssts = registry->GetSnapshot();
 
     // Build file_number → actual_level map from current Version.
     std::unordered_map<uint64_t, int> file_level_map;
@@ -6506,11 +6506,11 @@ class Benchmark {
 
     // Collect level distribution for reporting.
     std::map<int, size_t> level_dist;
-      for (const auto& [fnum, vsst] : all_vssts) {
-        auto it = file_level_map.find(fnum);
-        int lvl = (it != file_level_map.end()) ? it->second : vsst.level;
-        level_dist[lvl]++;
-      }
+    for (const auto& [fnum, vsst] : all_vssts) {
+      auto it = file_level_map.find(fnum);
+      int lvl = (it != file_level_map.end()) ? it->second : vsst->level;
+      level_dist[lvl]++;
+    }
     fprintf(stderr, "  Virtual SSTs: %zu (", all_vssts.size());
     bool first = true;
     for (const auto& [lvl, cnt] : level_dist) {
@@ -6522,13 +6522,13 @@ class Benchmark {
 
     // Pre-allocate output file numbers (one real SST per VirtualSST).
     struct SSTTask {
-        uint64_t virtual_fnum;
-        uint64_t real_fnum;
-        int level;
-        uint64_t materialize_key_min;
-        uint64_t materialize_key_max;
-        VirtualSST vsst;
-      };
+      uint64_t virtual_fnum;
+      uint64_t real_fnum;
+      int level;
+      uint64_t materialize_key_min;
+      uint64_t materialize_key_max;
+      VirtualSSTRegistry::Handle vsst;
+    };
     std::vector<SSTTask> tasks(all_vssts.size());
     std::unique_ptr<std::list<uint64_t>::iterator> phase2_pending_outputs;
     {
@@ -6536,15 +6536,15 @@ class Benchmark {
       phase2_pending_outputs =
           db_impl->CaptureVirtualCompactionMaterializationOutputs();
       for (size_t i = 0; i < all_vssts.size(); i++) {
-          tasks[i].virtual_fnum = all_vssts[i].first;
-          tasks[i].vsst = all_vssts[i].second;
-          tasks[i].real_fnum = versions->NewFileNumber();
-          auto it = file_level_map.find(all_vssts[i].first);
-          tasks[i].level = (it != file_level_map.end())
-                               ? it->second
-                               : all_vssts[i].second.level;
-          tasks[i].materialize_key_min = tasks[i].vsst.key_min;
-          tasks[i].materialize_key_max = tasks[i].vsst.key_max;
+        tasks[i].virtual_fnum = all_vssts[i].first;
+        tasks[i].vsst = all_vssts[i].second;
+        tasks[i].real_fnum = versions->NewFileNumber();
+        auto it = file_level_map.find(all_vssts[i].first);
+        tasks[i].level = (it != file_level_map.end())
+                             ? it->second
+                             : all_vssts[i].second->level;
+        tasks[i].materialize_key_min = tasks[i].vsst->key_min;
+        tasks[i].materialize_key_max = tasks[i].vsst->key_max;
       }
     }
 
@@ -6558,11 +6558,11 @@ class Benchmark {
       if (tasks[a].level != tasks[b].level) {
         return tasks[a].level < tasks[b].level;
       }
-      if (tasks[a].vsst.key_min != tasks[b].vsst.key_min) {
-        return tasks[a].vsst.key_min < tasks[b].vsst.key_min;
+      if (tasks[a].vsst->key_min != tasks[b].vsst->key_min) {
+        return tasks[a].vsst->key_min < tasks[b].vsst->key_min;
       }
-      if (tasks[a].vsst.key_max != tasks[b].vsst.key_max) {
-        return tasks[a].vsst.key_max < tasks[b].vsst.key_max;
+      if (tasks[a].vsst->key_max != tasks[b].vsst->key_max) {
+        return tasks[a].vsst->key_max < tasks[b].vsst->key_max;
       }
       return tasks[a].real_fnum < tasks[b].real_fnum;
     });
@@ -6631,8 +6631,8 @@ class Benchmark {
             res.level = task.level;
             res.ok = false;
 
-            if (task.vsst.num_entries == 0 ||
-                task.vsst.plr_model.Empty() ||
+            if (task.vsst->num_entries == 0 ||
+                task.vsst->plr_model.Empty() ||
                 task.materialize_key_min > task.materialize_key_max) {
               res.ok = true;
               continue;
@@ -6677,14 +6677,14 @@ class Benchmark {
 
             // Stream materialized keys directly into the SST writer. This
             // avoids allocating and rereading a uint64_t vector per VSST.
-            const auto& segments = task.vsst.plr_model.Segments();
+            const auto& segments = task.vsst->plr_model.Segments();
             size_t seg_idx = 0;
             uint64_t prev_materialized_key = 0;
             bool has_prev_materialized_key = false;
             std::string prev_key_str;
             uint64_t keys_in_file = 0;
 
-            for (uint64_t pos = 0; pos < task.vsst.num_entries; pos++) {
+            for (uint64_t pos = 0; pos < task.vsst->num_entries; pos++) {
               double position = static_cast<double>(pos);
 
               while (seg_idx + 1 < segments.size()) {

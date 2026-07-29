@@ -1470,9 +1470,10 @@ Status DBImpl::PerformTrivialMove(Compaction& c, LogBuffer* log_buffer,
       for (size_t i = 0; i < c.num_input_files(l); i++) {
         FileMetaData* f = c.input(l, i);
         const uint64_t fnum = f->fd.GetNumber();
-        VirtualSST vsst;
-        if (virtual_sst_registry_->LookupCopy(fnum, &vsst)) {
+        auto vsst_handle = virtual_sst_registry_->Lookup(fnum);
+        if (vsst_handle != nullptr) {
           has_virtual_input = true;
+          VirtualSST vsst = *vsst_handle;
           vsst.level = c.output_level();
           moved_virtuals.emplace_back(fnum, std::move(vsst));
           continue;
@@ -4433,7 +4434,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
                  for (size_t i = 0; i < c->num_input_files(lvl); i++) {
                    const auto* fmd = c->input(lvl, i);
                    uint64_t fnum = fmd->fd.GetNumber();
-                   if (virtual_sst_registry_->Lookup(fnum) != nullptr) {
+                   if (virtual_sst_registry_->IsVirtual(fnum)) {
                      return true;
                    }
                    std::string fname = TableFileName(
@@ -5656,11 +5657,12 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   };
 
   // Gather input PLR models from all input levels.
-  std::vector<VirtualSST> input_vssts;
+  std::vector<VirtualSSTRegistry::Handle> input_vssts;
   std::vector<const PLRModel*> models;
   std::vector<uint64_t> num_entries_vec;
   std::vector<uint64_t> key_mins_vec;
   std::vector<uint64_t> key_maxs_vec;
+  std::vector<FileMetaData*> input_files;
   std::vector<uint64_t> input_file_numbers;
   std::vector<int> input_levels;
   uint64_t l0_input_files = 0;
@@ -5683,54 +5685,63 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   num_entries_vec.reserve(num_input_files);
   key_mins_vec.reserve(num_input_files);
   key_maxs_vec.reserve(num_input_files);
+  input_files.reserve(num_input_files);
   input_file_numbers.reserve(num_input_files);
   input_levels.reserve(num_input_files);
 
   for (size_t lvl = 0; lvl < c->num_input_levels(); lvl++) {
     for (size_t i = 0; i < c->num_input_files(lvl); i++) {
       auto* fmd = c->input(lvl, i);
-      uint64_t fnum = fmd->fd.GetNumber();
-      VirtualSST vsst;
-      if (!virtual_sst_registry_->LookupCopy(fnum, &vsst)) {
-        auto location = cfd->current()->storage_info()->GetFileLocation(fnum);
-        if (!location.IsValid()) {
-          ROCKS_LOG_BUFFER(log_buffer,
-                           "[%s] Skipping stale virtual compaction: input "
-                           "file %" PRIu64 " is no longer current",
-                           cfd->GetName().c_str(), fnum);
-          release_compaction(Status::OK());
-          return Status::OK();
-        }
-        std::string fname = TableFileName(c->immutable_options().cf_paths,
-                                          fnum, fmd->fd.GetPathId());
-        if (!env_->FileExists(fname).ok()) {
-          Status s = Status::Corruption(
-              "current virtual SST missing from registry", fname);
-          ROCKS_LOG_BUFFER(log_buffer, "[%s] %s", cfd->GetName().c_str(),
-                           s.ToString().c_str());
-          release_compaction(s);
-          return s;
-        }
-        Status s = Status::NotSupported(
-            "mixed physical/virtual compaction input", fname);
+      input_files.push_back(fmd);
+      input_file_numbers.push_back(fmd->fd.GetNumber());
+      input_levels.push_back(c->level(lvl));
+    }
+  }
+
+  auto input_handles =
+      virtual_sst_registry_->LookupMany(input_file_numbers);
+  for (size_t i = 0; i < input_handles.size(); ++i) {
+    auto* fmd = input_files[i];
+    uint64_t fnum = input_file_numbers[i];
+    auto& vsst = input_handles[i];
+    if (vsst == nullptr) {
+      auto location = cfd->current()->storage_info()->GetFileLocation(fnum);
+      if (!location.IsValid()) {
+        ROCKS_LOG_BUFFER(log_buffer,
+                         "[%s] Skipping stale virtual compaction: input "
+                         "file %" PRIu64 " is no longer current",
+                         cfd->GetName().c_str(), fnum);
+        release_compaction(Status::OK());
+        return Status::OK();
+      }
+      std::string fname = TableFileName(c->immutable_options().cf_paths, fnum,
+                                        fmd->fd.GetPathId());
+      if (!env_->FileExists(fname).ok()) {
+        Status s = Status::Corruption(
+            "current virtual SST missing from registry", fname);
         ROCKS_LOG_BUFFER(log_buffer, "[%s] %s", cfd->GetName().c_str(),
                          s.ToString().c_str());
         release_compaction(s);
         return s;
       }
-      input_vssts.push_back(std::move(vsst));
-      const VirtualSST& input_vsst = input_vssts.back();
-      models.push_back(&input_vsst.plr_model);
-      num_entries_vec.push_back(input_vsst.num_entries);
-      key_mins_vec.push_back(input_vsst.key_min);
-      key_maxs_vec.push_back(input_vsst.key_max);
-      input_file_numbers.push_back(fnum);
-      input_levels.push_back(c->level(lvl));
-      input_bytes += fmd->fd.GetFileSize();
-      if (c->level(lvl) == 0) {
-        l0_input_files++;
-        l0_input_bytes += fmd->fd.GetFileSize();
-      }
+      Status s =
+          Status::NotSupported("mixed physical/virtual compaction input", fname);
+      ROCKS_LOG_BUFFER(log_buffer, "[%s] %s", cfd->GetName().c_str(),
+                       s.ToString().c_str());
+      release_compaction(s);
+      return s;
+    }
+
+    input_vssts.push_back(std::move(vsst));
+    const VirtualSST& input_vsst = *input_vssts.back();
+    models.push_back(&input_vsst.plr_model);
+    num_entries_vec.push_back(input_vsst.num_entries);
+    key_mins_vec.push_back(input_vsst.key_min);
+    key_maxs_vec.push_back(input_vsst.key_max);
+    input_bytes += fmd->fd.GetFileSize();
+    if (input_levels[i] == 0) {
+      l0_input_files++;
+      l0_input_bytes += fmd->fd.GetFileSize();
     }
   }
   uint64_t gather_us = immutable_db_options_.clock->NowMicros() - gather_t0;
@@ -5743,7 +5754,7 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   std::vector<const VirtualSST*> input_vsst_ptrs;
   input_vsst_ptrs.reserve(input_vssts.size());
   for (const auto& vsst : input_vssts) {
-    input_vsst_ptrs.push_back(&vsst);
+    input_vsst_ptrs.push_back(vsst.get());
   }
 
   // Release mutex during PLR merge (CPU-intensive, no shared state).

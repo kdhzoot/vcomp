@@ -166,8 +166,8 @@ pos_j(k) = a_j k + b_j, for k in [l_j, r_j]
 - Random key generation과 sorting은 foreground Phase 1에서 수행된다.
 - vSST의 estimated size는 `num_entries * average_entry_size`로 계산된다.
 - KMV sketch는 sorted unique key vector에서 가장 작은 hash sample을 유지한다.
-  현재 기본 total budget은 `VCOMP_KMV_SAMPLES=512`이며, range-local sketch 수는
-  `VCOMP_KMV_RANGE_BUCKETS=8`이다.
+  모든 vcomp 실험은 고정된 total budget `512`와 range-local sketch `8`개를
+  사용한다.
 
 ## 5. Visible L0 Window
 
@@ -313,9 +313,9 @@ rank shape는 input PLR slope를 사용해 유지하지만, total mass는 global
   함께 만든다.
 - Sketch sample은 `(key, hash)`를 저장한다. `key`를 함께 저장하는 이유는 output
   vSST split 후 각 output range에 속한 sample만 전파하기 위해서이다.
-- 기본 sample count는 `512`이며 `VCOMP_KMV_SAMPLES` 환경변수로 조절할 수 있다.
-- 기본 range bucket 수는 `8`이며 `VCOMP_KMV_RANGE_BUCKETS` 환경변수로 조절할 수
-  있다. sample budget은 vSST 전체 기준으로 유지하고 bucket들이 나눠 쓴다.
+- Sample count는 `512`, range bucket 수는 `8`로 고정한다. 이 값은 실험
+  파라미터가 아니며 모든 vcomp 실험에서 동일하게 사용한다.
+- Sample budget은 vSST 전체 기준으로 유지하고 bucket들이 나눠 쓴다.
 - `theta_hash`를 함께 유지해 range-filtered sample을 bottom-K로 오해하지 않도록
   한다.
 - Global KMV union estimate가 output logical entry count를 직접 결정한다.

@@ -48,13 +48,15 @@ struct VirtualSST {
   }
 };
 
-// Number of samples retained per virtual SST. Can be overridden with
-// VCOMP_KMV_SAMPLES for experiments.
+// Fixed number of samples retained per virtual SST.
 size_t VirtualSSTKMVSamples();
 
-// Number of range-local KMV buckets retained per virtual SST. Can be overridden
-// with VCOMP_KMV_RANGE_BUCKETS for experiments.
+// Fixed number of range-local KMV buckets retained per virtual SST.
 size_t VirtualSSTKMVRangeBuckets();
+
+// Runtime switch for KMV metadata and KMV-based dedup. Set
+// VCOMP_KMV_ENABLED=0 to fall back to the pre-KMV PLR dedup path.
+bool VirtualSSTKMVEnabled();
 
 // Build a KMV sketch from sorted unique keys.
 KMVSketch BuildKMVSketchFromSortedKeys(const std::vector<uint64_t>& sorted_keys,

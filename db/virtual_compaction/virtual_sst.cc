@@ -7,10 +7,12 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <iterator>
 #include <limits>
+#include <string>
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -114,29 +116,22 @@ KMVSketch BuildKMVSketchFromSortedKeyRange(
 }  // namespace
 
 size_t VirtualSSTKMVSamples() {
-  const char* value = std::getenv("VCOMP_KMV_SAMPLES");
-  if (value == nullptr || *value == '\0') {
-    return kDefaultKMVSamples;
-  }
-  char* end = nullptr;
-  unsigned long long parsed = std::strtoull(value, &end, 10);
-  if (end == value || parsed == 0) {
-    return kDefaultKMVSamples;
-  }
-  return static_cast<size_t>(parsed);
+  return kDefaultKMVSamples;
 }
 
 size_t VirtualSSTKMVRangeBuckets() {
-  const char* value = std::getenv("VCOMP_KMV_RANGE_BUCKETS");
+  return kDefaultKMVRangeBuckets;
+}
+
+bool VirtualSSTKMVEnabled() {
+  const char* value = std::getenv("VCOMP_KMV_ENABLED");
   if (value == nullptr || *value == '\0') {
-    return kDefaultKMVRangeBuckets;
+    return true;
   }
-  char* end = nullptr;
-  unsigned long long parsed = std::strtoull(value, &end, 10);
-  if (end == value || parsed == 0) {
-    return kDefaultKMVRangeBuckets;
-  }
-  return static_cast<size_t>(parsed);
+  std::string v(value);
+  std::transform(v.begin(), v.end(), v.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return !(v == "0" || v == "false" || v == "off" || v == "no");
 }
 
 KMVSketch BuildKMVSketchFromSortedKeys(const std::vector<uint64_t>& sorted_keys,
@@ -877,20 +872,27 @@ std::vector<VirtualSST> VirtualCompact(
   }
 
   std::vector<const VirtualSST*> input_ptrs = inputs;
-  uint64_t kmv_entries = 0;
-  PLRModel merged = NWayMergeKMVRangeAware(input_ptrs, &kmv_entries);
-  if (kmv_entries > total_entries && kmv_entries > 0) {
-    double scale = static_cast<double>(total_entries) /
-                   static_cast<double>(kmv_entries);
-    merged = ScalePLRPositions(merged, scale);
-    kmv_entries = total_entries;
+  uint64_t adjusted_entries = 0;
+  PLRModel merged;
+  if (VirtualSSTKMVEnabled()) {
+    merged = NWayMergeKMVRangeAware(input_ptrs, &adjusted_entries);
+    if (adjusted_entries > total_entries && adjusted_entries > 0) {
+      double scale = static_cast<double>(total_entries) /
+                     static_cast<double>(adjusted_entries);
+      merged = ScalePLRPositions(merged, scale);
+      adjusted_entries = total_entries;
+    }
+  } else {
+    merged = NWayMergePLR(models, num_entries, key_mins, key_maxs,
+                          /*dedup=*/true, &adjusted_entries);
   }
-  total_entries = kmv_entries;
+  total_entries = adjusted_entries;
 
   // Split into output SSTs.
   return SplitIntoSSTs(merged, total_entries, target_sst_size, avg_entry_size,
                        global_min, global_max, output_level,
-                       /*grandparent_boundaries=*/{}, &input_ptrs);
+                       /*grandparent_boundaries=*/{},
+                       VirtualSSTKMVEnabled() ? &input_ptrs : nullptr);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

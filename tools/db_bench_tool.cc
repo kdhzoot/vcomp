@@ -5945,8 +5945,10 @@ class Benchmark {
 
           VirtualSST vsst;
           vsst.plr_model = std::move(plr);
-          vsst.kmv_sketch = BuildKMVSketchFromSortedKeys(keys);
-          vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(keys);
+          if (VirtualSSTKMVEnabled()) {
+            vsst.kmv_sketch = BuildKMVSketchFromSortedKeys(keys);
+            vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(keys);
+          }
           vsst.key_min = keys.front();
           vsst.key_max = keys.back();
           vsst.num_entries = keys.size();
@@ -6052,8 +6054,10 @@ class Benchmark {
       // Build VirtualSST.
       VirtualSST vsst;
       vsst.plr_model = std::move(plr);
-      vsst.kmv_sketch = BuildKMVSketchFromSortedKeys(memtable_buf);
-      vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(memtable_buf);
+      if (VirtualSSTKMVEnabled()) {
+        vsst.kmv_sketch = BuildKMVSketchFromSortedKeys(memtable_buf);
+        vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(memtable_buf);
+      }
       vsst.key_min = memtable_buf.front();
       vsst.key_max = memtable_buf.back();
       vsst.num_entries = memtable_buf.size();

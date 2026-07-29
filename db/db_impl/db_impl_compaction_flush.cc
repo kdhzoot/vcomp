@@ -5747,8 +5747,8 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   // Release mutex during PLR merge (CPU-intensive, no shared state).
   mutex_.Unlock();
 
-  // N-way PLR shape merge with range-aware KMV-only dedup. PLR is used for
-  // shape/interval boundaries, not for dedup cardinality.
+  // N-way PLR shape merge. By default KMV estimates dedup cardinality; setting
+  // VCOMP_KMV_ENABLED=0 falls back to the pre-KMV PLR dedup path.
   uint64_t input_segments_total = 0;
   for (const auto* m : models) input_segments_total += m->NumSegments();
   uint64_t naive_entries = 0;
@@ -5762,7 +5762,14 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
 
   uint64_t merge_t0 = immutable_db_options_.clock->NowMicros();
   uint64_t total_entries = 0;
-  PLRModel merged = NWayMergeKMVRangeAware(input_vsst_ptrs, &total_entries);
+  PLRModel merged;
+  const bool use_kmv = VirtualSSTKMVEnabled();
+  if (use_kmv) {
+    merged = NWayMergeKMVRangeAware(input_vsst_ptrs, &total_entries);
+  } else {
+    merged = NWayMergePLR(models, num_entries_vec, key_mins_vec, key_maxs_vec,
+                          /*dedup=*/true, &total_entries);
+  }
   uint64_t merge_us = immutable_db_options_.clock->NowMicros() - merge_t0;
 
   uint64_t split_t0 = immutable_db_options_.clock->NowMicros();
@@ -5814,7 +5821,8 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   // Split into output VirtualSSTs.
   std::vector<VirtualSST> output_vssts = SplitIntoSSTs(
       merged, total_entries, target_sst_size, avg_entry_size, global_min,
-      global_max, output_level, gp_boundaries, &input_vsst_ptrs);
+      global_max, output_level, gp_boundaries,
+      use_kmv ? &input_vsst_ptrs : nullptr);
   uint64_t split_us = immutable_db_options_.clock->NowMicros() - split_t0;
 
   auto key_width = [](uint64_t key_min, uint64_t key_max) -> uint64_t {

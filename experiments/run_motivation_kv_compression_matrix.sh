@@ -70,6 +70,16 @@ write_amp() {
   grep -E '^ Sum[[:space:]]' "$1" | tail -1 | awk '{ print $13 }' || true
 }
 
+extract_peak_rss_kb() {
+  local time_out="$1"
+  awk -F: '/Maximum resident set size/ {gsub(/^[ \t]+/, "", $2); print $2}' "${time_out}" 2>/dev/null || true
+}
+
+rss_kb_to_gb() {
+  local rss_kb="$1"
+  awk -v kb="${rss_kb}" 'BEGIN { if (kb != "") printf "%.3f", kb / 1024 / 1024 }'
+}
+
 extract_breakdown() {
   local case_name="$1"
   local run_dir="$2"
@@ -163,7 +173,9 @@ run_one() {
   local db_dir="${DB_ROOT%/}/motivation_${case_name}_${TARGET_DB_GB}gb_${RUN_ID}"
   local rep_file="${run_dir}/report.rep"
   local out_file="${run_dir}/bench.out"
+  local time_out="${raw_dir}/time.out"
   local status rc start_ts end_ts elapsed db_size fill_sec fill_ops ingest comp_gb wamp
+  local peak_rss_kb="" peak_rss_gb=""
   local total_write_gb="" sectors_start="" sectors_end=""
   local extra_args=()
   local breakdown_jobs=0 breakdown_tsv="" breakdown_raw=""
@@ -231,7 +243,7 @@ run_one() {
   fi
 
   set +e
-  "${cmd[@]}" >> "${out_file}" 2>&1
+  /usr/bin/time -v -o "${time_out}" "${cmd[@]}" >> "${out_file}" 2>&1
   rc=$?
   set -e
 
@@ -240,6 +252,10 @@ run_one() {
   elapsed=$((end_ts - start_ts))
   echo "${end_ts}" > "${raw_dir}/end_epoch.txt"
   echo "${elapsed}" > "${raw_dir}/elapsed_sec.txt"
+  peak_rss_kb="$(extract_peak_rss_kb "${time_out}")"
+  peak_rss_gb="$(rss_kb_to_gb "${peak_rss_kb}")"
+  echo "${peak_rss_kb}" > "${raw_dir}/peak_rss_kb.txt"
+  echo "${peak_rss_gb}" > "${raw_dir}/peak_rss_gb.txt"
   cat /proc/diskstats > "${raw_dir}/diskstats.end"
   cat /proc/stat > "${raw_dir}/procstat.end"
 
@@ -262,9 +278,10 @@ run_one() {
   comp_gb="$(compaction_gb "${out_file}")"
   wamp="$(write_amp "${out_file}")"
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "${case_name}" "${TARGET_DB_GB}" "${KEY_SIZE}" "${value_size}" "${compression_type}" \
-    "1" "vector" "${status}" "${elapsed}" "${fill_sec}" "${fill_ops}" \
+    "1" "vector" "${status}" "${elapsed}" "${peak_rss_kb}" "${peak_rss_gb}" \
+    "${fill_sec}" "${fill_ops}" \
     "${db_size}" "${DISKSTAT_DEV}" "${total_write_gb}" "${ingest}" "${comp_gb}" "${wamp}" \
     "${breakdown_jobs}" "${breakdown_tsv}" "${run_dir}" "${db_dir}" \
     >> "${SUMMARY_FILE}"
@@ -277,6 +294,7 @@ run_one() {
     echo "DB Size:        ${db_size}"
     echo "Keys:           ${nkeys}"
     echo "Elapsed:        ${elapsed} sec"
+    echo "Peak RSS:       ${peak_rss_gb:-NA} GiB (${peak_rss_kb:-NA} KB)"
     echo "Breakdown jobs: ${breakdown_jobs}"
     echo "Breakdown TSV:  ${breakdown_tsv}"
     echo "Breakdown raw:  ${breakdown_raw}"
@@ -300,7 +318,7 @@ if [[ ! -x "${DB_BENCH}" ]]; then
   exit 1
 fi
 
-printf 'case\ttarget_db_gb\tkey_size\tvalue_size\tcompression_type\tthreads\tmemtable\tstatus\telapsed_sec\tfillrandom_sec\tfillrandom_ops_sec\tdb_size\tdiskstat_dev\ttotal_write_gb\tingest_gb\tcompaction_write_gb\tcompaction_wamp\tbreakdown_jobs\tbreakdown_tsv\tlog_dir\tdb_dir\n' > "${SUMMARY_FILE}"
+printf 'case\ttarget_db_gb\tkey_size\tvalue_size\tcompression_type\tthreads\tmemtable\tstatus\telapsed_sec\tpeak_rss_kb\tpeak_rss_gb\tfillrandom_sec\tfillrandom_ops_sec\tdb_size\tdiskstat_dev\ttotal_write_gb\tingest_gb\tcompaction_write_gb\tcompaction_wamp\tbreakdown_jobs\tbreakdown_tsv\tlog_dir\tdb_dir\n' > "${SUMMARY_FILE}"
 : > "${BREAKDOWN_ALL_FILE}"
 : > "${BREAKDOWN_REP_FILE}"
 

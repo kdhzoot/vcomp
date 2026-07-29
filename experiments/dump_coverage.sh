@@ -20,8 +20,9 @@ for db in $DB_GLOB; do
   [ -d "$db" ] || continue
   name=$(basename "$db")
   out="$OUT_DIR/${name}.cov"
+  time_out="$OUT_DIR/${name}.time.out"
   echo "[dump] $name -> $out" >&2
-  "$DB_BENCH" \
+  /usr/bin/time -v -o "$time_out" "$DB_BENCH" \
     --use_existing_db=true \
     --readonly \
     --num=0 \
@@ -29,4 +30,7 @@ for db in $DB_GLOB; do
     --db="$db" \
     --key_size=24 --value_size=1000 \
     > "$out" 2>&1
+  peak_rss_kb="$(awk -F: '/Maximum resident set size/ {gsub(/^[ \t]+/, "", $2); print $2}' "$time_out" 2>/dev/null || true)"
+  echo "$peak_rss_kb" > "$OUT_DIR/${name}.peak_rss_kb"
+  awk -v kb="$peak_rss_kb" 'BEGIN { if (kb != "") printf "%.3f", kb / 1024 / 1024 }' > "$OUT_DIR/${name}.peak_rss_gb"
 done

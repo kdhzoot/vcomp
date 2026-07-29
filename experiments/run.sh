@@ -52,6 +52,7 @@ CACHE_SIZE=$(echo "scale=0; $DB_SIZE_BYTES * $CACHE_PCT / 100" | bc)
 DB_NAME="$(basename "${DB_DIR}")"
 RUN_TS="$(date '+%y%m%d_%H%M')"
 RESULT_DIR="${RESULT_DIR:-${SCRIPT_DIR}/log_runs/${DB_NAME}/${WORKLOAD}_${THREADS}t_${CACHE_PCT}p_${RUN_TS}}"
+TIME_FILE="${RESULT_DIR}/time.out"
 
 mkdir -p "${RESULT_DIR}"
 ulimit -n 1048576
@@ -124,7 +125,7 @@ cat /proc/stat > "${RESULT_DIR}/procstat.start"
 cat /proc/diskstats > "${RESULT_DIR}/diskstats.start"
 
 # ── Run ──
-${DB_BENCH} \
+/usr/bin/time -v -o "${TIME_FILE}" "${DB_BENCH}" \
   --threads="${THREADS}" \
   --statistics=1 \
   --stats_interval_seconds=10 \
@@ -158,6 +159,10 @@ end_ts="$(date +%s.%N)"
 elapsed=$(echo "$end_ts - $start_ts" | bc)
 cat /proc/stat > "${RESULT_DIR}/procstat.end"
 cat /proc/diskstats > "${RESULT_DIR}/diskstats.end"
+PEAK_RSS_KB="$(awk -F: '/Maximum resident set size/ {gsub(/^[ \t]+/, "", $2); print $2}' "${TIME_FILE}" 2>/dev/null || true)"
+PEAK_RSS_GB="$(awk -v kb="${PEAK_RSS_KB}" 'BEGIN { if (kb != "") printf "%.3f", kb / 1024 / 1024 }')"
+echo "${PEAK_RSS_KB}" > "${RESULT_DIR}/peak_rss_kb.txt"
+echo "${PEAK_RSS_GB}" > "${RESULT_DIR}/peak_rss_gb.txt"
 
 # ── CPU utilization ──
 get_cpu() {
@@ -198,6 +203,8 @@ OPS=$(grep -oP '\d+ ops/sec' "${RESULT_DIR}/stdout.txt" | head -1 || echo "? ops
   echo "cache_pct: ${CACHE_PCT}%"
   echo "duration: ${DURATION}s"
   echo "elapsed: ${elapsed}s"
+  echo "peak_rss_kb: ${PEAK_RSS_KB}"
+  echo "peak_rss_gb: ${PEAK_RSS_GB}"
   echo "throughput: ${OPS}"
   echo "cpu_util: ${CPU_UTIL}%"
   echo "disk_read: ${READ_MB} MB/s"

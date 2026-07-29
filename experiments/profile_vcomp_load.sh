@@ -30,8 +30,14 @@ REPORT_DIR="${RUN_DIR}/reports"
 IOSTAT_PID=""
 BENCH_PID=""
 SAMPLER_PID=""
+RSS_SAMPLER_PID=""
 
 cleanup_background() {
+  if [[ -n "${RSS_SAMPLER_PID:-}" ]]; then
+    kill "${RSS_SAMPLER_PID}" 2>/dev/null || true
+    wait "${RSS_SAMPLER_PID}" 2>/dev/null || true
+    RSS_SAMPLER_PID=""
+  fi
   if [[ -n "${SAMPLER_PID:-}" ]]; then
     kill "${SAMPLER_PID}" 2>/dev/null || true
     wait "${SAMPLER_PID}" 2>/dev/null || true
@@ -146,6 +152,22 @@ sample_threads() {
 sample_threads > "${REPORT_DIR}/thread_samples.txt" &
 SAMPLER_PID=$!
 
+sample_peak_rss() {
+  local peak_kb=0
+  local rss_kb=0
+  while kill -0 "${BENCH_PID}" 2>/dev/null; do
+    rss_kb="$(awk '/VmRSS:/ {print $2}' "/proc/${BENCH_PID}/status" 2>/dev/null || echo 0)"
+    if [[ -n "${rss_kb}" && "${rss_kb}" =~ ^[0-9]+$ && "${rss_kb}" -gt "${peak_kb}" ]]; then
+      peak_kb="${rss_kb}"
+    fi
+    sleep 1
+  done
+  echo "${peak_kb}" > "${RAW_DIR}/peak_rss_kb.txt"
+  awk -v kb="${peak_kb}" 'BEGIN { printf "%.3f", kb / 1024 / 1024 }' > "${RAW_DIR}/peak_rss_gb.txt"
+}
+sample_peak_rss &
+RSS_SAMPLER_PID=$!
+
 run_if_alive() {
   local name="$1"
   shift
@@ -178,6 +200,8 @@ set +e
 wait "${BENCH_PID}"
 bench_rc=$?
 set -e
+wait "${RSS_SAMPLER_PID}" 2>/dev/null || true
+RSS_SAMPLER_PID=""
 BENCH_PID=""
 
 cleanup_background
@@ -206,6 +230,8 @@ fi
   echo "- end: $(date -Is)"
   echo "- exit_code: ${bench_rc}"
   echo "- elapsed_sec: $(( $(cat "${RAW_DIR}/end_epoch.txt") - $(cat "${RAW_DIR}/start_epoch.txt") ))"
+  echo "- peak_rss_kb: $(cat "${RAW_DIR}/peak_rss_kb.txt" 2>/dev/null || echo NA)"
+  echo "- peak_rss_gb: $(cat "${RAW_DIR}/peak_rss_gb.txt" 2>/dev/null || echo NA)"
   echo "- db_size: $(du -sh "${DB_DIR}" 2>/dev/null | cut -f1)"
   echo
   echo "## Key bench lines"

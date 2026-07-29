@@ -47,3 +47,33 @@ cd /home/smrc/virtual_compaction/eval-vcomp
 The script uses `../vcomp/db_bench --benchmarks=baseload,...` with
 `--use_virtual_compaction=false`, so it exercises the real RocksDB write and
 compaction path while reading the generated trace.
+
+## Known Follow-Up: Affine Mapping Sort Artifact
+
+The current generated trace uses affine key mapping for exact unique-key
+preservation:
+
+```text
+key_i = (a*i+b) mod key_domain
+```
+
+This is a permutation, but it creates a low-byte regularity that slows vcomp's
+radix-sort scatter path. On 2026-06-07, `500GB/1024B/unique100` trace replay
+showed sort `10.349s` vs `4.995s` for the synthetic RNG path with the same
+record count. The difference came from radix scatter (`8.648s` vs `3.191s`),
+not trace file I/O.
+
+Next step when revisiting trace-based vcomp timing:
+
+- Add a generator mode that uses a hash/permutation mapping with better low-byte
+  randomness while preserving exact uniqueness.
+- Re-run `500GB/1024B/unique100` synthetic vs trace and compare
+  `Phase 1 sort time detail`.
+- Keep baseline trace semantics unchanged unless the new mapping is documented
+  in `../vcomp/LOAD_TRACE_FORMAT.md`.
+
+Reference data:
+
+```text
+eval-vcomp/log_loads/sort_bottleneck_analysis.tsv
+```

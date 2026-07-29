@@ -156,6 +156,33 @@ Expected outputs:
 - `motivation_vcomp_shape.tsv`
 - `motivation_vcomp_speedup.png`
 
+Execution note:
+
+- Use the existing clean-RocksDB 1KB baseline summary instead of rerunning
+  baseline unless configuration drift is found.
+- Run only one loading job at a time.
+- Disable detailed hot-loop instrumentation for final speedup numbers:
+  `VCOMP_LOG_APPLY_TIMING=false`, `VCOMP_SORT_DETAIL_TIMING=false`.
+- If a bottleneck needs diagnosis, rerun only the target size with
+  `VCOMP_SORT_DETAIL_TIMING=true` or LogAndApply timing enabled.
+
+Vcomp run command:
+
+```bash
+cd eval-vcomp
+./run_motivation_vcomp_speedup_1kb.sh
+```
+
+Default vcomp settings:
+
+- Sizes: `500 1000 2000 4000 8000`
+- Key/value: `key_size=24`, `value_size=1000`
+- Compression: `none`
+- Write threads: `1`
+- Memtable: `vector`
+- DB root: `/work/vcomp/exp/motivation_speedup_1kb`
+- Log root: `log_loads/motivation_vcomp_speedup_1kb_<RUN_ID>`
+
 ## B3. Motivation KV/Compression Matrix
 
 Question:
@@ -249,6 +276,92 @@ Expected outputs:
 - Per-run `read_summary.tsv`
 - Per-run `shape.tsv`
 
+## Q3. Testbed Construction Flexibility
+
+Question:
+
+`F2Load가 다양한 synthetic dataset configuration을 만들 수 있고, 그 결과가 loading뿐 아니라 read/mixed workload 관점에서도 baseline과 유사한가?`
+
+Dataset matrix:
+
+| Factor | Values |
+| --- | --- |
+| DB size | 500GB, 1TB |
+| KV size | 91B, 1024B |
+| Distribution | uniform, Zipfian |
+| Unique key ratio | 100%, 50% |
+
+Current trace naming:
+
+- `unique100`: 100% unique. Put-only에서는 uniform/Zipfian 구분이 없어 하나로 대표.
+- `uniform50`: 50% unique, uniform repeat.
+- `zipf99_50`: 50% unique, Zipfian repeat with alpha 0.99.
+
+Loading-side metrics:
+
+- Loading time
+- Total disk write
+- Write amplification
+- Final DB size
+- Level별 size distribution
+- Level별 SST count
+- Average SST size
+- Key-range overlap
+- Filter/index/data block size
+
+Read/mixed workloads:
+
+- Read binary: `../vcomp-prof/db_bench`
+- YCSB: actual ported benchmarks `workloada` through `workloadf`.
+- MixGraph: `mixgraph`, default paper-like get/put/seek mix.
+
+Read/mixed metrics:
+
+- Throughput
+- Average latency
+- 50p/95p/99p latency
+- Total filter/index/data block reads
+- Total I/O request count
+- I/O latency
+- Mixed-workload read amplification
+- Mixed-workload write amplification
+
+Source DB protection:
+
+- Read/mixed runs never open the original loaded DB path.
+- `run_q3_read_workloads.sh` stages a temp DB under
+  `/work/vcomp/exp/q3_read_tmp` for every workload, including read-only YCSB-C.
+- SST files are hard-linked, but mutable metadata files are copied.
+- Temp staged DBs are deleted after each run unless `KEEP_RUN_DB=1`.
+
+Scripts:
+
+- Plan: `Q3_TESTBED_FLEXIBILITY.md`
+- Matrix generator: `make_q3_read_matrix.py`
+- Runner: `run_q3_read_workloads.sh`
+
+First pass:
+
+```bash
+cd eval-vcomp
+SYSTEMS="baseline vcomp" \
+SIZES_GB="500" \
+KV_LABELS="1024B 91B" \
+DISTRIBUTIONS="unique100 uniform50 zipf99_50" \
+WORKLOADS="workloada workloadb workloadc workloadd workloade workloadf mixgraph" \
+DURATION=60 \
+THREADS=1 \
+CACHE_PCT=0 \
+./run_q3_read_workloads.sh
+```
+
+Current gap:
+
+- Baseline trace DBs exist for 500GB and 1TB.
+- Final-design vcomp trace DBs currently exist for 500GB only.
+- Full Q3 requires generating the 1TB final-design vcomp trace sweep before
+  running the complete read/mixed matrix.
+
 ## Execution Order
 
 1. Run A at 1TB for both KV sizes.
@@ -269,3 +382,16 @@ Open decisions:
 
 - 10TB 91B can be mandatory or best-effort depending on runtime and disk pressure.
 - Flexibility sweep may not need full baseline for every point. Decide after the first alpha/ratio points.
+
+Open follow-up:
+
+- Trace-generated `unique100` keys currently use affine mapping
+  `key_i = (a*i+b) mod domain`. This preserves uniqueness but creates a
+  low-byte pattern that makes the radix-sort scatter phase much slower than the
+  synthetic RNG path. Observed on 2026-06-07:
+  `500GB/1KB synthetic` sort `4.995s` vs `500GB/1024B trace` sort `10.349s`.
+  The increase is almost entirely radix scatter (`3.191s -> 8.648s`), especially
+  lower-byte passes. Before using trace-based vcomp timings as final numbers,
+  revisit trace generation and test a hash/permutation mapping with better
+  low-byte randomness while preserving unique-key semantics.
+  Raw analysis: `log_loads/sort_bottleneck_analysis.tsv`.

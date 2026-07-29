@@ -35,7 +35,7 @@ if [[ ! -x "${DB_BENCH}" ]]; then
   exit 1
 fi
 
-printf 'size_gb\tthreads\tmemtable\tstatus\telapsed_sec\tbench_sec\tdb_size\tdiskstat_dev\ttotal_write_gb\tingest_gb\tcompaction_write_gb\tcompaction_wamp\tlog_dir\tdb_dir\n' > "${SUMMARY_FILE}"
+printf 'size_gb\tthreads\tmemtable\tstatus\telapsed_sec\tpeak_rss_kb\tpeak_rss_gb\tbench_sec\tdb_size\tdiskstat_dev\ttotal_write_gb\tingest_gb\tcompaction_write_gb\tcompaction_wamp\tlog_dir\tdb_dir\n' > "${SUMMARY_FILE}"
 
 extract_metric() {
   local bench_out="$1"
@@ -48,12 +48,28 @@ disk_written_sectors() {
   awk -v dev="${DISKSTAT_DEV}" '$3 == dev { print $10; found = 1 } END { if (!found) print "" }' "${diskstats_file}"
 }
 
+read_peak_rss_kb() {
+  local raw_dir="$1"
+  if [[ -f "${raw_dir}/peak_rss_kb.txt" ]]; then
+    cat "${raw_dir}/peak_rss_kb.txt"
+  elif [[ -f "${raw_dir}/time.out" ]]; then
+    awk -F: '/Maximum resident set size/ {gsub(/^[ \t]+/, "", $2); print $2}' "${raw_dir}/time.out" 2>/dev/null || true
+  fi
+}
+
+rss_kb_to_gb() {
+  local rss_kb="$1"
+  awk -v kb="${rss_kb}" 'BEGIN { if (kb != "") printf "%.3f", kb / 1024 / 1024 }'
+}
+
 append_summary() {
   local size_gb="$1"
   local status="$2"
   local run_dir="$3"
   local db_dir="$4"
   local elapsed_sec=""
+  local peak_rss_kb=""
+  local peak_rss_gb=""
   local bench_sec=""
   local db_size=""
   local total_write_gb=""
@@ -63,6 +79,8 @@ append_summary() {
   local bench_out="${run_dir}/bench.out"
 
   [[ -f "${run_dir}/raw/elapsed_sec.txt" ]] && elapsed_sec="$(<"${run_dir}/raw/elapsed_sec.txt")"
+  peak_rss_kb="$(read_peak_rss_kb "${run_dir}/raw")"
+  peak_rss_gb="$(rss_kb_to_gb "${peak_rss_kb}")"
   [[ -d "${db_dir}" ]] && db_size="$(du -sh "${db_dir}" 2>/dev/null | cut -f1 || true)"
   if [[ -f "${run_dir}/raw/diskstats.start" && -f "${run_dir}/raw/diskstats.end" ]]; then
     local sectors_start=""
@@ -81,8 +99,9 @@ append_summary() {
     compaction_wamp="$(grep -E '^ Sum[[:space:]]' "${bench_out}" | tail -1 | awk '{print $13}')"
   fi
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "${size_gb}" "1" "vector" "${status}" "${elapsed_sec}" "${bench_sec}" "${db_size}" \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "${size_gb}" "1" "vector" "${status}" "${elapsed_sec}" "${peak_rss_kb}" "${peak_rss_gb}" \
+    "${bench_sec}" "${db_size}" \
     "${DISKSTAT_DEV}" "${total_write_gb}" "${ingest_gb}" \
     "${compaction_write_gb}" "${compaction_wamp}" "${run_dir}" "${db_dir}" >> "${SUMMARY_FILE}"
 }

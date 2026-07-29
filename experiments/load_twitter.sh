@@ -73,7 +73,17 @@ DB_DIR="${DB_DIR:-${DB_ROOT%/}/${RUN_NAME}}"
 RAW_DIR="${RUN_DIR}/raw"
 REP_FILE="${RUN_DIR}/report.rep"
 OUT_FILE="${RUN_DIR}/bench.out"
+TIME_FILE="${RAW_DIR}/time.out"
 IOSTAT_PID=""
+
+extract_peak_rss_kb() {
+  awk -F: '/Maximum resident set size/ {gsub(/^[ \t]+/, "", $2); print $2}' "$1" 2>/dev/null || true
+}
+
+rss_kb_to_gb() {
+  local rss_kb="$1"
+  awk -v kb="${rss_kb}" 'BEGIN { if (kb != "") printf "%.3f", kb / 1024 / 1024 }'
+}
 
 cleanup_iostat() {
   if [[ -n "${IOSTAT_PID:-}" ]]; then
@@ -177,7 +187,7 @@ if command -v iostat >/dev/null 2>&1; then
 fi
 
 set +e
-"${cmd[@]}" >> "${OUT_FILE}" 2>&1
+/usr/bin/time -v -o "${TIME_FILE}" "${cmd[@]}" >> "${OUT_FILE}" 2>&1
 exit_code=$?
 set -e
 
@@ -188,6 +198,10 @@ end_ts="$(date +%s)"
 echo "${end_ts}" > "${RAW_DIR}/end_epoch.txt"
 elapsed=$((end_ts - start_ts))
 echo "${elapsed}" > "${RAW_DIR}/elapsed_sec.txt"
+peak_rss_kb="$(extract_peak_rss_kb "${TIME_FILE}")"
+peak_rss_gb="$(rss_kb_to_gb "${peak_rss_kb}")"
+echo "${peak_rss_kb}" > "${RAW_DIR}/peak_rss_kb.txt"
+echo "${peak_rss_gb}" > "${RAW_DIR}/peak_rss_gb.txt"
 cat /proc/diskstats > "${RAW_DIR}/diskstats.end"
 cat /proc/stat > "${RAW_DIR}/procstat.end"
 
@@ -217,6 +231,7 @@ echo "DB Size:   ${db_size}"
 echo "Threads:   1"
 echo "Memtable:  vector"
 echo "Elapsed:   ${elapsed} sec (full db_bench command)"
+echo "Peak RSS:  ${peak_rss_gb:-NA} GiB (${peak_rss_kb:-NA} KB)"
 echo "Primary:   ${primary_bench:-NA} ${primary_sec:-NA} sec"
 echo "Remainder: ${non_primary_sec} sec (post-primary benchmarks + teardown)"
 echo "Log:       ${RUN_DIR}"

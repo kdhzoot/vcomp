@@ -52,7 +52,7 @@ echo "  Log Root:  ${RUN_ROOT}"
 echo "=========================================="
 
 CSV="${RUN_ROOT}/results.csv"
-echo "run_id,elapsed_s,throughput_ops_s,cpu_util,disk_read_MBs,exit_code" > "${CSV}"
+echo "run_id,elapsed_s,peak_rss_kb,peak_rss_gb,throughput_ops_s,cpu_util,disk_read_MBs,exit_code" > "${CSV}"
 
 for ((i = 1; i <= RUNS; i++)); do
   label="${MODE}_run${i}"
@@ -81,11 +81,13 @@ for ((i = 1; i <= RUNS; i++)); do
 
   if [[ -f "${result_dir}/summary.txt" ]]; then
     elapsed=$(awk -F: '/^elapsed:/ {print $2}' "${result_dir}/summary.txt" | tr -d 's ' || echo 0)
+    peak_rss_kb=$(awk -F: '/^peak_rss_kb:/ {print $2}' "${result_dir}/summary.txt" | tr -d ' ' || echo "")
+    peak_rss_gb=$(awk -F: '/^peak_rss_gb:/ {print $2}' "${result_dir}/summary.txt" | tr -d ' ' || echo "")
     throughput=$(awk -F: '/^throughput:/ {print $2}' "${result_dir}/summary.txt" | awk '{print $1}' || echo 0)
     cpu_util=$(awk -F: '/^cpu_util:/ {print $2}' "${result_dir}/summary.txt" | tr -d '% ' || echo 0)
     disk_r=$(awk -F: '/^disk_read:/ {print $2}' "${result_dir}/summary.txt" | awk '{print $1}' || echo 0)
     exit_code=$(awk -F: '/^exit_code:/ {print $2}' "${result_dir}/summary.txt" | tr -d ' ' || echo 1)
-    echo "${i},${elapsed},${throughput},${cpu_util},${disk_r},${exit_code}" >> "${CSV}"
+    echo "${i},${elapsed},${peak_rss_kb},${peak_rss_gb},${throughput},${cpu_util},${disk_r},${exit_code}" >> "${CSV}"
   fi
 done
 

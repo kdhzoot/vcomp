@@ -68,15 +68,19 @@ run_one() {
 
   local db_size
   db_size="$(du -sh "${db_dir}" 2>/dev/null | cut -f1)"
+  local peak_rss_kb=""
+  local peak_rss_gb=""
+  [[ -f "${SUMMARY_DIR}/${label}/raw/peak_rss_kb.txt" ]] && peak_rss_kb="$(<"${SUMMARY_DIR}/${label}/raw/peak_rss_kb.txt")"
+  [[ -f "${SUMMARY_DIR}/${label}/raw/peak_rss_gb.txt" ]] && peak_rss_gb="$(<"${SUMMARY_DIR}/${label}/raw/peak_rss_gb.txt")"
 
-  echo "[${label}] Done: ${elapsed}s, ${db_size}"
+  echo "[${label}] Done: ${elapsed}s, ${db_size}, peak_rss=${peak_rss_gb:-NA}GiB"
 
   # Append to CSV
-  echo "${mode},${run_id},1,vector,${elapsed},${db_size}" >> "${SUMMARY_DIR}/results.csv"
+  echo "${mode},${run_id},1,vector,${elapsed},${peak_rss_kb},${peak_rss_gb},${db_size}" >> "${SUMMARY_DIR}/results.csv"
 }
 
 # ── CSV header ──
-echo "mode,run_id,threads,memtable,elapsed_sec,db_size" > "${SUMMARY_DIR}/results.csv"
+echo "mode,run_id,threads,memtable,elapsed_sec,peak_rss_kb,peak_rss_gb,db_size" > "${SUMMARY_DIR}/results.csv"
 
 # ── Main loop ──
 IFS=',' read -ra mode_arr <<< "${MODES}"

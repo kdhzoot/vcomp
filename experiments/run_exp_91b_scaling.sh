@@ -27,6 +27,10 @@ VCOMP_REGISTER_BATCH_MAX="${VCOMP_REGISTER_BATCH_MAX:-256}"
 VCOMP_VISIBLE_L0_BATCH_MB="${VCOMP_VISIBLE_L0_BATCH_MB:-0}"
 VCOMP_BG_COMMIT_BATCH_MAX="${VCOMP_BG_COMMIT_BATCH_MAX:-16}"
 VCOMP_BG_COMMIT_DELAY_US="${VCOMP_BG_COMMIT_DELAY_US:-100}"
+VCOMP_LOG_APPLY_TIMING="${VCOMP_LOG_APPLY_TIMING:-false}"
+VCOMP_SORT_DETAIL_TIMING="${VCOMP_SORT_DETAIL_TIMING:-false}"
+VCOMP_PHASE1_SHARDS="${VCOMP_PHASE1_SHARDS:-8}"
+VCOMP_MATERIALIZE_WORKERS="${VCOMP_MATERIALIZE_WORKERS:-48}"
 
 mkdir -p "${LOG_ROOT}" "${EXP_DB_ROOT}"
 
@@ -37,6 +41,20 @@ log() {
 disk_written_sectors() {
   local diskstats_file="$1"
   awk -v dev="${DISKSTAT_DEV}" '$3 == dev { print $10; found = 1 } END { if (!found) print "" }' "${diskstats_file}"
+}
+
+read_peak_rss_kb() {
+  local raw_dir="$1"
+  if [[ -f "${raw_dir}/peak_rss_kb.txt" ]]; then
+    cat "${raw_dir}/peak_rss_kb.txt"
+  elif [[ -f "${raw_dir}/time.out" ]]; then
+    awk -F: '/Maximum resident set size/ {gsub(/^[ \t]+/, "", $2); print $2}' "${raw_dir}/time.out" 2>/dev/null || true
+  fi
+}
+
+rss_kb_to_gb() {
+  local rss_kb="$1"
+  awk -v kb="${rss_kb}" 'BEGIN { if (kb != "") printf "%.3f", kb / 1024 / 1024 }'
 }
 
 bench_seconds() {
@@ -74,6 +92,8 @@ append_summary() {
   local db_dir="$5"
   local bench_out="${run_dir}/bench.out"
   local elapsed_sec=""
+  local peak_rss_kb=""
+  local peak_rss_gb=""
   local fill_sec=""
   local fill_ops=""
   local fill_bench=""
@@ -84,6 +104,8 @@ append_summary() {
   local wamp=""
 
   [[ -f "${run_dir}/raw/elapsed_sec.txt" ]] && elapsed_sec="$(<"${run_dir}/raw/elapsed_sec.txt")"
+  peak_rss_kb="$(read_peak_rss_kb "${run_dir}/raw")"
+  peak_rss_gb="$(rss_kb_to_gb "${peak_rss_kb}")"
   [[ -d "${db_dir}" ]] && db_size="$(du -sh "${db_dir}" 2>/dev/null | cut -f1 || true)"
 
   if [[ -f "${run_dir}/raw/diskstats.start" && -f "${run_dir}/raw/diskstats.end" ]]; then
@@ -105,9 +127,10 @@ append_summary() {
     wamp="$(write_amp "${bench_out}")"
   fi
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "${system}" "${size_gb}" "91B" "${KEY_SIZE}" "${VALUE_SIZE}" "${COMPRESSION_TYPE}" \
-    "1" "vector" "${status}" "${elapsed_sec}" "${fill_bench}" "${fill_sec}" "${fill_ops}" \
+    "1" "vector" "${status}" "${elapsed_sec}" "${peak_rss_kb}" "${peak_rss_gb}" \
+    "${fill_bench}" "${fill_sec}" "${fill_ops}" \
     "${db_size}" "${DISKSTAT_DEV}" "${total_write_gb}" "${ingest}" "${comp_gb}" "${wamp}" \
     "${run_dir}" "${db_dir}" "${RUN_ID}" >> "${SUMMARY_FILE}"
 }
@@ -146,7 +169,7 @@ for system in ${SYSTEMS_STR}; do
   fi
 done
 
-SUMMARY_HEADER='system	size_gb	kv	key_size	value_size	compression_type	threads	memtable	status	elapsed_sec	bench_name	bench_sec	bench_ops_sec	db_size	diskstat_dev	total_write_gb	ingest_gb	compaction_write_gb	compaction_wamp	log_dir	db_dir	run_id'
+SUMMARY_HEADER='system	size_gb	kv	key_size	value_size	compression_type	threads	memtable	status	elapsed_sec	peak_rss_kb	peak_rss_gb	bench_name	bench_sec	bench_ops_sec	db_size	diskstat_dev	total_write_gb	ingest_gb	compaction_write_gb	compaction_wamp	log_dir	db_dir	run_id'
 if [[ "${RESUME}" == "1" ]]; then
   if [[ ! -s "${SUMMARY_FILE}" ]]; then
     printf '%s\n' "${SUMMARY_HEADER}" > "${SUMMARY_FILE}"
@@ -170,6 +193,10 @@ log "THREADS=1"
 log "MEMTABLE_REP=vector"
 log "ROCKSDB_BENCH=${ROCKSDB_BENCH}"
 log "VCOMP_BENCH=${VCOMP_BENCH}"
+log "VCOMP_LOG_APPLY_TIMING=${VCOMP_LOG_APPLY_TIMING}"
+log "VCOMP_SORT_DETAIL_TIMING=${VCOMP_SORT_DETAIL_TIMING}"
+log "VCOMP_PHASE1_SHARDS=${VCOMP_PHASE1_SHARDS}"
+log "VCOMP_MATERIALIZE_WORKERS=${VCOMP_MATERIALIZE_WORKERS}"
 
 for size_gb in ${SIZES_GB_STR}; do
   for system in ${SYSTEMS_STR}; do
@@ -211,6 +238,10 @@ for size_gb in ${SIZES_GB_STR}; do
     VCOMP_VISIBLE_L0_BATCH_MB="${VCOMP_VISIBLE_L0_BATCH_MB}" \
     VCOMP_BG_COMMIT_BATCH_MAX="${VCOMP_BG_COMMIT_BATCH_MAX}" \
     VCOMP_BG_COMMIT_DELAY_US="${VCOMP_BG_COMMIT_DELAY_US}" \
+    VCOMP_LOG_APPLY_TIMING="${VCOMP_LOG_APPLY_TIMING}" \
+    VCOMP_SORT_DETAIL_TIMING="${VCOMP_SORT_DETAIL_TIMING}" \
+    VCOMP_PHASE1_SHARDS="${VCOMP_PHASE1_SHARDS}" \
+    VCOMP_MATERIALIZE_WORKERS="${VCOMP_MATERIALIZE_WORKERS}" \
     bash "${LOAD_SH}" 2>&1 | tee -a "${RUN_LOG}"
     exit_code=${PIPESTATUS[0]}
     set -e

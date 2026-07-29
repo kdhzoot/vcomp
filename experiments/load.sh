@@ -26,9 +26,10 @@ require_env() {
 for name in MODE TARGET_DB_GB DB_ROOT; do
   require_env "$name"
 done
-[[ "${MODE}" == "baseline" || "${MODE}" == "vcomp" ]] || {
-  echo "[ERROR] MODE must be 'baseline' or 'vcomp'" >&2; exit 1
-}
+case "${MODE}" in
+  baseline|vcomp|l0only|l0compact) ;;
+  *) echo "[ERROR] MODE must be 'baseline', 'vcomp', 'l0only', or 'l0compact'" >&2; exit 1 ;;
+esac
 [[ -x "${DB_BENCH}" ]] || {
   echo "[ERROR] db_bench not found at ${DB_BENCH}. Run make.sh first." >&2; exit 1
 }
@@ -45,7 +46,17 @@ DB_DIR="${DB_DIR:-${DB_ROOT%/}/${MODE}_${TARGET_DB_GB}gb}"
 RAW_DIR="${RUN_DIR}/raw"
 REP_FILE="${RUN_DIR}/report.rep"
 OUT_FILE="${RUN_DIR}/bench.out"
+TIME_FILE="${RAW_DIR}/time.out"
 IOSTAT_PID=""
+
+extract_peak_rss_kb() {
+  awk -F: '/Maximum resident set size/ {gsub(/^[ \t]+/, "", $2); print $2}' "$1" 2>/dev/null || true
+}
+
+rss_kb_to_gb() {
+  local rss_kb="$1"
+  awk -v kb="${rss_kb}" 'BEGIN { if (kb != "") printf "%.3f", kb / 1024 / 1024 }'
+}
 
 cleanup_iostat() {
   if [[ -n "${IOSTAT_PID:-}" ]]; then
@@ -69,6 +80,9 @@ BG_JOBS="${BG_JOBS:-$(nproc)}"
 VCOMP_REGISTER_BATCH_MAX="${VCOMP_REGISTER_BATCH_MAX:-256}"
 VCOMP_VISIBLE_L0_BATCH_MB="${VCOMP_VISIBLE_L0_BATCH_MB:-0}"
 VCOMP_LOG_APPLY_TIMING="${VCOMP_LOG_APPLY_TIMING:-true}"
+VCOMP_SORT_DETAIL_TIMING="${VCOMP_SORT_DETAIL_TIMING:-false}"
+VCOMP_PHASE1_SHARDS="${VCOMP_PHASE1_SHARDS:-8}"
+VCOMP_MATERIALIZE_WORKERS="${VCOMP_MATERIALIZE_WORKERS:-48}"
 COMPRESSION_TYPE="${COMPRESSION_TYPE:-none}"
 
 [[ ! -d "${DB_DIR}" ]] || { echo "[ERROR] DB already exists: ${DB_DIR}" >&2; exit 1; }
@@ -106,6 +120,28 @@ if [[ "${MODE}" == "baseline" ]]; then
   cmd+=(
     --benchmarks=fillrandom,flush,compact0,waitforcompaction,stats,levelstats
   )
+elif [[ "${MODE}" == "l0only" || "${MODE}" == "l0compact" ]]; then
+  # Same write path as baseline (identical cmd[] above); the ONLY variable is
+  # the compaction strategy. Auto compaction is disabled so every flushed SST
+  # piles up in L0. With auto off, L0 never shrinks, so all write-stall limits
+  # must be lifted or the load deadlocks (L0 stop / pending-bytes stall).
+  STALL_TRIGGER="${STALL_TRIGGER:-1073741824}"
+  cmd+=(
+    --disable_auto_compactions=true
+    --level0_file_num_compaction_trigger="${STALL_TRIGGER}"
+    --level0_slowdown_writes_trigger="${STALL_TRIGGER}"
+    --level0_stop_writes_trigger="${STALL_TRIGGER}"
+    --soft_pending_compaction_bytes_limit=0
+    --hard_pending_compaction_bytes_limit=0
+  )
+  if [[ "${MODE}" == "l0only" ]]; then
+    # (ii-fail) leave everything overlapping in L0 — no compaction at all.
+    cmd+=(--benchmarks=fillrandom,flush,stats,levelstats)
+  else
+    # l0compact: one final full CompactRange (kForceOptimized) collapses all of
+    # L0 into a single non-overlapping sorted run at the bottom level.
+    cmd+=(--benchmarks=fillrandom,flush,compact,stats,levelstats)
+  fi
 else
   cmd+=(
     --benchmarks=fillvirtual,flush,compact0,waitforcompaction,stats,levelstats
@@ -118,6 +154,9 @@ else
   [[ -z "${VCOMP_VISIBLE_L0_BATCH_MB}" ]] || \
     cmd+=(--vcomp_visible_l0_batch_mb="${VCOMP_VISIBLE_L0_BATCH_MB}")
   cmd+=(--vcomp_log_apply_timing="${VCOMP_LOG_APPLY_TIMING}")
+  cmd+=(--vcomp_sort_detail_timing="${VCOMP_SORT_DETAIL_TIMING}")
+  cmd+=(--vcomp_phase1_shards="${VCOMP_PHASE1_SHARDS}")
+  cmd+=(--vcomp_materialize_workers="${VCOMP_MATERIALIZE_WORKERS}")
 fi
 
 # ── Save run info ──
@@ -148,7 +187,7 @@ if command -v iostat >/dev/null 2>&1; then
 fi
 
 set +e
-"${cmd[@]}" >> "${OUT_FILE}" 2>&1
+/usr/bin/time -v -o "${TIME_FILE}" "${cmd[@]}" >> "${OUT_FILE}" 2>&1
 exit_code=$?
 set -e
 
@@ -159,6 +198,10 @@ end_ts="$(date +%s)"
 echo "${end_ts}" > "${RAW_DIR}/end_epoch.txt"
 elapsed=$((end_ts - start_ts))
 echo "${elapsed}" > "${RAW_DIR}/elapsed_sec.txt"
+peak_rss_kb="$(extract_peak_rss_kb "${TIME_FILE}")"
+peak_rss_gb="$(rss_kb_to_gb "${peak_rss_kb}")"
+echo "${peak_rss_kb}" > "${RAW_DIR}/peak_rss_kb.txt"
+echo "${peak_rss_gb}" > "${RAW_DIR}/peak_rss_gb.txt"
 cat /proc/diskstats > "${RAW_DIR}/diskstats.end"
 cat /proc/stat > "${RAW_DIR}/procstat.end"
 
@@ -172,6 +215,8 @@ echo "Keys:      ${NKEYS}"
 echo "Threads:   1"
 echo "Memtable:  vector"
 echo "Elapsed:   ${elapsed} sec"
+echo "Peak RSS:  ${peak_rss_gb:-NA} GiB (${peak_rss_kb:-NA} KB)"
 echo "Log:       ${RUN_DIR}"
 echo "DB:        ${DB_DIR}"
 echo "Exit code: ${exit_code}"
+exit "${exit_code}"

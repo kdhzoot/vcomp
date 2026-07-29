@@ -5639,7 +5639,7 @@ Status DBImpl::CommitVirtualCompactionEdit(
 }
 
 Status DBImpl::RunVirtualCompaction(Compaction* c,
-                                    JobContext* /*job_context*/,
+                                    JobContext* job_context,
                                     LogBuffer* log_buffer,
                                     bool* compaction_released) {
   mutex_.AssertHeld();
@@ -5665,6 +5665,7 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   std::vector<int> input_levels;
   uint64_t l0_input_files = 0;
   uint64_t l0_input_bytes = 0;
+  uint64_t input_bytes = 0;
   size_t num_input_files = 0;
   std::string input_level_summary;
   for (size_t lvl = 0; lvl < c->num_input_levels(); lvl++) {
@@ -5725,6 +5726,7 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
       key_maxs_vec.push_back(input_vsst.key_max);
       input_file_numbers.push_back(fnum);
       input_levels.push_back(c->level(lvl));
+      input_bytes += fmd->fd.GetFileSize();
       if (c->level(lvl) == 0) {
         l0_input_files++;
         l0_input_bytes += fmd->fd.GetFileSize();
@@ -5949,12 +5951,14 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   pending_outputs.reserve(output_vssts.size());
   uint64_t l0_output_files = 0;
   uint64_t l0_output_bytes = 0;
+  uint64_t output_bytes = 0;
 
   // Allocate file numbers and build output metadata. Registry publication is
   // delayed until the VersionSet update succeeds.
   for (const auto& vsst : output_vssts) {
     uint64_t fnum = versions_->NewFileNumber();
     pending_outputs.push_back(VirtualCompactionPendingOutput{fnum, vsst});
+    output_bytes += vsst.size_bytes;
     if (output_level == 0) {
       l0_output_files++;
       l0_output_bytes += vsst.size_bytes;
@@ -6014,6 +6018,12 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
       commit_queue_wait_us, std::memory_order_relaxed);
 
   if (s.ok()) {
+    int job_id = job_context != nullptr ? job_context->job_id : -1;
+    double dedup_rate =
+        naive_entries == 0
+            ? 0.0
+            : static_cast<double>(dedup_estimate) /
+                  static_cast<double>(naive_entries);
     ROCKS_LOG_BUFFER(
         log_buffer,
         "[%s] Virtual compaction L%d -> L%d: %zu inputs [%s] (%" PRIu64
@@ -6028,6 +6038,53 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
         naive_entries, dedup_estimate, total_us, gather_us, merge_us,
         split_us, mutex_wait_us, edit_build_us, log_apply_us,
         commit_queue_wait_us, commit_batch_size);
+    ROCKS_LOG_BUFFER(
+        log_buffer,
+        "[%s] VCOMP_WRITE_JOB job=%d start_level=%d output_level=%d "
+        "input_files=%zu input_level_summary=%s input_segments=%" PRIu64
+        " input_entries=%" PRIu64 " input_bytes=%" PRIu64
+        " output_files=%zu output_entries=%" PRIu64
+        " output_bytes=%" PRIu64 " dedup_entries=%" PRIu64
+        " dedup_rate=%.8f key_min=%" PRIu64 " key_max=%" PRIu64
+        " target_sst_size=%" PRIu64 " avg_entry_size=%" PRIu64
+        " use_kmv=%d total_us=%" PRIu64 " gather_us=%" PRIu64
+        " merge_us=%" PRIu64 " split_us=%" PRIu64
+        " mutex_wait_us=%" PRIu64 " edit_us=%" PRIu64
+        " log_apply_us=%" PRIu64 " commit_queue_us=%" PRIu64
+        " commit_batch=%" PRIu64,
+        cfd->GetName().c_str(), job_id, c->start_level(), output_level,
+        input_file_numbers.size(), input_level_summary.c_str(),
+        input_segments_total, naive_entries, input_bytes, output_vssts.size(),
+        total_entries, output_bytes, dedup_estimate, dedup_rate, global_min,
+        global_max, target_sst_size, avg_entry_size, use_kmv ? 1 : 0, total_us,
+        gather_us, merge_us, split_us, mutex_wait_us, edit_build_us,
+        log_apply_us, commit_queue_wait_us, commit_batch_size);
+    uint64_t split_pos = 0;
+    bool have_prev_output = false;
+    uint64_t prev_key_max = 0;
+    for (size_t i = 0; i < output_vssts.size(); i++) {
+      const auto& vsst = output_vssts[i];
+      uint64_t fnum = pending_outputs[i].file_number;
+      uint64_t split_gap = 0;
+      if (have_prev_output && vsst.key_min > prev_key_max) {
+        split_gap = vsst.key_min - prev_key_max - 1;
+      }
+      ROCKS_LOG_BUFFER(
+          log_buffer,
+          "[%s] VCOMP_WRITE_OUTPUT job=%d start_level=%d output_level=%d "
+          "out_idx=%zu file=%" PRIu64 " entries=%" PRIu64
+          " bytes=%" PRIu64 " key_min=%" PRIu64 " key_max=%" PRIu64
+          " split_pos=%" PRIu64 " split_has_prev=%d "
+          "split_prev_key_max=%" PRIu64 " split_key_min=%" PRIu64
+          " split_gap=%" PRIu64,
+          cfd->GetName().c_str(), job_id, c->start_level(), output_level, i,
+          fnum, vsst.num_entries, vsst.size_bytes, vsst.key_min, vsst.key_max,
+          split_pos, have_prev_output ? 1 : 0, prev_key_max, vsst.key_min,
+          split_gap);
+      split_pos += vsst.num_entries;
+      prev_key_max = vsst.key_max;
+      have_prev_output = true;
+    }
   }
 
   return s;

@@ -10933,6 +10933,15 @@ class Benchmark {
         int lvl = kv.first;
         auto& ranges = kv.second;
         std::sort(ranges.begin(), ranges.end());
+        // Optional per-file range dump for all levels (read-only). Enabled via
+        // VCOMP_COV_PERFILE; default output unchanged. Format:
+        //   PERFILE <level> <smallest_u64> <largest_u64>
+        if (std::getenv("VCOMP_COV_PERFILE") != nullptr) {
+          for (const auto& r : ranges) {
+            fprintf(stdout, "PERFILE %d %llu %llu\n", lvl,
+                    (unsigned long long)r.first, (unsigned long long)r.second);
+          }
+        }
         uint64_t level_min = ranges.front().first;
         uint64_t level_max = ranges.back().second;
         uint64_t level_span = level_max - level_min;

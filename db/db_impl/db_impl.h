@@ -1184,6 +1184,10 @@ class DBImpl : public DB {
   void ResetVirtualCompactionStats();
   VirtualCompactionStats GetVirtualCompactionStats() const;
   void CleanupVirtualCompactionObsoleteFiles();
+  std::unique_ptr<std::list<uint64_t>::iterator>
+  CaptureVirtualCompactionMaterializationOutputs();
+  void ReleaseVirtualCompactionMaterializationOutputs(
+      std::unique_ptr<std::list<uint64_t>::iterator>& v);
 
   // Initialize a brand new DB. The DB directory is expected to be empty before
   // calling it. Push new manifest file name into `new_filenames`.

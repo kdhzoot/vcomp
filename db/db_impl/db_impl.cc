@@ -4873,6 +4873,20 @@ void DBImpl::ReleaseFileNumberFromPendingOutputs(
   }
 }
 
+std::unique_ptr<std::list<uint64_t>::iterator>
+DBImpl::CaptureVirtualCompactionMaterializationOutputs() {
+  mutex_.AssertHeld();
+  return std::unique_ptr<std::list<uint64_t>::iterator>(
+      new std::list<uint64_t>::iterator(
+          CaptureCurrentFileNumberInPendingOutputs()));
+}
+
+void DBImpl::ReleaseVirtualCompactionMaterializationOutputs(
+    std::unique_ptr<std::list<uint64_t>::iterator>& v) {
+  mutex_.AssertHeld();
+  ReleaseFileNumberFromPendingOutputs(v);
+}
+
 std::list<uint64_t>::iterator DBImpl::CaptureOptionsFileNumber() {
   // We need to remember the iterator of our insert, because after the
   // compaction is done, we need to remove that element from

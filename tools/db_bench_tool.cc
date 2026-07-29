@@ -35,6 +35,8 @@
 #include <deque>
 #include <future>
 #include <iostream>
+#include <list>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -96,6 +98,7 @@
 
 #include "db/virtual_compaction/plr_model.h"
 #include "db/virtual_compaction/virtual_sst.h"
+#include "rocksdb/sst_file_reader.h"
 #include "rocksdb/sst_file_writer.h"
 #include "utilities/blob_db/blob_db.h"
 #include "utilities/counted_fs.h"
@@ -6522,11 +6525,16 @@ class Benchmark {
         uint64_t virtual_fnum;
         uint64_t real_fnum;
         int level;
+        uint64_t materialize_key_min;
+        uint64_t materialize_key_max;
         VirtualSST vsst;
       };
     std::vector<SSTTask> tasks(all_vssts.size());
+    std::unique_ptr<std::list<uint64_t>::iterator> phase2_pending_outputs;
     {
       InstrumentedMutexLock l(db_impl->mutex());
+      phase2_pending_outputs =
+          db_impl->CaptureVirtualCompactionMaterializationOutputs();
       for (size_t i = 0; i < all_vssts.size(); i++) {
           tasks[i].virtual_fnum = all_vssts[i].first;
           tasks[i].vsst = all_vssts[i].second;
@@ -6535,6 +6543,46 @@ class Benchmark {
           tasks[i].level = (it != file_level_map.end())
                                ? it->second
                                : all_vssts[i].second.level;
+          tasks[i].materialize_key_min = tasks[i].vsst.key_min;
+          tasks[i].materialize_key_max = tasks[i].vsst.key_max;
+      }
+    }
+
+    // Non-L0 files in a RocksDB level must have disjoint internal-key ranges.
+    // Virtual split boundaries are inclusive and adjacent VSSTs can share the
+    // same boundary key. Materialize same-level non-L0 outputs as half-open
+    // ranges by assigning the shared boundary key to the earlier file only.
+    std::vector<size_t> task_order(tasks.size());
+    for (size_t i = 0; i < task_order.size(); ++i) task_order[i] = i;
+    std::sort(task_order.begin(), task_order.end(), [&](size_t a, size_t b) {
+      if (tasks[a].level != tasks[b].level) {
+        return tasks[a].level < tasks[b].level;
+      }
+      if (tasks[a].vsst.key_min != tasks[b].vsst.key_min) {
+        return tasks[a].vsst.key_min < tasks[b].vsst.key_min;
+      }
+      if (tasks[a].vsst.key_max != tasks[b].vsst.key_max) {
+        return tasks[a].vsst.key_max < tasks[b].vsst.key_max;
+      }
+      return tasks[a].real_fnum < tasks[b].real_fnum;
+    });
+    int current_level = -1;
+    bool has_prev_range = false;
+    uint64_t prev_key_max = 0;
+    for (size_t idx : task_order) {
+      auto& task = tasks[idx];
+      if (task.level == 0 || task.level != current_level) {
+        current_level = task.level;
+        has_prev_range = task.level != 0;
+        prev_key_max = task.materialize_key_max;
+        continue;
+      }
+      if (has_prev_range && task.materialize_key_min <= prev_key_max) {
+        task.materialize_key_min =
+            prev_key_max == UINT64_MAX ? UINT64_MAX : prev_key_max + 1;
+      }
+      if (task.materialize_key_max > prev_key_max) {
+        prev_key_max = task.materialize_key_max;
       }
     }
 
@@ -6547,6 +6595,7 @@ class Benchmark {
       std::string first_key;
       std::string last_key;
       bool ok;
+      uint64_t tail_size = 0;
     };
     std::vector<SSTResult> results(tasks.size());
     std::atomic<int64_t> total_written{0};
@@ -6583,7 +6632,9 @@ class Benchmark {
             res.ok = false;
 
             if (task.vsst.num_entries == 0 ||
-                task.vsst.plr_model.Empty()) {
+                task.vsst.plr_model.Empty() ||
+                task.materialize_key_min > task.materialize_key_max) {
+              res.ok = true;
               continue;
             }
 
@@ -6594,6 +6645,22 @@ class Benchmark {
             Options sst_opts = open_options_;
             if (FLAGS_compression_type_e != kNoCompression) {
               sst_opts.compression = FLAGS_compression_type_e;
+            }
+            // Force the materialized SST's index-block compression to match the
+            // configured flag (= baseline's setting). Without this the SST
+            // format can silently diverge from a normal RocksDB load.
+            {
+              auto* bbto_ptr =
+                  sst_opts.table_factory
+                      ? sst_opts.table_factory
+                            ->GetOptions<BlockBasedTableOptions>()
+                      : nullptr;
+              if (bbto_ptr && bbto_ptr->enable_index_compression !=
+                                  FLAGS_enable_index_compression) {
+                BlockBasedTableOptions bbto = *bbto_ptr;
+                bbto.enable_index_compression = FLAGS_enable_index_compression;
+                sst_opts.table_factory.reset(NewBlockBasedTableFactory(bbto));
+              }
             }
             EnvOptions env_opts;
             if (FLAGS_use_direct_io_for_flush_and_compaction) {
@@ -6639,13 +6706,13 @@ class Benchmark {
                 key_d = std::min(key_d, static_cast<double>(seg.key_end));
                 k = static_cast<uint64_t>(std::round(key_d));
               }
-              k = std::max(k, task.vsst.key_min);
-              k = std::min(k, task.vsst.key_max);
+              k = std::max(k, task.materialize_key_min);
+              k = std::min(k, task.materialize_key_max);
               if (has_prev_materialized_key && k <= prev_materialized_key) {
                 if (prev_materialized_key == UINT64_MAX) break;
                 k = prev_materialized_key + 1;
               }
-              if (k > task.vsst.key_max) break;
+              if (k > task.materialize_key_max) break;
 
               GenerateKeyFromInt(k, key_domain_for_keys, &local_key);
               if (!prev_key_str.empty() &&
@@ -6672,7 +6739,11 @@ class Benchmark {
               keys_in_file++;
             }
 
-            if (keys_in_file == 0) continue;
+            if (keys_in_file == 0) {
+              FLAGS_env->DeleteFile(sst_path);
+              res.ok = true;
+              continue;
+            }
             s = sst_writer.Finish();
             if (!s.ok()) {
               static std::atomic<int> fin_err_count{0};
@@ -6685,6 +6756,20 @@ class Benchmark {
             uint64_t fsize = 0;
             FLAGS_env->GetFileSize(sst_path, &fsize);
             res.file_size = fsize;
+            // Record the SST tail (index+filter+meta+footer) size so the
+            // manifest's FileMetaData enables the one-read table-open tail
+            // prefetch. Without it (tail_size=0) RocksDB re-reads index/filter
+            // on every table open -> large read amplification (see analysis).
+            {
+              SstFileReader tail_reader(sst_opts);
+              if (tail_reader.Open(sst_path).ok()) {
+                auto tp = tail_reader.GetTableProperties();
+                if (tp && tp->tail_start_offset > 0 &&
+                    fsize > tp->tail_start_offset) {
+                  res.tail_size = fsize - tp->tail_start_offset;
+                }
+              }
+            }
             res.keys_written = keys_in_file;
             res.ok = true;
             total_written.fetch_add(keys_in_file);
@@ -6705,6 +6790,11 @@ class Benchmark {
       }
       if (!materialize_ok) {
         fprintf(stderr, "Error: materialization failed; VersionEdit skipped\n");
+        {
+          InstrumentedMutexLock l(db_impl->mutex());
+          db_impl->ReleaseVirtualCompactionMaterializationOutputs(
+              phase2_pending_outputs);
+        }
         Status resume_s = db_.db->ContinueBackgroundWork();
         if (!resume_s.ok()) {
           fprintf(stderr, "ContinueBackgroundWork error: %s\n",
@@ -6720,7 +6810,7 @@ class Benchmark {
         edit.DeleteFile(tasks[i].level, tasks[i].virtual_fnum);
       }
     for (const auto& res : results) {
-      if (!res.ok) continue;
+      if (!res.ok || res.keys_written == 0) continue;
       // Match the seqno convention used by RegisterVirtualL0File: smallest
       // InternalKey uses kMaxSequenceNumber (the smallest internal key for
       // a given user_key), largest uses 0. Using 0 for smallest makes the
@@ -6739,7 +6829,7 @@ class Benchmark {
       edit.AddFile(res.level, res.file_number, 0, res.file_size,
                    smallest, largest, 0, 0, false, Temperature::kUnknown,
                    kInvalidBlobFileNumber, 0, 0, epoch, "", "",
-                   UniqueId64x2{}, 0, 0, true);
+                   UniqueId64x2{}, 0, res.tail_size, true);
     }
     {
       ReadOptions ro;
@@ -6747,10 +6837,29 @@ class Benchmark {
       InstrumentedMutexLock l(db_impl->mutex());
         Status s = versions->LogAndApply(cfd, ro, wo, &edit,
                                          db_impl->mutex(), nullptr);
+        db_impl->ReleaseVirtualCompactionMaterializationOutputs(
+            phase2_pending_outputs);
         if (!s.ok()) {
           fprintf(stderr, "Error applying VersionEdit: %s\n",
                   s.ToString().c_str());
         } else {
+          // The edit above deletes virtual files and adds real SSTs, but the
+          // existing MANIFEST still contains earlier virtual-only records. A
+          // clean RocksDB recovery can roll back to the last complete point if
+          // it sees those missing virtual files. After the current version is
+          // real-SST-only, force a fresh MANIFEST snapshot so the DB is a
+          // standard RocksDB DB on disk.
+          VersionEdit snapshot_edit;
+          Status snapshot_s = versions->LogAndApply(
+              cfd, ro, wo, &snapshot_edit, db_impl->mutex(), nullptr,
+              /*new_descriptor_log=*/true);
+          if (!snapshot_s.ok()) {
+            fprintf(stderr, "Error writing final MANIFEST snapshot: %s\n",
+                    snapshot_s.ToString().c_str());
+            s = snapshot_s;
+          }
+        }
+        if (s.ok()) {
           for (const auto& task : tasks) {
             registry->Remove(task.virtual_fnum);
           }

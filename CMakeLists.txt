@@ -1445,6 +1445,7 @@ if(WITH_TESTS)
         db/range_tombstone_fragmenter_test.cc
         db/repair_test.cc
         db/table_properties_collector_test.cc
+        db/virtual_compaction/virtual_sst_test.cc
         db/version_builder_test.cc
         db/version_edit_test.cc
         db/version_set_test.cc

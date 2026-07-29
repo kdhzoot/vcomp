@@ -1551,6 +1551,9 @@ db_properties_test: $(OBJ_DIR)/db/db_properties_test.o $(TEST_LIBRARY) $(LIBRARY
 db_table_properties_test: $(OBJ_DIR)/db/db_table_properties_test.o $(TEST_LIBRARY) $(LIBRARY)
 	$(AM_LINK)
 
+virtual_sst_test: $(OBJ_DIR)/db/virtual_compaction/virtual_sst_test.o $(TEST_LIBRARY) $(LIBRARY)
+	$(AM_LINK)
+
 log_write_bench: $(OBJ_DIR)/util/log_write_bench.o $(TEST_LIBRARY) $(LIBRARY)
 	$(AM_LINK) $(PROFILING_FLAGS)
 

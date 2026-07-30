@@ -30,6 +30,13 @@ VCOMP_SORT_DETAIL_TIMING="${VCOMP_SORT_DETAIL_TIMING:-false}"
 VCOMP_PHASE1_SHARDS="${VCOMP_PHASE1_SHARDS:-8}"
 VCOMP_MATERIALIZE_WORKERS="${VCOMP_MATERIALIZE_WORKERS:-48}"
 
+[[ "${RESUME}" == "0" || "${RESUME}" == "1" ]] || die "RESUME must be 0 or 1"
+require_positive_uint KEY_SIZE
+require_positive_uint VALUE_SIZE
+require_positive_uint BG_JOBS
+if [[ "${RESUME}" == "0" && -e "${LOG_ROOT}" ]]; then
+  die "Log output already exists: ${LOG_ROOT}"
+fi
 mkdir -p "${LOG_ROOT}" "${EXP_DB_ROOT}"
 
 log() {
@@ -62,20 +69,6 @@ metric_from_tsv() {
 disk_written_sectors() {
   local diskstats_file="$1"
   awk -v dev="${DISKSTAT_DEV}" '$3 == dev { print $10; found = 1 } END { if (!found) print "" }' "${diskstats_file}"
-}
-
-read_peak_rss_kb() {
-  local raw_dir="$1"
-  if [[ -f "${raw_dir}/peak_rss_kb.txt" ]]; then
-    cat "${raw_dir}/peak_rss_kb.txt"
-  elif [[ -f "${raw_dir}/time.out" ]]; then
-    awk -F: '/Maximum resident set size/ {gsub(/^[ \t]+/, "", $2); print $2}' "${raw_dir}/time.out" 2>/dev/null || true
-  fi
-}
-
-rss_kb_to_gb() {
-  local rss_kb="$1"
-  awk -v kb="${rss_kb}" 'BEGIN { if (kb != "") printf "%.3f", kb / 1024 / 1024 }'
 }
 
 bench_seconds() {

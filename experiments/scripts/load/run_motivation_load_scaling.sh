@@ -16,25 +16,16 @@ EXP_DIR="${LOG_ROOT:-${ARTIFACT_ROOT}/log_loads/motivation_load_scaling_${RUN_ID
 SUMMARY_FILE="${EXP_DIR}/summary.tsv"
 RUN_LOG="${EXP_DIR}/run.log"
 
+require_executable "${LOAD_SH}" "load runner"
+require_executable "${DB_BENCH}" "clean RocksDB db_bench"
+require_positive_uint BG_JOBS
+require_no_db_bench "motivation load scaling"
+[[ ! -e "${EXP_DIR}" ]] || die "Log output already exists: ${EXP_DIR}"
 mkdir -p "${EXP_DIR}"
 
 log() {
   printf '[%s] %s\n' "$(date '+%F %T')" "$*" | tee -a "${RUN_LOG}"
 }
-
-if pgrep -x db_bench >/dev/null 2>&1; then
-  log "ERROR: db_bench is already running. Stop it before starting this sequential experiment."
-  exit 1
-fi
-
-if [[ ! -x "${LOAD_SH}" ]]; then
-  log "ERROR: load.sh is not executable: ${LOAD_SH}"
-  exit 1
-fi
-if [[ ! -x "${DB_BENCH}" ]]; then
-  log "ERROR: clean RocksDB db_bench is not executable: ${DB_BENCH}"
-  exit 1
-fi
 
 printf 'size_gb\tthreads\tmemtable\tstatus\telapsed_sec\tpeak_rss_kb\tpeak_rss_gb\tbench_sec\tdb_size\tdiskstat_dev\ttotal_write_gb\tingest_gb\tcompaction_write_gb\tcompaction_wamp\tlog_dir\tdb_dir\n' > "${SUMMARY_FILE}"
 
@@ -47,20 +38,6 @@ extract_metric() {
 disk_written_sectors() {
   local diskstats_file="$1"
   awk -v dev="${DISKSTAT_DEV}" '$3 == dev { print $10; found = 1 } END { if (!found) print "" }' "${diskstats_file}"
-}
-
-read_peak_rss_kb() {
-  local raw_dir="$1"
-  if [[ -f "${raw_dir}/peak_rss_kb.txt" ]]; then
-    cat "${raw_dir}/peak_rss_kb.txt"
-  elif [[ -f "${raw_dir}/time.out" ]]; then
-    awk -F: '/Maximum resident set size/ {gsub(/^[ \t]+/, "", $2); print $2}' "${raw_dir}/time.out" 2>/dev/null || true
-  fi
-}
-
-rss_kb_to_gb() {
-  local rss_kb="$1"
-  awk -v kb="${rss_kb}" 'BEGIN { if (kb != "") printf "%.3f", kb / 1024 / 1024 }'
 }
 
 append_summary() {

@@ -33,20 +33,25 @@ BENCH_PID=""
 SAMPLER_PID=""
 RSS_SAMPLER_PID=""
 
+require_executable "${DB_BENCH}" "db_bench"
+require_positive_uint TARGET_DB_GB
+require_positive_uint PROFILE_SECONDS
+require_positive_uint BG_JOBS
+require_positive_uint VCOMP_REGISTER_BATCH_MAX
+require_no_db_bench "vcomp profiling load"
+[[ ! -e "${RUN_DIR}" ]] || die "Profile output already exists: ${RUN_DIR}"
+
 cleanup_background() {
   if [[ -n "${RSS_SAMPLER_PID:-}" ]]; then
-    kill "${RSS_SAMPLER_PID}" 2>/dev/null || true
-    wait "${RSS_SAMPLER_PID}" 2>/dev/null || true
+    stop_process "${RSS_SAMPLER_PID}"
     RSS_SAMPLER_PID=""
   fi
   if [[ -n "${SAMPLER_PID:-}" ]]; then
-    kill "${SAMPLER_PID}" 2>/dev/null || true
-    wait "${SAMPLER_PID}" 2>/dev/null || true
+    stop_process "${SAMPLER_PID}"
     SAMPLER_PID=""
   fi
   if [[ -n "${IOSTAT_PID:-}" ]]; then
-    kill "${IOSTAT_PID}" 2>/dev/null || true
-    wait "${IOSTAT_PID}" 2>/dev/null || true
+    stop_process "${IOSTAT_PID}"
     IOSTAT_PID=""
   fi
 }
@@ -54,8 +59,7 @@ cleanup_background() {
 cleanup_on_signal() {
   cleanup_background
   if [[ -n "${BENCH_PID:-}" ]]; then
-    kill "${BENCH_PID}" 2>/dev/null || true
-    wait "${BENCH_PID}" 2>/dev/null || true
+    stop_process "${BENCH_PID}"
     BENCH_PID=""
   fi
 }
@@ -118,15 +122,7 @@ echo "[RUN_DIR] ${RUN_DIR}"
 echo "[DB_DIR] ${DB_DIR}"
 echo "[CMD] $(cat "${RAW_DIR}/load_cmd.sh")"
 
-if [[ -w /proc/sys/vm/drop_caches ]]; then
-  sync
-  echo 3 > /proc/sys/vm/drop_caches
-  echo "[INFO] Page cache dropped"
-else
-  sync
-  sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches' && \
-    echo "[INFO] Page cache dropped (sudo)"
-fi
+drop_page_cache
 
 cat /proc/diskstats > "${RAW_DIR}/diskstats.start"
 cat /proc/stat > "${RAW_DIR}/procstat.start"
@@ -184,17 +180,17 @@ sleep 2
 ps -L -p "${BENCH_PID}" -o pid,tid,psr,pcpu,stat,wchan:36,comm > "${REPORT_DIR}/threads.initial.txt" || true
 
 run_if_alive oncpu \
-  sudo perf record -o "${PERF_DIR}/oncpu.data" -g -e task-clock -p "${BENCH_PID}" -- sleep "${PROFILE_SECONDS}"
+  sudo -n perf record -o "${PERF_DIR}/oncpu.data" -g -e task-clock -p "${BENCH_PID}" -- sleep "${PROFILE_SECONDS}"
 
 run_if_alive sched \
-  sudo perf sched record -o "${PERF_DIR}/sched.data" -p "${BENCH_PID}" -- sleep "${PROFILE_SECONDS}"
+  sudo -n perf sched record -o "${PERF_DIR}/sched.data" -p "${BENCH_PID}" -- sleep "${PROFILE_SECONDS}"
 
 run_if_alive switch_wakeup \
-  sudo perf record -o "${PERF_DIR}/switch_wakeup.data" -g \
+  sudo -n perf record -o "${PERF_DIR}/switch_wakeup.data" -g \
     -e sched:sched_switch,sched:sched_wakeup -p "${BENCH_PID}" -- sleep "${PROFILE_SECONDS}"
 
 run_if_alive futex \
-  sudo perf record -o "${PERF_DIR}/futex.data" -g \
+  sudo -n perf record -o "${PERF_DIR}/futex.data" -g \
     -e syscalls:sys_enter_futex,syscalls:sys_exit_futex -p "${BENCH_PID}" -- sleep "${PROFILE_SECONDS}"
 
 set +e
@@ -215,14 +211,14 @@ make_report() {
   local data="$1"
   local out="$2"
   [[ -f "${data}" ]] || return 0
-  sudo perf report --stdio -i "${data}" --no-children > "${out}" 2>&1 || true
+  sudo -n perf report --stdio -i "${data}" --no-children > "${out}" 2>&1 || true
 }
 
 make_report "${PERF_DIR}/oncpu.data" "${REPORT_DIR}/oncpu.report.txt"
 make_report "${PERF_DIR}/switch_wakeup.data" "${REPORT_DIR}/switch_wakeup.report.txt"
 make_report "${PERF_DIR}/futex.data" "${REPORT_DIR}/futex.report.txt"
 if [[ -f "${PERF_DIR}/sched.data" ]]; then
-  sudo perf sched latency -i "${PERF_DIR}/sched.data" > "${REPORT_DIR}/sched_latency.txt" 2>&1 || true
+  sudo -n perf sched latency -i "${PERF_DIR}/sched.data" > "${REPORT_DIR}/sched_latency.txt" 2>&1 || true
 fi
 
 {
@@ -239,7 +235,7 @@ fi
   rg -n "fillvirtual|Virtual compaction|LogAndApply|prepare_detail|compaction_pri_by_level|file_index_detail|BG virtual|L0 release|Virtual SSTs|Level [0-9]|Cumulative virtual" "${LOG_DIR}/bench.out" || true
 } > "${RUN_DIR}/SUMMARY.md"
 
-sudo chown -R "$(id -u):$(id -g)" "${RUN_DIR}" 2>/dev/null || true
+sudo -n chown -R "$(id -u):$(id -g)" "${RUN_DIR}" 2>/dev/null || true
 
 echo "[DONE] exit=${bench_rc}"
 echo "[RUN_DIR] ${RUN_DIR}"

@@ -15,38 +15,26 @@ RESUME="${RESUME:-0}"
 SUMMARY="${LOG_ROOT}/summary.tsv"
 RUN_LOG="${LOG_ROOT}/run.log"
 
+require_executable "${DB_BENCH}" "db_bench"
+require_file "${MANIFEST}" "trace manifest"
+require_positive_uint BG_JOBS
+[[ "${RESUME}" == "0" || "${RESUME}" == "1" ]] || die "RESUME must be 0 or 1"
+require_no_db_bench "baseline trace loading"
+if [[ "${RESUME}" == "0" && -e "${LOG_ROOT}" ]]; then
+  die "Log output already exists: ${LOG_ROOT}"
+fi
 mkdir -p "${LOG_ROOT}" "${DB_ROOT}"
 
 log() {
   printf '[%s] %s\n' "$(date '+%F %T')" "$*" | tee -a "${RUN_LOG}"
 }
 
-extract_peak_rss_kb() {
-  local time_out="$1"
-  awk -F: '/Maximum resident set size/ {gsub(/^[ \t]+/, "", $2); print $2}' "${time_out}" 2>/dev/null || true
-}
-
-rss_kb_to_gb() {
-  local rss_kb="$1"
-  awk -v kb="${rss_kb}" 'BEGIN { if (kb != "") printf "%.3f", kb / 1024 / 1024 }'
-}
-
-if [[ ! -x "${DB_BENCH}" ]]; then
-  log "ERROR: db_bench not executable: ${DB_BENCH}"
-  exit 1
-fi
-if [[ ! -f "${MANIFEST}" ]]; then
-  log "ERROR: manifest not found: ${MANIFEST}"
-  exit 1
-fi
-if pgrep -x db_bench >/dev/null 2>&1; then
-  log "ERROR: another db_bench is running. Stop it before baseline loading."
-  exit 1
+SUMMARY_HEADER='case_id	size_gb	kv_label	key_size	value_size	distribution	unique_ratio	zipf_alpha	status	elapsed_sec	peak_rss_kb	peak_rss_gb	bench_sec	bench_ops_sec	db_size	trace_path	log_dir	db_dir'
+if [[ ! -s "${SUMMARY}" ]]; then
+  printf '%s\n' "${SUMMARY_HEADER}" > "${SUMMARY}"
 fi
 
-printf 'case_id\tsize_gb\tkv_label\tkey_size\tvalue_size\tdistribution\tunique_ratio\tzipf_alpha\tstatus\telapsed_sec\tpeak_rss_kb\tpeak_rss_gb\tbench_sec\tbench_ops_sec\tdb_size\ttrace_path\tlog_dir\tdb_dir\n' > "${SUMMARY}"
-
-tail -n +2 "${MANIFEST}" | while IFS=$'\t' read -r case_id size_gb kv_label key_size value_size distribution unique_ratio zipf_alpha num_records key_domain unique_count trace_path expected_bytes status; do
+while IFS=$'\t' read -r case_id size_gb kv_label key_size value_size distribution unique_ratio zipf_alpha num_records key_domain unique_count trace_path expected_bytes status; do
   if [[ "${status}" != "ok" ]]; then
     log "SKIP ${case_id}: trace status=${status}"
     continue
@@ -55,13 +43,18 @@ tail -n +2 "${MANIFEST}" | while IFS=$'\t' read -r case_id size_gb kv_label key_
   run_dir="${LOG_ROOT}/${case_id}"
   db_dir="${DB_ROOT}/${case_id}"
   if [[ "${RESUME}" == "1" && -f "${run_dir}/raw/elapsed_sec.txt" ]]; then
+    existing_status="$(awk -F'\t' -v case_id="${case_id}" \
+      'NR > 1 && $1 == case_id { status=$9 } END { print status }' "${SUMMARY}")"
+    [[ "${existing_status}" == "ok" ]] ||
+      die "Cannot resume ${case_id}: summary status is ${existing_status:-missing}"
     log "SKIP ${case_id}: already has elapsed_sec"
     continue
   fi
-  if [[ -d "${run_dir}" || -d "${db_dir}" ]]; then
+  if [[ -e "${run_dir}" || -e "${db_dir}" ]]; then
     log "ERROR: existing output for ${case_id}: ${run_dir} ${db_dir}"
     exit 1
   fi
+  require_file "${trace_path}" "trace for ${case_id}"
 
   mkdir -p "${run_dir}/raw" "${db_dir}"
   time_out="${run_dir}/raw/time.out"
@@ -94,8 +87,7 @@ tail -n +2 "${MANIFEST}" | while IFS=$'\t' read -r case_id size_gb kv_label key_
   chmod +x "${run_dir}/raw/load_cmd.sh"
 
   log "BEGIN ${case_id}"
-  sync
-  echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null 2>&1 || true
+  drop_page_cache
   date +%s > "${run_dir}/raw/start_epoch.txt"
   set +e
   /usr/bin/time -v -o "${time_out}" "${cmd[@]}" > "${run_dir}/bench.out" 2>&1
@@ -136,6 +128,6 @@ tail -n +2 "${MANIFEST}" | while IFS=$'\t' read -r case_id size_gb kv_label key_
   if [[ "${exit_code}" -ne 0 ]]; then
     exit "${exit_code}"
   fi
-done
+done < <(tail -n +2 "${MANIFEST}")
 
 log "Summary: ${SUMMARY}"

@@ -26,6 +26,22 @@ READS="${READS:-0}"
 CACHE_PCT="${CACHE_PCT:-0}"
 KEEP_RUN_DB="${KEEP_RUN_DB:-0}"
 
+require_executable "${DB_BENCH}" "db_bench"
+require_positive_uint THREADS
+require_uint DURATION
+require_uint READS
+require_uint CACHE_PCT
+(( CACHE_PCT <= 100 )) || die "CACHE_PCT must be between 0 and 100"
+[[ "${KEEP_RUN_DB}" == "0" || "${KEEP_RUN_DB}" == "1" ]] ||
+  die "KEEP_RUN_DB must be 0 or 1"
+for workload in ${WORKLOADS}; do
+  case "${workload}" in
+    workloada|workloadb|workloadc|workloadd|workloade|workloadf|mixgraph) ;;
+    *) die "Unknown Q3 workload: ${workload}" ;;
+  esac
+done
+require_no_db_bench "Q3 read workloads"
+[[ ! -e "${LOG_ROOT}" ]] || die "Log output already exists: ${LOG_ROOT}"
 mkdir -p "${LOG_ROOT}" "${TMP_ROOT}"
 
 log() {
@@ -147,10 +163,6 @@ workload_opts() {
     mixgraph)
       printf '%s\n' "--benchmarks=mixgraph,stats,levelstats --mix_get_ratio=0.83 --mix_put_ratio=0.14 --mix_seek_ratio=0.03 --key_dist_a=0.002312 --key_dist_b=0.3467 --keyrange_dist_a=14.18 --keyrange_dist_b=-2.917 --keyrange_dist_c=0.0164 --keyrange_dist_d=-0.08082 --keyrange_num=30 --value_k=0.2615 --value_sigma=25.45 --iter_k=2.517 --iter_sigma=14.236"
       ;;
-    *)
-      log "ERROR: unknown workload ${workload}"
-      exit 1
-      ;;
   esac
 }
 
@@ -158,19 +170,9 @@ is_readonly_workload() {
   [[ "$1" == "workloadc" ]]
 }
 
-if [[ ! -x "${DB_BENCH}" ]]; then
-  log "ERROR: db_bench not executable: ${DB_BENCH}"
-  exit 1
-fi
-
 if [[ ! -f "${MATRIX}" ]]; then
   log "Matrix missing, generating ${MATRIX}"
   python3 "${EXPERIMENT_ROOT}/analysis/make_q3_read_matrix.py" --out "${MATRIX}" | tee -a "${RUN_LOG}"
-fi
-
-if pgrep -x db_bench >/dev/null 2>&1; then
-  log "ERROR: another db_bench is running. Stop it before Q3 read workloads."
-  exit 1
 fi
 
 printf 'system\tcase_id\tsize_gb\tkv_label\tdistribution\tunique_ratio\tworkload\tstatus\telapsed_sec\tthreads\tduration_sec\tcache_pct\tavg_latency_us\tthroughput_ops_sec\tp50_us\tp95_us\tp99_us\tfilter_hit\tfilter_miss\tfilter_bytes_insert\tindex_hit\tindex_miss\tindex_bytes_insert\tdata_hit\tdata_miss\tdata_bytes_insert\trocksdb_bytes_read\trocksdb_bytes_written\tdisk_read_ios\tdisk_write_ios\tdisk_read_mb\tdisk_write_mb\tdisk_read_lat_ms\tdisk_write_lat_ms\tdisk_read_mb_s\tdisk_write_mb_s\tread_amp_bytes_per_op\twrite_amp_bytes_per_op\tresult_dir\trun_db_dir\tsource_db_dir\n' > "${SUMMARY}"
@@ -188,7 +190,8 @@ log "DURATION=${DURATION}"
 log "READS=${READS}"
 log "CACHE_PCT=${CACHE_PCT}"
 
-tail -n +2 "${MATRIX}" | while IFS=$'\t' read -r system case_id size_gb kv_label key_size value_size distribution unique_ratio zipf_alpha db_dir load_log_dir source_summary; do
+run_count=0
+while IFS=$'\t' read -r system case_id size_gb kv_label key_size value_size distribution unique_ratio zipf_alpha db_dir load_log_dir source_summary; do
   contains_word "${system}" "${SYSTEMS}" || continue
   contains_word "${size_gb}" "${SIZES_GB}" || continue
   contains_word "${kv_label}" "${KV_LABELS}" || continue
@@ -228,6 +231,7 @@ tail -n +2 "${MATRIX}" | while IFS=$'\t' read -r system case_id size_gb kv_label
   fi
 
   for workload in ${WORKLOADS}; do
+    run_count=$((run_count + 1))
     workload_reads="${reads}"
     workload_reads_var="READS_${workload^^}"
     if [[ -n "${!workload_reads_var:-}" ]]; then
@@ -290,8 +294,7 @@ tail -n +2 "${MATRIX}" | while IFS=$'\t' read -r system case_id size_gb kv_label
     chmod +x "${raw_dir}/run_cmd.sh"
 
     log "BEGIN ${system} ${case_id} ${workload} reads=${workload_reads}"
-    sync
-    echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null 2>&1 || true
+    drop_page_cache
     cat /proc/diskstats > "${raw_dir}/diskstats.start"
     start_ts="$(date +%s)"
     set +e
@@ -371,6 +374,7 @@ tail -n +2 "${MATRIX}" | while IFS=$'\t' read -r system case_id size_gb kv_label
       exit "${exit_code}"
     fi
   done
-done
+done < <(tail -n +2 "${MATRIX}")
 
 log "Summary: ${SUMMARY}"
+(( run_count > 0 )) || die "No Q3 workload matched the selected matrix filters"

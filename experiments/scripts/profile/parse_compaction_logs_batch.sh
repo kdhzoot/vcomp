@@ -13,23 +13,31 @@ OUT_DIR="${3:?out dir}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../../lib/common.sh"
 
-mkdir -p "$OUT_DIR"
+require_dir "${BATCH_DIR}" "batch directory"
+[[ "${MODE}" == "baseline" || "${MODE}" == "vcomp" ]] ||
+  die "MODE must be baseline or vcomp"
+JOBS="${JOBS:-8}"
+require_positive_uint JOBS
+mkdir -p "${OUT_DIR}"
 
-# Process in parallel (8 at a time) — each parse is independent
+# Each parse is independent, so process them in bounded parallel batches.
 N=0
-for db in "$BATCH_DIR"/${MODE}_run*; do
-  [ -d "$db" ] || continue
-  [ -f "$db/LOG" ] || continue
-  name=$(basename "$db")
-  out="$OUT_DIR/${name}.csv"
-  if [ -f "$out" ]; then
-    echo "[skip] $name (already parsed)" >&2
+matched=0
+for db in "${BATCH_DIR}"/${MODE}_run*; do
+  [[ -d "${db}" ]] || continue
+  [[ -f "${db}/LOG" ]] || continue
+  matched=$((matched + 1))
+  name="$(basename "${db}")"
+  out="${OUT_DIR}/${name}.csv"
+  if [[ -f "${out}" ]]; then
+    echo "[skip] ${name} (already parsed)" >&2
     continue
   fi
-  python3 "${EXPERIMENT_ROOT}/analysis/parse_compaction_log.py" "$db/LOG" \
-      --mode "$MODE" --run "$name" --out "$out" &
+  python3 "${EXPERIMENT_ROOT}/analysis/parse_compaction_log.py" "${db}/LOG" \
+      --mode "${MODE}" --run "${name}" --out "${out}" &
   N=$((N + 1))
-  if (( N % 8 == 0 )); then wait; fi
+  if (( N % JOBS == 0 )); then wait; fi
 done
 wait
-echo "[done] parsed $N logs into $OUT_DIR" >&2
+(( matched > 0 )) || die "No ${MODE} LOG files found under ${BATCH_DIR}"
+echo "[done] parsed ${N} logs into ${OUT_DIR}" >&2

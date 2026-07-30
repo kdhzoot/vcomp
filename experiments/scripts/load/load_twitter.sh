@@ -22,25 +22,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../../lib/common.sh"
 DB_BENCH="${DB_BENCH:-${VCOMP_DB_BENCH}}"
 
-require_env() {
-  local name="$1"
-  [[ -n "${!name:-}" ]] || { echo "[ERROR] Missing required env: ${name}" >&2; exit 1; }
-}
-for name in MODE TRACE_FILE DB_ROOT; do
-  require_env "$name"
-done
+require_env MODE TRACE_FILE DB_ROOT
 [[ "${MODE}" == "baseline" || "${MODE}" == "vcomp" ]] || {
   echo "[ERROR] MODE must be 'baseline' or 'vcomp'" >&2; exit 1
 }
-[[ -x "${DB_BENCH}" ]] || {
-  echo "[ERROR] db_bench not found at ${DB_BENCH}. Run make.sh first." >&2; exit 1
-}
-[[ -f "${TRACE_FILE}" ]] || {
-  echo "[ERROR] TRACE_FILE not found: ${TRACE_FILE}" >&2; exit 1
-}
+require_executable "${DB_BENCH}" "db_bench"
+require_file "${TRACE_FILE}" "Twitter trace"
 
 # Optional caps
 MAX_OPS="${MAX_OPS:-0}"
+require_uint MAX_OPS
 # RandomGenerator bound. 2 MiB covers the cluster012 sample max (312480 B).
 # If full trace has larger values, bump this (twitterload will error out with
 # a clear message telling you the required minimum).
@@ -49,6 +40,9 @@ RG_VALUE_SIZE="${RG_VALUE_SIZE:-2097152}"
 # Cosmetic: reported key_size in db_bench header. cluster012 has 44 B keys;
 # twitterload reads actual key bytes from the trace regardless of this flag.
 KEY_SIZE_HINT="${KEY_SIZE_HINT:-44}"
+require_positive_uint RG_VALUE_SIZE
+require_positive_uint KEY_SIZE_HINT
+require_no_db_bench "${MODE} Twitter load"
 
 TRACE_BASENAME="$(basename "${TRACE_FILE}" .vcomptrace)"
 format_ops() {
@@ -65,7 +59,7 @@ format_ops() {
     echo "${n}"
   fi
 }
-RUN_TS="$(date '+%y%m%d_%H%M')"
+RUN_TS="$(date '+%y%m%d_%H%M%S')"
 RUN_TAG_SUFFIX="${RUN_TAG:+_${RUN_TAG}}"
 OPS_LABEL="$(format_ops "${MAX_OPS}")"
 RUN_NAME="${RUN_NAME:-${MODE}_tl_${TRACE_BASENAME}_${OPS_LABEL}${RUN_TAG_SUFFIX}}"
@@ -77,21 +71,9 @@ OUT_FILE="${RUN_DIR}/bench.out"
 TIME_FILE="${RAW_DIR}/time.out"
 IOSTAT_PID=""
 
-extract_peak_rss_kb() {
-  awk -F: '/Maximum resident set size/ {gsub(/^[ \t]+/, "", $2); print $2}' "$1" 2>/dev/null || true
-}
-
-rss_kb_to_gb() {
-  local rss_kb="$1"
-  awk -v kb="${rss_kb}" 'BEGIN { if (kb != "") printf "%.3f", kb / 1024 / 1024 }'
-}
-
 cleanup_iostat() {
-  if [[ -n "${IOSTAT_PID:-}" ]]; then
-    kill "${IOSTAT_PID}" 2>/dev/null || true
-    wait "${IOSTAT_PID}" 2>/dev/null || true
-    IOSTAT_PID=""
-  fi
+  stop_process "${IOSTAT_PID:-}"
+  IOSTAT_PID=""
 }
 
 trap cleanup_iostat EXIT
@@ -102,7 +84,8 @@ trap 'cleanup_iostat; exit 143' TERM
 PLR_ERROR_BOUND="${PLR_ERROR_BOUND:-8}"
 MEMTABLE_FLUSH_MB="${MEMTABLE_FLUSH_MB:-64}"
 
-[[ ! -d "${DB_DIR}" ]] || { echo "[ERROR] DB already exists: ${DB_DIR}" >&2; exit 1; }
+[[ ! -e "${DB_DIR}" ]] || die "DB output already exists: ${DB_DIR}"
+[[ ! -e "${RUN_DIR}" ]] || die "Log output already exists: ${RUN_DIR}"
 mkdir -p "${DB_DIR}" "${RAW_DIR}"
 ulimit -n 1048576
 
@@ -154,9 +137,8 @@ else
 fi
 
 if [[ -n "${EXTRA_DB_BENCH_ARGS:-}" ]]; then
-  # shellcheck disable=SC2206
-  extra_args=( ${EXTRA_DB_BENCH_ARGS} )
-  cmd+=( "${extra_args[@]}" )
+  read -r -a extra_args <<< "${EXTRA_DB_BENCH_ARGS}"
+  cmd+=("${extra_args[@]}")
 fi
 
 # ── Save run info ──
@@ -168,15 +150,7 @@ echo "=== ${MODE} twitterload | trace=${TRACE_BASENAME} | MAX_OPS=${MAX_OPS} | $
   echo "[RUN_CMD]"; printf '%q ' "${cmd[@]}"; echo; } | tee "${OUT_FILE}"
 
 # ── Drop page cache for clean measurement ──
-if [[ -w /proc/sys/vm/drop_caches ]]; then
-  sync
-  echo 3 > /proc/sys/vm/drop_caches
-  echo "[INFO] Page cache dropped"
-else
-  sync
-  echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null 2>&1 && echo "[INFO] Page cache dropped (sudo)" \
-    || echo "[WARN] Cannot drop page cache (no permission)"
-fi
+drop_page_cache
 
 # ── Collect before-stats and run ──
 start_ts="$(date +%s)"

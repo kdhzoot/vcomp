@@ -20,27 +20,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../../lib/common.sh"
 DB_BENCH="${DB_BENCH:-${VCOMP_DB_BENCH}}"
 
-require_env() {
-  local name="$1"
-  [[ -n "${!name:-}" ]] || { echo "[ERROR] Missing required env: ${name}" >&2; exit 1; }
-}
-for name in MODE TARGET_DB_GB DB_ROOT; do
-  require_env "$name"
-done
+require_env MODE TARGET_DB_GB DB_ROOT
+require_positive_uint TARGET_DB_GB
 case "${MODE}" in
   baseline|vcomp|l0only|l0compact) ;;
   *) echo "[ERROR] MODE must be 'baseline', 'vcomp', 'l0only', or 'l0compact'" >&2; exit 1 ;;
 esac
-[[ -x "${DB_BENCH}" ]] || {
-  echo "[ERROR] db_bench not found at ${DB_BENCH}. Run make.sh first." >&2; exit 1
-}
+require_executable "${DB_BENCH}" "db_bench"
+require_no_db_bench "${MODE} load"
 
 # ── Common parameters ──
 KEY_SIZE="${KEY_SIZE:-24}"
 VALUE_SIZE="${VALUE_SIZE:-1000}"
+require_positive_uint KEY_SIZE
+require_positive_uint VALUE_SIZE
 KV_SIZE=$((KEY_SIZE + VALUE_SIZE))
 
-RUN_TS="$(date '+%y%m%d_%H%M')"
+RUN_TS="$(date '+%y%m%d_%H%M%S')"
 RUN_TAG="${RUN_TAG:+_${RUN_TAG}}"
 RUN_DIR="${LOG_DIR:-${ARTIFACT_ROOT}/log_loads/${MODE}_${RUN_TS}_${TARGET_DB_GB}gb${RUN_TAG}}"
 DB_DIR="${DB_DIR:-${DB_ROOT%/}/${MODE}_${TARGET_DB_GB}gb}"
@@ -50,21 +46,9 @@ OUT_FILE="${RUN_DIR}/bench.out"
 TIME_FILE="${RAW_DIR}/time.out"
 IOSTAT_PID=""
 
-extract_peak_rss_kb() {
-  awk -F: '/Maximum resident set size/ {gsub(/^[ \t]+/, "", $2); print $2}' "$1" 2>/dev/null || true
-}
-
-rss_kb_to_gb() {
-  local rss_kb="$1"
-  awk -v kb="${rss_kb}" 'BEGIN { if (kb != "") printf "%.3f", kb / 1024 / 1024 }'
-}
-
 cleanup_iostat() {
-  if [[ -n "${IOSTAT_PID:-}" ]]; then
-    kill "${IOSTAT_PID}" 2>/dev/null || true
-    wait "${IOSTAT_PID}" 2>/dev/null || true
-    IOSTAT_PID=""
-  fi
+  stop_process "${IOSTAT_PID:-}"
+  IOSTAT_PID=""
 }
 
 trap cleanup_iostat EXIT
@@ -86,7 +70,8 @@ VCOMP_PHASE1_SHARDS="${VCOMP_PHASE1_SHARDS:-8}"
 VCOMP_MATERIALIZE_WORKERS="${VCOMP_MATERIALIZE_WORKERS:-48}"
 COMPRESSION_TYPE="${COMPRESSION_TYPE:-none}"
 
-[[ ! -d "${DB_DIR}" ]] || { echo "[ERROR] DB already exists: ${DB_DIR}" >&2; exit 1; }
+[[ ! -e "${DB_DIR}" ]] || die "DB output already exists: ${DB_DIR}"
+[[ ! -e "${RUN_DIR}" ]] || die "Log output already exists: ${RUN_DIR}"
 mkdir -p "${DB_DIR}" "${RAW_DIR}"
 ulimit -n 1048576
 
@@ -168,15 +153,7 @@ echo "=== ${MODE} | ${TARGET_DB_GB}GB | $(date) ==="
 { echo "[MODE] ${MODE}"; echo "[RUN_CMD]"; printf '%q ' "${cmd[@]}"; echo; } | tee "${OUT_FILE}"
 
 # ── Drop page cache for clean measurement ──
-if [[ -w /proc/sys/vm/drop_caches ]]; then
-  sync
-  echo 3 > /proc/sys/vm/drop_caches
-  echo "[INFO] Page cache dropped"
-else
-  sync
-  echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null 2>&1 && echo "[INFO] Page cache dropped (sudo)" \
-    || echo "[WARN] Cannot drop page cache (no permission)"
-fi
+drop_page_cache
 
 # ── Collect before-stats and run ──
 start_ts="$(date +%s)"

@@ -71,16 +71,6 @@ write_amp() {
   grep -E '^ Sum[[:space:]]' "$1" | tail -1 | awk '{ print $13 }' || true
 }
 
-extract_peak_rss_kb() {
-  local time_out="$1"
-  awk -F: '/Maximum resident set size/ {gsub(/^[ \t]+/, "", $2); print $2}' "${time_out}" 2>/dev/null || true
-}
-
-rss_kb_to_gb() {
-  local rss_kb="$1"
-  awk -v kb="${rss_kb}" 'BEGIN { if (kb != "") printf "%.3f", kb / 1024 / 1024 }'
-}
-
 extract_breakdown() {
   local case_name="$1"
   local run_dir="$2"
@@ -230,10 +220,7 @@ run_one() {
     echo
   } | tee "${out_file}" >/dev/null
 
-  sync
-  echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null 2>&1 && \
-    echo "[INFO] Page cache dropped" | tee -a "${out_file}" >/dev/null || \
-    echo "[WARN] Cannot drop page cache" | tee -a "${out_file}" >/dev/null
+  drop_page_cache 2>&1 | tee -a "${out_file}" >/dev/null
 
   start_ts="$(date +%s)"
   echo "${start_ts}" > "${raw_dir}/start_epoch.txt"
@@ -308,16 +295,13 @@ run_one() {
   [[ "${rc}" -eq 0 ]]
 }
 
+require_executable "${DB_BENCH}" "vcomp-prof db_bench"
+require_positive_uint TARGET_DB_GB
+require_positive_uint KEY_SIZE
+require_positive_uint BG_JOBS
+require_no_db_bench "motivation KV/compression matrix"
+[[ ! -e "${EXP_DIR}" ]] || die "Log output already exists: ${EXP_DIR}"
 mkdir -p "${EXP_DIR}"
-
-if pgrep -x db_bench >/dev/null 2>&1; then
-  log "ERROR: db_bench is already running. Stop it before starting this sequential experiment."
-  exit 1
-fi
-if [[ ! -x "${DB_BENCH}" ]]; then
-  log "ERROR: vcomp-prof db_bench not executable: ${DB_BENCH}"
-  exit 1
-fi
 
 printf 'case\ttarget_db_gb\tkey_size\tvalue_size\tcompression_type\tthreads\tmemtable\tstatus\telapsed_sec\tpeak_rss_kb\tpeak_rss_gb\tfillrandom_sec\tfillrandom_ops_sec\tdb_size\tdiskstat_dev\ttotal_write_gb\tingest_gb\tcompaction_write_gb\tcompaction_wamp\tbreakdown_jobs\tbreakdown_tsv\tlog_dir\tdb_dir\n' > "${SUMMARY_FILE}"
 : > "${BREAKDOWN_ALL_FILE}"

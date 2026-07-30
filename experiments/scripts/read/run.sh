@@ -17,26 +17,28 @@ source "${SCRIPT_DIR}/../../lib/common.sh"
 DB_BENCH="${DB_BENCH:-${VCOMP_PROF_DB_BENCH}}"
 
 # ── Required env ──
-require_env() {
-  local name="$1"
-  [[ -n "${!name:-}" ]] || { echo "[ERROR] Missing required env: ${name}" >&2; exit 1; }
-}
-for name in WORKLOAD DB_DIR DB_SIZE_GB CACHE_PCT THREADS; do
-  require_env "$name"
-done
-
-[[ -x "${DB_BENCH}" ]] || {
-  echo "[ERROR] db_bench not found at ${DB_BENCH}" >&2; exit 1
-}
-[[ -d "${DB_DIR}" ]] || {
-  echo "[ERROR] DB directory not found: ${DB_DIR}" >&2; exit 1
-}
+require_env WORKLOAD DB_DIR DB_SIZE_GB CACHE_PCT THREADS
+require_positive_uint DB_SIZE_GB
+require_positive_uint THREADS
+require_uint CACHE_PCT
+(( CACHE_PCT <= 100 )) || die "CACHE_PCT must be between 0 and 100"
+require_executable "${DB_BENCH}" "db_bench"
+require_dir "${DB_DIR}" "DB directory"
 
 # ── Defaults ──
 READ_ONLY="${READ_ONLY:-1}"
 DURATION="${DURATION:-180}"
 READS="${READS:-0}"
 TMP_ROOT="${TMP_ROOT:-/work/tmp}"
+require_uint READ_ONLY
+require_uint DURATION
+require_uint READS
+[[ "${READ_ONLY}" == "0" || "${READ_ONLY}" == "1" ]] ||
+  die "READ_ONLY must be 0 or 1"
+case "${WORKLOAD}" in
+  readrandom|seekrandom|readwhilewriting|mixgraph) ;;
+  *) die "Unknown workload: ${WORKLOAD} (supported: readrandom, seekrandom, readwhilewriting, mixgraph)" ;;
+esac
 
 # ── KV parameters (match load.sh) ──
 KEY_SIZE=24
@@ -46,15 +48,16 @@ KV_SIZE=$((KEY_SIZE + VALUE_SIZE))
 # ── Derived values ──
 DB_SIZE_BYTES=$((DB_SIZE_GB * 1024 * 1024 * 1024))
 NKEYS=$((DB_SIZE_BYTES / KV_SIZE))
-CACHE_SIZE=$(echo "scale=0; $DB_SIZE_BYTES * $CACHE_PCT / 100" | bc)
+CACHE_SIZE=$((DB_SIZE_BYTES * CACHE_PCT / 100))
 # cache=0 → use 1 byte so block cache stats (filter/index/data miss) are tracked
 (( CACHE_SIZE == 0 )) && CACHE_SIZE=1
 
 DB_NAME="$(basename "${DB_DIR}")"
-RUN_TS="$(date '+%y%m%d_%H%M')"
+RUN_TS="$(date '+%y%m%d_%H%M%S')"
 RESULT_DIR="${RESULT_DIR:-${ARTIFACT_ROOT}/log_runs/${DB_NAME}/${WORKLOAD}_${THREADS}t_${CACHE_PCT}p_${RUN_TS}}"
 TIME_FILE="${RESULT_DIR}/time.out"
 
+[[ ! -e "${RESULT_DIR}" ]] || die "Result output already exists: ${RESULT_DIR}"
 mkdir -p "${RESULT_DIR}"
 ulimit -n 1048576
 
@@ -73,32 +76,38 @@ fi
 # ── Workload-specific options ──
 case "${WORKLOAD}" in
   readrandom)
-    BENCH_OPTS="--benchmarks=readrandom,stats,levelstats"
+    bench_opts=(--benchmarks=readrandom,stats,levelstats)
     ;;
   seekrandom)
-    BENCH_OPTS="--benchmarks=seekrandom,stats,levelstats --seek_nexts=100"
+    bench_opts=(--benchmarks=seekrandom,stats,levelstats --seek_nexts=100)
     ;;
   readwhilewriting)
-    BENCH_OPTS="--benchmarks=readwhilewriting,stats,levelstats"
+    bench_opts=(--benchmarks=readwhilewriting,stats,levelstats)
     ;;
   mixgraph)
     MIX_GET=0.83; MIX_PUT=0.14; MIX_SEEK=0.03
     [[ "${READ_ONLY}" == "1" ]] && { MIX_GET=1; MIX_PUT=0; MIX_SEEK=0; }
-    BENCH_OPTS="--benchmarks=mixgraph,stats,levelstats \
-      --key_dist_a=0.002312 --key_dist_b=0.3467 \
-      --keyrange_dist_a=14.18 --keyrange_dist_b=-2.917 \
-      --keyrange_dist_c=0.0164 --keyrange_dist_d=-0.08082 \
-      --keyrange_num=30 \
-      --value_k=0.2615 --value_sigma=25.45 \
-      --iter_k=2.517 --iter_sigma=14.236 \
-      --sine_mix_rate_interval_milliseconds=5000 \
-      --sine_a=1000 --sine_b=0.000073 --sine_d=450000000 \
-      --mix_get_ratio=${MIX_GET} --mix_put_ratio=${MIX_PUT} --mix_seek_ratio=${MIX_SEEK}"
-    ;;
-  *)
-    echo "[ERROR] Unknown workload: ${WORKLOAD}" >&2
-    echo "  Supported: readrandom, seekrandom, readwhilewriting, mixgraph" >&2
-    exit 1
+    bench_opts=(
+      --benchmarks=mixgraph,stats,levelstats
+      --key_dist_a=0.002312
+      --key_dist_b=0.3467
+      --keyrange_dist_a=14.18
+      --keyrange_dist_b=-2.917
+      --keyrange_dist_c=0.0164
+      --keyrange_dist_d=-0.08082
+      --keyrange_num=30
+      --value_k=0.2615
+      --value_sigma=25.45
+      --iter_k=2.517
+      --iter_sigma=14.236
+      --sine_mix_rate_interval_milliseconds=5000
+      --sine_a=1000
+      --sine_b=0.000073
+      --sine_d=450000000
+      --mix_get_ratio="${MIX_GET}"
+      --mix_put_ratio="${MIX_PUT}"
+      --mix_seek_ratio="${MIX_SEEK}"
+    )
     ;;
 esac
 
@@ -116,9 +125,7 @@ echo "  Result:      ${RESULT_DIR}"
 echo "=========================================="
 
 # ── Drop page cache ──
-sync
-echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null 2>&1 && echo "[INFO] Page cache dropped" \
-  || echo "[WARN] Cannot drop page cache"
+drop_page_cache
 
 # ── Capture before-stats ──
 start_ts="$(date +%s.%N)"
@@ -126,42 +133,47 @@ cat /proc/stat > "${RESULT_DIR}/procstat.start"
 cat /proc/diskstats > "${RESULT_DIR}/diskstats.start"
 
 # ── Run ──
-/usr/bin/time -v -o "${TIME_FILE}" "${DB_BENCH}" \
-  --threads="${THREADS}" \
-  --statistics=1 \
-  --stats_interval_seconds=10 \
-  --stats_per_interval=1 \
-  --report_interval_seconds=10 \
-  --report_file="${RESULT_DIR}/report.rep" \
-  --cache_size="${CACHE_SIZE}" \
-  --cache_index_and_filter_blocks=$( (( CACHE_SIZE > 0 )) && echo true || echo false ) \
-  --bloom_bits=10 \
-  --max_background_jobs=$(nproc) \
-  --num="${NKEYS}" \
-  --reads=$(( READS > 0 ? READS : NKEYS * 10 )) \
-  --key_size="${KEY_SIZE}" \
-  --value_size="${VALUE_SIZE}" \
-  --seed=87654321 \
-  --db="${RUN_DIR}" \
-  --use_existing_db=1 \
-  $( [[ "${READ_ONLY}" == "1" ]] && echo "--readonly=true" ) \
-  --use_direct_reads=true \
-  --use_direct_io_for_flush_and_compaction=true \
-  --compression_type=none \
-  --duration="${DURATION}" \
-  $( (( CACHE_SIZE > 0 )) && echo "--cache_type=hyper_clock_cache" ) \
-  ${BENCH_OPTS} \
-  > "${RESULT_DIR}/stdout.txt" 2> "${RESULT_DIR}/stderr.txt"
+cmd=(
+  "${DB_BENCH}"
+  --threads="${THREADS}"
+  --statistics=1
+  --stats_interval_seconds=10
+  --stats_per_interval=1
+  --report_interval_seconds=10
+  --report_file="${RESULT_DIR}/report.rep"
+  --cache_size="${CACHE_SIZE}"
+  --cache_index_and_filter_blocks=true
+  --cache_type=hyper_clock_cache
+  --bloom_bits=10
+  --max_background_jobs="$(nproc)"
+  --num="${NKEYS}"
+  --reads=$(( READS > 0 ? READS : NKEYS * 10 ))
+  --key_size="${KEY_SIZE}"
+  --value_size="${VALUE_SIZE}"
+  --seed=87654321
+  --db="${RUN_DIR}"
+  --use_existing_db=1
+  --use_direct_reads=true
+  --use_direct_io_for_flush_and_compaction=true
+  --compression_type=none
+  --duration="${DURATION}"
+)
+[[ "${READ_ONLY}" == "1" ]] && cmd+=(--readonly=true)
+cmd+=("${bench_opts[@]}")
 
+set +e
+/usr/bin/time -v -o "${TIME_FILE}" "${cmd[@]}" \
+  > "${RESULT_DIR}/stdout.txt" 2> "${RESULT_DIR}/stderr.txt"
 exit_code=$?
+set -e
 
 # ── Capture after-stats ──
 end_ts="$(date +%s.%N)"
-elapsed=$(echo "$end_ts - $start_ts" | bc)
+elapsed="$(awk -v start="${start_ts}" -v end="${end_ts}" 'BEGIN { printf "%.3f", end - start }')"
 cat /proc/stat > "${RESULT_DIR}/procstat.end"
 cat /proc/diskstats > "${RESULT_DIR}/diskstats.end"
-PEAK_RSS_KB="$(awk -F: '/Maximum resident set size/ {gsub(/^[ \t]+/, "", $2); print $2}' "${TIME_FILE}" 2>/dev/null || true)"
-PEAK_RSS_GB="$(awk -v kb="${PEAK_RSS_KB}" 'BEGIN { if (kb != "") printf "%.3f", kb / 1024 / 1024 }')"
+PEAK_RSS_KB="$(extract_peak_rss_kb "${TIME_FILE}")"
+PEAK_RSS_GB="$(rss_kb_to_gb "${PEAK_RSS_KB}")"
 echo "${PEAK_RSS_KB}" > "${RESULT_DIR}/peak_rss_kb.txt"
 echo "${PEAK_RSS_GB}" > "${RESULT_DIR}/peak_rss_gb.txt"
 
@@ -181,7 +193,8 @@ get_cpu() {
 read T0 I0 < <(get_cpu "${RESULT_DIR}/procstat.start" "${THREADS}")
 read T1 I1 < <(get_cpu "${RESULT_DIR}/procstat.end" "${THREADS}")
 DT=$((T1 - T0)); DI=$((I1 - I0))
-CPU_UTIL=$( (( DT > 0 )) && echo "scale=1; 100*(1-$DI/$DT)" | bc || echo "0" )
+CPU_UTIL="$(awk -v total="${DT}" -v idle="${DI}" \
+  'BEGIN { if (total > 0) printf "%.1f", 100 * (1 - idle / total); else print "0" }')"
 
 # ── Disk bandwidth ──
 get_disk() {
@@ -190,11 +203,23 @@ get_disk() {
 read R0 W0 < <(get_disk "${RESULT_DIR}/diskstats.start")
 read R1 W1 < <(get_disk "${RESULT_DIR}/diskstats.end")
 RS=$(( R1 - R0 )); WS=$(( W1 - W0 ))
-READ_MB=$(echo "scale=1; $RS*512/1048576/$elapsed" | bc 2>/dev/null || echo 0)
-WRITE_MB=$(echo "scale=1; $WS*512/1048576/$elapsed" | bc 2>/dev/null || echo 0)
+READ_MB="$(awk -v sectors="${RS}" -v seconds="${elapsed}" \
+  'BEGIN { if (seconds > 0) printf "%.1f", sectors * 512 / 1048576 / seconds; else print "0" }')"
+WRITE_MB="$(awk -v sectors="${WS}" -v seconds="${elapsed}" \
+  'BEGIN { if (seconds > 0) printf "%.1f", sectors * 512 / 1048576 / seconds; else print "0" }')"
 
 # ── Extract throughput ──
-OPS=$(grep -oP '\d+ ops/sec' "${RESULT_DIR}/stdout.txt" | head -1 || echo "? ops/sec")
+OPS="$(awk -v workload="${WORKLOAD}" '
+  $1 == workload && $2 == ":" {
+    for (i = 1; i <= NF; i++) {
+      if ($i == "ops/sec") {
+        print $(i - 1) " ops/sec"
+        exit
+      }
+    }
+  }
+' "${RESULT_DIR}/stdout.txt")"
+OPS="${OPS:-? ops/sec}"
 
 # ── Summary ──
 {
@@ -215,3 +240,4 @@ OPS=$(grep -oP '\d+ ops/sec' "${RESULT_DIR}/stdout.txt" | head -1 || echo "? ops
 
 echo ""
 echo "Results: ${RESULT_DIR}"
+exit "${exit_code}"

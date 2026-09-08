@@ -15,7 +15,7 @@ Motivation은 세 가지 결과로 정리한다.
 - KV/compression + breakdown 실험은 timer가 들어간 `$VCOMP_PROF_DB_BENCH` 사용.
 - key size는 24B.
 - write thread는 1개.
-- memtable representation은 `vector`.
+- baseline runner의 memtable representation은 `vector`로 고정한다.
 - WAL disabled.
 - direct I/O enabled for read/flush/compaction.
 - Bloom bits 10.
@@ -57,6 +57,11 @@ RUN_ID=260602_motivation BG_JOBS=48 SIZES_GB="500 1000 2000 4000 8000" \
 현재 결과:
 
 `artifacts/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv`
+
+주의: 이 historical artifact의 저장된 `load_cmd.sh`에는
+`--memtablerep`가 없으며 `bench.out`은 `Memtablerep: SkipListFactory`를
+기록한다. 따라서 이 artifact의 500GB--8TB 결과는 문서의 이전 표기와 달리
+clean RocksDB 기본값인 `skip_list` 결과로 해석해야 한다.
 
 ## Experiment 2: KV Size and Compression
 

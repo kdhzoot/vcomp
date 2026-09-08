@@ -1,0 +1,4 @@
+system	target_gib	configured_cap	actual_subcompactions	status	elapsed_sec	fill_sec	compact_sec	peak_rss_kb	swap_in_delta	swap_out_delta	pending_bytes	final_db_bytes	read_found	read_requested
+lastcomp_sub32	500	32		aborted_memory_gate				254971324						
+lastcomp_sub16	500	16	11	ok	982	637.898	343.511	188398140	0	0	0	344813536250	10000	10000
+baseline_sub16	500	16	2467	ok	796	782.162		3504120	0	0	0	374619949901	10000	10000

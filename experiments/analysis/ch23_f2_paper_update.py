@@ -1,0 +1,184 @@
+"""Focused numerical update against the author's current, edited manuscript."""
+import re
+
+from ch23_paper_update import preserve_replace, update_paper
+
+
+def active_lines(text):
+    commented = False
+    for line in text.splitlines():
+        if line.lstrip().startswith('%'):
+            continue
+        if r'\begin{comment}' in line:
+            commented = True
+        if not commented:
+            yield line
+        if r'\end{comment}' in line:
+            commented = False
+
+
+def edit(text, prefix, transform):
+    lines = [line for line in active_lines(text) if line.lstrip().startswith(prefix)]
+    if len(lines) != 1:
+        raise RuntimeError('Expected one current paragraph: {!r}, found {}'.format(prefix,len(lines)))
+    new = transform(lines[0]) if callable(transform) else transform
+    return text if new == lines[0] else preserve_replace(text,prefix,new)
+
+
+def caption(text, label, replacement):
+    lines=list(active_lines(text)); target=r'\label{'+label+'}'
+    indices=[i for i,line in enumerate(lines) if target in line]
+    if len(indices)!=1:
+        raise RuntimeError('Expected one figure label: '+label)
+    old=next(line for line in reversed(lines[:indices[0]]) if line.lstrip().startswith(r'\caption{'))
+    return edit(text,old.lstrip(),r'    \caption{'+replacement+'}')
+
+
+def update_f2_paper(paper,loads,reads,manifest,loading_rows):
+    update_paper(paper,loads,reads,manifest,loading_rows,macros_only=True)
+    b,f2=loads['baseline_1kb'],loads['f2load_1kb']
+    extras={
+        'FtwoMaterializedSec':(f2['materialized_process_sec'],1),
+        'FtwoSettleSec':(f2['settle_process_sec'],1),
+        'FtwoPendingGiB':(f2['pending_before_settle']/1024**3,2),
+        'FtwoSettleReadGiB':(f2['settle_compaction_read_bytes']/1024**3,2),
+        'FtwoSettleWriteGiB':(f2['settle_compaction_write_bytes']/1024**3,2),
+        'AdocSlowerPct':((4122/b['elapsed_sec']-1)*100,1),
+        'AdocCompReductionPct':((1-19059/b['compaction_jobs'])*100,1),
+        'AdocReadRatio':(530.5/(b['compaction_read_bytes']/b['compaction_jobs']/1024**2),2),
+        'AdocDurationRatio':(1.328/(b['cumulative_compaction_sec']/b['compaction_jobs']),2),
+        'AdocStallIncreasePct':((3002/b['stall_sec']-1)*100,1),
+        'LastSlowerPct':((loads['last_comp_1kb']['elapsed_sec']/b['elapsed_sec']-1)*100,1),
+    }
+    ratios=[reads[c+'/f2load']['throughput_ops_sec']/reads[c+'/baseline']['throughput_ops_sec']
+            for c in ('A_cache_zero','B_cache_5pct','C_pinned_zero','D_pinned_5pct')]
+    extras.update(FtwoReadMinRatio=(min(ratios),2),FtwoReadMaxRatio=(max(ratios),2))
+    macro=paper/'tex/ch23_measurements.tex'
+    with macro.open('a') as out:
+        for name,(value,digits) in sorted(extras.items()):
+            out.write(r'\newcommand{\Ch'+name+'}{'+format(value,'.{}f'.format(digits))+'}\n')
+
+    p=paper/'tex/02_Background.tex'; text=p.read_text()
+    text=caption(text,'fig:bg-loading-scale','Historical scaling; diamonds: common baseline.')
+    text=caption(text,'fig:bg-loading-breakdown','Historical background-job breakdown.')
+    text=caption(text,'fig:bg-loading',
+        r'Dataset loading cost; sizes denote logical input. (a) Bars/WAF lines retain the historical scaling configuration; diamonds show the common-release Conventional times at 1,000~GiB. (b) Common-release single-run measurements; the 1~KB Conventional and Flush-only cells are shared with Figure~\ref{fig:bg-compaction-alternatives}. WAF is flush/compaction SST bytes divided by logical input bytes. (c) Separate historical instrumented measurements with two write buffers; Flush comes from flush-only, Compaction from conventional loading. Cumulative job time is distinct from loading wall time.')
+    text=caption(text,'fig:bg-compaction-alternatives',
+        r'Loading time for a 1,000~GiB logical input domain with 1~KB KV pairs. Fillseq+OW adds 10\% writes. \name{} includes materialization and timed clean-RocksDB completion; its subsequent reads use that same completed DB. ADOC and BlobDB reuse the validated results described in the text.')
+    text=caption(text,'fig:bg-alternative-reads',
+        r'Read-side consequences of alternative LSM-Tree states under uniform point reads: (a) filter checks per lookup, (b) positive lookups, and (c) normalized throughput.')
+
+    common=(r'공통 1,000~GiB 비교의 Conventional, Flush-only, Last-comp, Fillseq, Fillseq+OW는 동일 RocksDB 11.1.0 revision \texttt{f455ab7b}의 release 실행 파일을 사용한다. '
+        r'Assertions off, INFO logging, Vector memtable, 64~MiB write buffer 최대 16개, 64~MiB target SST, format version 7, static leveled compaction과 \texttt{kMinOverlappingRatio}, background jobs 48개, subcompaction 1개를 고정하고 WAL/compression을 끄며 direct I/O를 사용하였다. '
+        r'One writer, batch size 1, seed 12345678이며, 1,000~GiB는 최종 DB 크기가 아닌 제출한 KV byte의 합이다. 1~KB는 24~B key와 1,000~B value, 91~B는 48~B key와 43~B value이다. '
+        r'마지막 flush와 compaction drain까지의 Conventional 시간은 각각 \ChBaselineHour{}시간과 \ChNinetyHour{}시간이다. '
+        r'Figure~\ref{fig:bg-loading-scale}의 historical 계열은 assertions on, write buffer 2개이며 1~KB는 SkipList, 91~B는 Vector이므로 새 공통 측정과 연결하지 않는다. '
+        r'별도 historical breakdown은 RocksDB 10.10.1 instrumented release, Vector, write buffer 2개, format version 6에서 측정하였다.')
+    text=edit(text,'Conventional loading으로 TB급 규모의 데이터셋을 구축하는 것은',
+        lambda line: line.replace('8~TB 데이터셋을 로딩 시간은 KV 크기가 1KB일 때는 13시간, 91B일 때는 47시간이다.',
+            '별도 historical scaling에서 8,000~GiB의 로딩 시간은 1~KB에서 13.25시간, 91~B에서 46.23시간이었다.')+'\n\n'+common)
+    text=edit(text,'Flush는 immutable memtable의 KV 데이터를 SST로',
+        lambda line: line.replace(r'각각 2.9$\times$와 1.4$\times$',r'각각 \ChFlushSpeedup{}$\times$와 \ChNinetyFlushSpeedup{}$\times$'))
+    text=edit(text,'Figure~\\ref{fig:bg-loading-breakdown}은 flush-only에서',
+        lambda line: line.replace('은 flush-only에서 측정한 flush breakdown이다.',
+            '의 Flush는 위 별도 historical 설정의 flush-only에서 측정한 breakdown이다.'))
+    text=edit(text,'그러나 개별 compaction에서 발생하는 CPU 및 I/O 비용보다',
+        lambda line: line.replace('실제 디스크에 기록된 전체 데이터양을 logical KV 입력 데이터양으로 나눈 값을 write amplification factor (WAF)로 정의한다.',
+            r'flush와 compaction으로 기록된 SST bytes를 logical KV 입력 bytes로 나눈 값을 SST write amplification factor (WAF)로 정의한다. 공통 1~KB Conventional의 SST WAF는 \ChBaselineWaf{}이며, 별도 device write counter로 구한 device-level WAF \ChBaselineDeviceWaf{}와 구분한다.'))
+    text=edit(text,'데이터셋의 규모가 증가하면 LSM-Tree는 더 많은 레벨을 형성하고,',
+        lambda line: line.replace(r'Figure~\ref{fig:bg-loading-scale}에서',r'별도 historical Figure~\ref{fig:bg-loading-scale}에서'))
+
+    text=edit(text,'기존 연구들은 conventional write path를 유지하면서',
+        lambda line: line + r' Baseline은 \ChBaselineMin{}분이며, BlobDB는 동일 clean release의 기존 검증 결과, ADOC은 저자 artifact의 기존 검증 결과를 재사용하였다. ADOC과의 비교는 version-matched causal comparison이 아니다.')
+    def adoc(line):
+        replacements={r'24.2~\%':r'\ChAdocSlowerPct{}~\%',r'13.47':r'\ChBaselineDeviceWaf{}',
+            r'60.1~\%':r'\ChAdocCompReductionPct{}~\%',r'257.6~MiB':r'\ChBaselineCompReadMiB{}~MiB',
+            r'0.645초':r'\ChBaselineCompDuration{}초',r'2,205초':r'\ChBaselineStall{}초',
+            r'36.1~\%':r'\ChAdocStallIncreasePct{}~\%',
+            r'각각 약 2.06$\times$':r'각각 \ChAdocReadRatio{}$\times$와 \ChAdocDurationRatio{}$\times$',
+            r'각각 약 $2.06\times$':r'각각 \ChAdocReadRatio{}$\times$와 \ChAdocDurationRatio{}$\times$'}
+        for old,new in replacements.items(): line=line.replace(old,new)
+        return line
+    text=edit(text,'ADOC은 compaction work를 제거하지 않고',adoc)
+    text=edit(text,'ADOC은 compaction 자체를 제거하는 대신,',adoc)
+    text=edit(text,'BlobDB는 key와 value를 분리하여',
+        lambda line: line.replace(r'1.94$\times$',r'\ChBlobSpeedup{}$\times$'))
+    text=edit(text,'이 두 접근의 한계는 데이터셋 로딩에만 존재하는 기회를',
+        lambda line: line.replace('225,083개의',r'\ChCreatedSst{}개의').replace('13,389개',r'\ChFinalSst{}개').replace(r'5.95~\%',r'\ChRetainedSstPct{}~\%').replace('실제 1~TB 실행', '공통 1,000~GiB 실행'))
+    text=edit(text,'Intermediate compaction의 physical data movement가 불필요하다면',
+        lambda line: line.replace('16.2분',r'\ChFlushMin{}분').replace(r'3.41$\times$',r'\ChFlushSpeedup{}$\times$'))
+    text=edit(text,'Flush-only의 L0 overlap을 없애기 위해 loading 후',
+        lambda line: line.replace('16.2분',r'\ChFlushMin{}분').replace('67.6분',r'\ChLastTailMin{}분').replace('83.8분',r'\ChLastMin{}분')
+        .replace(r'51.4\%',r'\ChLastSlowerPct{}\%').replace('1.10~TB',r'\ChLastReadGiB{}~GiB').replace('689.6~GB',r'\ChLastWriteGiB{}~GiB')
+        +r' Flush-only의 원본 DB에서 checkpoint를 만들고 단일 full-range compaction을 측정했으며, checkpoint 준비 시간은 제외하고 두 측정 구간을 합산하였다.')
+    text=edit(text,'여러 level을 적은 비용으로 채우는 또 다른 방법은',
+        lambda line: line.replace('21.0분',r'\ChSeqMin{}분').replace(r'2.64$\times$',r'\ChSeqSpeedup{}$\times$'))
+    text=edit(text,'이 구조를 conventional state에 가깝게 만들기 위해 fillseq 이후',
+        lambda line: line.replace('29.1분',r'\ChOverwriteMin{}분').replace(r'1.90$\times$',r'\ChOverwriteSpeedup{}$\times$')
+        +r' 독립적인 전체 Fillseq와 104,857,600회의 overwrite를 모두 포함한 시간이며, key domain은 1,000~GiB이지만 총 logical write volume은 1,100~GiB이다.')
+
+    method=(r'Figure~\ref{fig:bg-compaction-alternatives}와 Figure~\ref{fig:bg-alternative-reads}는 각 loading 측정으로 만든 동일한 원본 DB를 공유한다. '
+        r'모든 reader는 공통 clean RocksDB 11.1.0 release의 \texttt{readrandom}이며, uniform requests, seed 87654321, 48 threads, 300초, direct reads를 사용한다. '
+        r'SST hard link와 mutable metadata copy로 만든 staged DB를 read-only로 열고 automatic compaction을 끈다. '
+        r'Merge operand가 없는 데이터에 사용되지 않는 \texttt{put} merge operator를 지정하여 single-level 전용 fast path를 비활성화하고 모든 state에 동일한 generic read-only 경로와 통계를 사용한다. '
+        r'LRU는 1~B 또는 50~GiB이며 filter/index는 cache 내부 또는 table reader에 유지한다. Pinned metadata는 LRU 밖의 추가 메모리를 사용한다. '
+        r'각 실행 전 page cache를 초기화하고 별도 warm-up 없이 DB open 뒤 300초를 측정한다.'
+        '\n\n'+r'\name{}은 고정된 별도 구현과 SST format 6을 사용한다. 새 로딩은 \ChFtwoMaterializedSec{}초의 materialization 포함 실행 이후 \ChFtwoPendingGiB{}~GiB의 estimated pending compaction을 남겼다. '
+        r'그 DB의 checkpoint를 공통 clean release로 다시 열어 automatic compaction이 끝날 때까지 \ChFtwoSettleSec{}초를 추가로 측정했고, 최종 pending bytes가 0임을 확인하였다. '
+        r'이 completion 단계는 실제 SST를 \ChFtwoSettleReadGiB{}~GiB 읽고 \ChFtwoSettleWriteGiB{}~GiB 썼다. '
+        r'Figure~\ref{fig:bg-compaction-alternatives}의 \ChFtwoSec{}초는 두 process wall time의 합이며 추가 physical compaction의 시간과 I/O를 포함한다. '
+        r'Checkpoint 준비와 단계 사이 cache reset은 측정 외 준비 작업이다. 읽기 네 조건은 바로 이 completed DB에서 수행했으므로 기존 102초 loading bar나 별도 재구축 DB의 read 결과를 섞지 않는다.')
+    text=edit(text,'Final state가 subsequent read behavior를 어떻게 바꾸는지',method)
+    text=edit(text,'Conventional loading은 request당 3.62개의 filter를',
+        r'공통 Baseline은 request당 \ChBaselineChecks{}개의 filter를 확인하며, Flush-only는 request당 \ChFlushChecks{}개의 filter를 확인한다. y축은 5에서 잘랐으며 실제 초과 값은 막대 위에 표시하였다. Last-comp는 request당 \ChLastChecks{}개, \name{}은 \ChFtwoChecks{}개의 filter를 확인한다. 짧은 lookup path만으로 fidelity를 판단할 수 없으며, single-level state의 candidate 축소와 여러 level에 걸친 lookup을 구분해야 한다.')
+    text=edit(text,'Lookup membership에서는 또 다른 차이가 드러난다',
+        r'Positive lookup 비율에서도 차이가 드러난다(Figure~\ref{fig:bg-alternative-lookup-hits}). Baseline, Flush-only, Last-comp의 positive lookup 비율은 각각 \ChBaselineFoundPct{}\%, \ChFlushFoundPct{}\%, \ChLastFoundPct{}\%이다. 분자는 전체 스레드가 성공적으로 읽은 value bytes와 level별 Get-hit counter로 교차 검증하고, 분모는 전체 Get 수를 사용하였다. Fillseq와 Fillseq+OW는 전체 key domain을 먼저 삽입하므로 모든 key가 존재하며, 이후 overwrite도 negative lookup을 복원하지 못한다. 따라서 lookup work 감소와 key membership의 변경을 함께 살펴보아야 한다.')
+    text=edit(text,r'\name{}은 동일한 nominal operation count와 key domain을',
+        r'\name{}은 동일 nominal input count와 key domain을 사용하지만 metadata-only path는 원래 key identity를 보존하는 대신 KMV sketch와 learned-index descriptor로 key set을 근사 재구성한다. 이번 positive lookup 비율은 \ChFtwoFoundPct{}\%이며 Baseline 대비 차이는 \ChFtwoMembershipDelta{} percentage points이다. 이 membership 차이는 current prototype의 key-set fidelity 한계이며, 동일 key set에서의 controlled speedup으로 throughput을 해석할 수 없게 한다.')
+    text=edit(text,'이러한 structural difference는 cache를 추가해도 사라지지 않는다',
+        r'Cached metadata와 1~B LRU에서 Baseline은 \ChCachedZeroBaselineQps{} ops/s, Flush-only는 \ChCachedZeroFlushQps{} ops/s였다. Pinned metadata와 1~B LRU에서는 각각 \ChPinnedZeroBaselineQps{}와 \ChPinnedZeroFlushQps{} ops/s이며, pinned metadata와 50~GiB LRU에서는 \ChPinnedFiftyBaselineQps{}와 \ChPinnedFiftyFlushQps{} ops/s였다. 마지막 조건에서도 Baseline/Flush-only throughput 비율은 \ChPinnedFiftyFlushSlowdown{}$\times$이다. Caching은 개별 access cost를 줄이지만 많은 candidate filter를 확인하는 구조 자체를 바꾸지는 않는다. Last-comp의 Baseline 대비 throughput은 네 조건에서 \ChLastReadMinRatio{}--\ChLastReadMaxRatio{}배였으며, 그 single-level state의 단순화와 함께 해석해야 한다.')
+    text=edit(text,r'\name{}은 네 configuration에서 Baseline과 같은 throughput order를',
+        r'\name{}의 throughput은 동일 cache 조건의 Baseline 대비 \ChFtwoReadMinRatio{}--\ChFtwoReadMaxRatio{}배이다. Key membership과 hit mix가 다르므로 이는 contextual evidence이며 controlled layout-only speedup은 아니다. 모든 cell은 한 번 측정했다. 기존 다섯 state는 사전에 정한 순서로 측정했고, 보류됐던 \name{}은 이후 별도로 측정했으므로 완전히 interleaved된 비교가 아니다. 본 실험은 read-only lookup consequence를 측정하며 subsequent write의 compaction cost는 직접 측정하지 않는다. Loading time이나 level 수뿐 아니라 candidate-SST composition과 live-key membership도 final-state fidelity의 평가 대상이다.')
+    p.write_text(text)
+
+    ep=paper/'tex/04_Evaluation.tex'; et=ep.read_text()
+    et=edit(et,'The new common-release 1,000~GiB conventional results are',
+        r'The new common-release 1,000~GiB conventional results are \ChBaselineSec{} seconds for 1~KB and \ChNinetySec{} seconds for 91~B. In the common 1~KB comparison, \name{} takes \ChFtwoSec{} seconds, including \ChFtwoMaterializedSec{} seconds for its initial loading process and \ChFtwoSettleSec{} seconds for clean-RocksDB completion to zero pending bytes. The loading-time ratio is \ChFtwoSpeedup{}$\times$. These values and source DBs are shared with Figures~\ref{fig:bg-compaction-alternatives} and~\ref{fig:bg-alternative-reads}; they are distinct from the historical scaling series above.')
+    et=edit(et,'The common 1,000~GiB, 1~KB baseline writes',
+        r'The common 1,000~GiB, 1~KB baseline writes \ChBaselineWaf{} times the logical input as flush/compaction SST bytes. Device-level write amplification is a separate metric: \ChBaselineDeviceWaf{} for Baseline and \ChFtwoDeviceWaf{} for \name{}, a \ChDiskWriteReduction{}\% reduction in device writes. The \name{} total includes both materialization and subsequent physical completion compactions; it is not a claim that the measured prototype writes every byte only once.')
+    ep.write_text(et)
+    for name in ['00_Abstract.tex','01_Introduction.tex','05_Conclusion.tex']:
+        p=paper/'tex'/name; text=p.read_text()
+        for line in list(active_lines(text)):
+            new=line
+            new=new.replace(r'reduces loading time by up to 47.9$\times$ over natural accumulation in the separate historical scaling series',
+                r'reduces loading time by \ChFtwoSpeedup{}$\times$ in the common 1,000~GiB, 1~KB comparison, including final completion compactions')
+            new=new.replace('This simulate-in-memory, write-once loading', 'This loading protocol')
+            new=new.replace(', while reproducing its LSM-Tree access behavior and performance on YCSB and MixGraph.',
+                '. Separate historical experiments evaluate its LSM-Tree access behavior and performance on YCSB and MixGraph.')
+            new=new.replace('별도 historical scaling의 loading performance 평가에서', '공통 1,000~GiB, 1~KB loading performance 평가에서')
+            new=new.replace('기존 natural loading 대비 최대 47.9배의 speedup을 달성하고',r'기존 natural loading 대비 \ChFtwoSpeedup{}배의 speedup을 달성하고')
+            new=new.replace(r'total disk write를 최대 96.6~\% 감소시켰다',r'최종 physical compaction까지 포함한 device write를 \ChDiskWriteReduction{}~\% 감소시켰다')
+            new=new.replace('특히 기존 방식으로 약 47시간이 필요할 것으로 예상되는', '별도 historical scaling에서는 기존 방식으로 약 47시간이 필요할 것으로 예상되는')
+            new=new.replace('또한 10 TB dataset에서 YCSB와 MixGraph workload를 실행하고',
+                '별도 historical 10 TB dataset에서 YCSB와 MixGraph workload를 실행하고')
+            new=new.replace(r'In the separate historical RocksDB scaling series, \name{} reduces loading time by up to 47.9$\times$ and total disk write by up to 96.6\%.',
+                r'In the common 1,000~GiB, 1~KB comparison, \name{} reduces loading time by \ChFtwoSpeedup{}$\times$ and device writes by \ChDiskWriteReduction{}\%, including physical completion compactions.')
+            new=new.replace('Because it predicts outputs from these descriptors instead of rewriting data, it writes each byte only once.',
+                'It avoids intermediate materialization; the measured prototype also performs physical completion compactions after materialization.')
+            new=new.replace('In particular, it builds an 8~TB dataset','In the separate historical scaling series, it builds an 8~TB dataset')
+            new=new.replace(r'It builds an 8\,TB dataset',r'The separate historical scaling series builds an 8\,TB dataset')
+            new=new.replace('The reproduced state matches the baseline in structure and workload behavior across a wide range of configurations.',
+                'Separate historical experiments compare the reproduced state and workload behavior across configurations. The new common comparison also exposes a key-membership difference, so its read-throughput ratios do not isolate layout effects.')
+            if name=='01_Introduction.tex' and line.startswith('Virtual compaction이 끝나 final state가 결정되면'):
+                new=new.replace('따라서 기존 로딩이 동일한 데이터를 여러 compaction에 걸쳐 반복적으로 쓰는 것과 달리, \\name은 실제 데이터를 final materialization 과정에서 한 번만 쓴다.',
+                    r'Virtual 단계는 intermediate KV materialization을 생략한다. 다만 이번 prototype 측정은 materialization 뒤 남은 physical compaction까지 완료한 시간과 I/O를 포함한다.')
+                new=new.replace('이러한 simulate-in-memory, write-once 방식은 compaction의 반복적인 CPU 및 I/O 비용을 제거하면서도',
+                    '이러한 simulate-in-memory 방식은 intermediate compaction의 반복적인 CPU 및 I/O 비용을 줄이면서도')
+            if new!=line:
+                text=edit(text,line.lstrip(),new)
+        p.write_text(text)
+    main=paper/'main.tex'; mt=main.read_text()
+    if r'\input{tex/ch23_measurements.tex}' not in mt:
+        mt=mt.replace(r'\begin{document}',r'\input{tex/ch23_measurements.tex}'+'\n'+r'\begin{document}',1)
+    main.write_text(mt)

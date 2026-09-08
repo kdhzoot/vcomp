@@ -1,0 +1,9 @@
+method	dataset_gib	key_bytes	value_bytes	kv_label	elapsed_sec	loading_min	repetitions	validation	status	source
+Baseline	1000	24	1000	1KB	3472	57.8667	1	10000_of_10000_found_after_reopen_and_settle	measured_vector_direct	experiments/artifacts/log_loads/paper_clean_vector_1000gib_260902_direct_run1/validated_summary.tsv
+ADOC	1000	24	1000	1KB	3840	64.0000	1	10000_of_10000_found_after_reopen_and_settle	measured_vector_direct_core48	experiments/artifacts/log_loads/paper_adoc_core48_1000gib_260902_run1/adoc_on
+DiffKV	1000	24	1000	1KB	NA	NA	0	NA	pending	NA
+Last compaction	1000	24	1000	1KB	4924	82.0667	1	10000_of_10000_found_after_reopen	measured	experiments/artifacts/log_loads/paper_fig3_1tb_lastcomp_single_260831_0642/lastcomp_sub1
+Fillseq	1000	24	1000	1KB	1578	26.3000	1	10000_of_10000_found_after_reopen_and_settle	measured_vector_direct	experiments/artifacts/log_loads/paper_clean_rocksdb_fillseq_only_1000gib_260902_run1/summary.tsv
+Fillseq + 10% overwrite	1000	24	1000	1KB	2014	33.5667	1	10000_of_10000_found_after_reopen_and_settle	measured	experiments/artifacts/log_loads/paper_clean_rocksdb_fillseq_overwrite_1000gib_260901_run1
+F2Load	1000	24	1000	1KB	102	1.7000	1	completed_and_reopened	measured	experiments/artifacts/log_loads/motivation_vcomp_speedup_1kb_260609_vcomp1kb_reload/vcomp_1000gb_1kb_none/bench.out
+No compaction	1000	24	1000	1KB	1286	21.4333	1	100_of_100_found_after_reopen	measured_not_shown	experiments/artifacts/log_loads/paper_fig3_1tb_single_260831_0612/no_comp

@@ -1,0 +1,37 @@
+{
+  "utc": "2026-09-07T03:22:06.616594+00:00",
+  "status": "passed",
+  "validated_loads": 8,
+  "validated_reads": 24,
+  "new_loads": 1,
+  "new_reads": 4,
+  "reused_loads": 7,
+  "reused_reads": 20,
+  "shared_figure2_figure4_controls_identical": true,
+  "figure2_source_unchanged": true,
+  "f2_phase_total_sec": 134.7306969165802,
+  "f2_pending_final": 0,
+  "all_four_f2_reader_commands_match_baseline_except_paths": true,
+  "all_four_f2_reads_use_completed_load_db": true,
+  "f2_read_swap_activity": false,
+  "paper_sources_match_built_staging": true,
+  "pdf_rendered_text_matches_staging": true,
+  "paper_sha256": "05aff6cc871e0b9c4857934c01991d9936c0e807233446fc30089fd36bc87a0b",
+  "author_review_markers_preserved": true,
+  "visually_inspected_staging_pages": [
+    1,
+    4,
+    6,
+    7,
+    8
+  ],
+  "visual_checks": [
+    "Vertical bars in Figures 4 and 5",
+    "Figure 5(a) axis capped at 5, clipped value shown, percent diamonds",
+    "Figure 5(c) divided by same-configuration baseline, red line at 1",
+    "New F2Load bars present and captions legible"
+  ],
+  "build_errors": [],
+  "remaining_build_warning": "Existing bibliography overfull hbox 1.21742pt and template/PDF package warnings",
+  "remaining_experiments": "Previously deferred size scaling and instrumentation breakdown"
+}

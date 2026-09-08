@@ -27,13 +27,24 @@ case "${MODE}" in
   *) echo "[ERROR] MODE must be 'baseline', 'vcomp', 'l0only', or 'l0compact'" >&2; exit 1 ;;
 esac
 require_executable "${DB_BENCH}" "db_bench"
-require_no_db_bench "${MODE} load"
+if [[ "${ALLOW_CONCURRENT_DB_BENCH:-0}" == "1" ]]; then
+  echo "[WARN] ALLOW_CONCURRENT_DB_BENCH=1: result may contain CPU/I/O interference" >&2
+else
+  require_no_db_bench "${MODE} load"
+fi
 
 # ── Common parameters ──
 KEY_SIZE="${KEY_SIZE:-24}"
 VALUE_SIZE="${VALUE_SIZE:-1000}"
+BATCH_SIZE="${BATCH_SIZE:-1}"
+MEMTABLE_REP="${MEMTABLE_REP:-vector}"
 require_positive_uint KEY_SIZE
 require_positive_uint VALUE_SIZE
+require_positive_uint BATCH_SIZE
+[[ -n "${MEMTABLE_REP}" ]] || die "MEMTABLE_REP must not be empty"
+if [[ "${MODE}" == "baseline" && "${MEMTABLE_REP}" != "vector" ]]; then
+  die "Baseline loads require MEMTABLE_REP=vector"
+fi
 KV_SIZE=$((KEY_SIZE + VALUE_SIZE))
 
 RUN_TS="$(date '+%y%m%d_%H%M%S')"
@@ -62,6 +73,7 @@ NKEYS=$((TARGET_DB_GB * 1024 * 1024 * 1024 / KV_SIZE))
 PLR_ERROR_BOUND="${PLR_ERROR_BOUND:-8}"
 MEMTABLE_FLUSH_MB="${MEMTABLE_FLUSH_MB:-64}"
 BG_JOBS="${BG_JOBS:-$(nproc)}"
+SUBCOMPACTIONS="${SUBCOMPACTIONS:-1}"
 VCOMP_REGISTER_BATCH_MAX="${VCOMP_REGISTER_BATCH_MAX:-256}"
 VCOMP_VISIBLE_L0_BATCH_MB="${VCOMP_VISIBLE_L0_BATCH_MB:-0}"
 VCOMP_LOG_APPLY_TIMING="${VCOMP_LOG_APPLY_TIMING:-true}"
@@ -69,6 +81,44 @@ VCOMP_SORT_DETAIL_TIMING="${VCOMP_SORT_DETAIL_TIMING:-false}"
 VCOMP_PHASE1_SHARDS="${VCOMP_PHASE1_SHARDS:-8}"
 VCOMP_MATERIALIZE_WORKERS="${VCOMP_MATERIALIZE_WORKERS:-48}"
 COMPRESSION_TYPE="${COMPRESSION_TYPE:-none}"
+WRITE_BUFFER_SIZE="${WRITE_BUFFER_SIZE:-67108864}"
+MAX_WRITE_BUFFER_NUMBER="${MAX_WRITE_BUFFER_NUMBER:-2}"
+MIN_WRITE_BUFFER_NUMBER_TO_MERGE="${MIN_WRITE_BUFFER_NUMBER_TO_MERGE:-1}"
+ALLOW_CONCURRENT_MEMTABLE_WRITE="${ALLOW_CONCURRENT_MEMTABLE_WRITE:-true}"
+USE_DIRECT_READS="${USE_DIRECT_READS:-true}"
+USE_DIRECT_IO_FOR_FLUSH_AND_COMPACTION="${USE_DIRECT_IO_FOR_FLUSH_AND_COMPACTION:-true}"
+ENABLE_BLOB_FILES="${ENABLE_BLOB_FILES:-false}"
+MIN_BLOB_SIZE="${MIN_BLOB_SIZE:-0}"
+BLOB_FILE_SIZE="${BLOB_FILE_SIZE:-268435456}"
+BLOB_COMPRESSION_TYPE="${BLOB_COMPRESSION_TYPE:-none}"
+ENABLE_BLOB_GARBAGE_COLLECTION="${ENABLE_BLOB_GARBAGE_COLLECTION:-false}"
+BLOB_GARBAGE_COLLECTION_AGE_CUTOFF="${BLOB_GARBAGE_COLLECTION_AGE_CUTOFF:-0.25}"
+BLOB_GARBAGE_COLLECTION_FORCE_THRESHOLD="${BLOB_GARBAGE_COLLECTION_FORCE_THRESHOLD:-1.0}"
+BLOB_COMPACTION_READAHEAD_SIZE="${BLOB_COMPACTION_READAHEAD_SIZE:-0}"
+BLOB_FILE_STARTING_LEVEL="${BLOB_FILE_STARTING_LEVEL:-0}"
+require_positive_uint SUBCOMPACTIONS
+require_positive_uint WRITE_BUFFER_SIZE
+require_positive_uint MAX_WRITE_BUFFER_NUMBER
+require_positive_uint MIN_WRITE_BUFFER_NUMBER_TO_MERGE
+[[ "${ALLOW_CONCURRENT_MEMTABLE_WRITE}" == "true" || \
+   "${ALLOW_CONCURRENT_MEMTABLE_WRITE}" == "false" ]] || \
+  die "ALLOW_CONCURRENT_MEMTABLE_WRITE must be true or false"
+for io_flag in USE_DIRECT_READS USE_DIRECT_IO_FOR_FLUSH_AND_COMPACTION; do
+  [[ "${!io_flag}" == "true" || "${!io_flag}" == "false" ]] || \
+    die "${io_flag} must be true or false: ${!io_flag}"
+done
+for blob_flag in ENABLE_BLOB_FILES ENABLE_BLOB_GARBAGE_COLLECTION; do
+  [[ "${!blob_flag}" == "true" || "${!blob_flag}" == "false" ]] || \
+    die "${blob_flag} must be true or false: ${!blob_flag}"
+done
+require_uint MIN_BLOB_SIZE
+require_positive_uint BLOB_FILE_SIZE
+require_uint BLOB_COMPACTION_READAHEAD_SIZE
+require_uint BLOB_FILE_STARTING_LEVEL
+if [[ "${ENABLE_BLOB_GARBAGE_COLLECTION}" == "true" && \
+      "${ENABLE_BLOB_FILES}" != "true" ]]; then
+  die "Blob garbage collection requires ENABLE_BLOB_FILES=true"
+fi
 
 [[ ! -e "${DB_DIR}" ]] || die "DB output already exists: ${DB_DIR}"
 [[ ! -e "${RUN_DIR}" ]] || die "Log output already exists: ${RUN_DIR}"
@@ -88,17 +138,37 @@ cmd=(
   --bloom_bits=10
   --disable_wal=true
   --max_background_jobs="${BG_JOBS}"
+  --subcompactions="${SUBCOMPACTIONS}"
+  --write_buffer_size="${WRITE_BUFFER_SIZE}"
+  --max_write_buffer_number="${MAX_WRITE_BUFFER_NUMBER}"
+  --min_write_buffer_number_to_merge="${MIN_WRITE_BUFFER_NUMBER_TO_MERGE}"
   --num="${NKEYS}"
   --key_size="${KEY_SIZE}"
   --value_size="${VALUE_SIZE}"
+  --batch_size="${BATCH_SIZE}"
   --threads=1
-  --memtablerep=vector
+  --memtablerep="${MEMTABLE_REP}"
+  --allow_concurrent_memtable_write="${ALLOW_CONCURRENT_MEMTABLE_WRITE}"
   --seed=12345678
   --db="${DB_DIR}"
-  --use_direct_reads=true
-  --use_direct_io_for_flush_and_compaction=true
+  --use_direct_reads="${USE_DIRECT_READS}"
+  --use_direct_io_for_flush_and_compaction="${USE_DIRECT_IO_FOR_FLUSH_AND_COMPACTION}"
   --compression_type="${COMPRESSION_TYPE}"
 )
+
+if [[ "${ENABLE_BLOB_FILES}" == "true" ]]; then
+  cmd+=(
+    --enable_blob_files=true
+    --min_blob_size="${MIN_BLOB_SIZE}"
+    --blob_file_size="${BLOB_FILE_SIZE}"
+    --blob_compression_type="${BLOB_COMPRESSION_TYPE}"
+    --enable_blob_garbage_collection="${ENABLE_BLOB_GARBAGE_COLLECTION}"
+    --blob_garbage_collection_age_cutoff="${BLOB_GARBAGE_COLLECTION_AGE_CUTOFF}"
+    --blob_garbage_collection_force_threshold="${BLOB_GARBAGE_COLLECTION_FORCE_THRESHOLD}"
+    --blob_compaction_readahead_size="${BLOB_COMPACTION_READAHEAD_SIZE}"
+    --blob_file_starting_level="${BLOB_FILE_STARTING_LEVEL}"
+  )
+fi
 
 if [[ "${MODE}" == "baseline" ]]; then
   # compact0 before waitforcompaction so follow-on L1→L2 triggers are waited
@@ -191,7 +261,11 @@ echo "Mode:      ${MODE}"
 echo "DB Size:   ${db_size}"
 echo "Keys:      ${NKEYS}"
 echo "Threads:   1"
-echo "Memtable:  vector"
+echo "Memtable:  ${MEMTABLE_REP}"
+echo "Buffers:   ${MAX_WRITE_BUFFER_NUMBER} x ${WRITE_BUFFER_SIZE} bytes; min_merge=${MIN_WRITE_BUFFER_NUMBER_TO_MERGE}"
+echo "Subcomp.:  ${SUBCOMPACTIONS}"
+echo "Direct I/O: reads=${USE_DIRECT_READS}, flush/compaction=${USE_DIRECT_IO_FOR_FLUSH_AND_COMPACTION}"
+echo "BlobDB:    enabled=${ENABLE_BLOB_FILES}, gc=${ENABLE_BLOB_GARBAGE_COLLECTION}, min_blob=${MIN_BLOB_SIZE}, blob_file=${BLOB_FILE_SIZE}"
 echo "Elapsed:   ${elapsed} sec"
 echo "Peak RSS:  ${peak_rss_gb:-NA} GiB (${peak_rss_kb:-NA} KB)"
 echo "Log:       ${RUN_DIR}"

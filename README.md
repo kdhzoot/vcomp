@@ -12,6 +12,10 @@ Measurement results (current best numbers) live in
 [experiments/docs/RESULTS.md](experiments/docs/RESULTS.md). Queued
 experiments live in
 [experiments/docs/EXPERIMENTS_PLANNED.md](experiments/docs/EXPERIMENTS_PLANNED.md).
+Git-published result bundles are indexed in
+[experiments/results/README.md](experiments/results/README.md). For the shared
+directory convention and setup on another server, see
+[experiments/README.md](experiments/README.md).
 
 ---
 

@@ -11,6 +11,7 @@ RUN_ID="${RUN_ID:-$(date '+%y%m%d_%H%M%S')}"
 SIZES_GB_STR="${SIZES_GB:-500 1000 2000 4000 8000}"
 BG_JOBS="${BG_JOBS:-48}"
 DISKSTAT_DEV="${DISKSTAT_DEV:-md0}"
+MEMTABLE_REP="vector"
 
 EXP_DIR="${LOG_ROOT:-${ARTIFACT_ROOT}/log_loads/motivation_load_scaling_${RUN_ID}}"
 SUMMARY_FILE="${EXP_DIR}/summary.tsv"
@@ -19,6 +20,7 @@ RUN_LOG="${EXP_DIR}/run.log"
 require_executable "${LOAD_SH}" "load runner"
 require_executable "${DB_BENCH}" "clean RocksDB db_bench"
 require_positive_uint BG_JOBS
+[[ -n "${MEMTABLE_REP}" ]] || die "MEMTABLE_REP must not be empty"
 require_no_db_bench "motivation load scaling"
 [[ ! -e "${EXP_DIR}" ]] || die "Log output already exists: ${EXP_DIR}"
 mkdir -p "${EXP_DIR}"
@@ -78,7 +80,7 @@ append_summary() {
   fi
 
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "${size_gb}" "1" "vector" "${status}" "${elapsed_sec}" "${peak_rss_kb}" "${peak_rss_gb}" \
+    "${size_gb}" "1" "${MEMTABLE_REP}" "${status}" "${elapsed_sec}" "${peak_rss_kb}" "${peak_rss_gb}" \
     "${bench_sec}" "${db_size}" \
     "${DISKSTAT_DEV}" "${total_write_gb}" "${ingest_gb}" \
     "${compaction_write_gb}" "${compaction_wamp}" "${run_dir}" "${db_dir}" >> "${SUMMARY_FILE}"
@@ -90,7 +92,7 @@ log "DB_ROOT=${DB_ROOT}"
 log "SIZES_GB=${SIZES_GB_STR}"
 log "BG_JOBS=${BG_JOBS}"
 log "THREADS=1"
-log "MEMTABLE_REP=vector"
+log "MEMTABLE_REP=${MEMTABLE_REP}"
 log "DB_BENCH=${DB_BENCH}"
 log "DISKSTAT_DEV=${DISKSTAT_DEV}"
 
@@ -117,6 +119,7 @@ for size_gb in ${SIZES_GB_STR}; do
   LOG_DIR="${run_dir}" \
   RUN_TAG="motivation_${RUN_ID}_${size_gb}gb" \
   BG_JOBS="${BG_JOBS}" \
+  MEMTABLE_REP="${MEMTABLE_REP}" \
   bash "${LOAD_SH}" 2>&1 | tee -a "${RUN_LOG}"
   exit_code=${PIPESTATUS[0]}
   set -e

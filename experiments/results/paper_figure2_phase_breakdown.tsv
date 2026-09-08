@@ -1,0 +1,19 @@
+kv_size	job_type	source_mode	category	time_sec	time_min	fraction	jobs	target_gib	repetitions	source
+1KB	Flush	Flush-only	Sort	448.377799	7.472963	0.271391	16237	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order4_kv1024_nocomp/raw/flush_breakdown.tsv
+1KB	Flush	Flush-only	SST Build	731.743998	12.195733	0.442904	16237	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order4_kv1024_nocomp/raw/flush_breakdown.tsv
+1KB	Flush	Flush-only	Write	392.437134	6.540619	0.237531	16237	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order4_kv1024_nocomp/raw/flush_breakdown.tsv
+1KB	Flush	Flush-only	Other	79.589806	1.326497	0.048174	16237	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order4_kv1024_nocomp/raw/flush_breakdown.tsv
+1KB	Compaction	Conventional	Merge	12132.994394	202.216573	0.357066	48075	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_run1/order1_kv1024_conventional/raw/compaction_breakdown.tsv
+1KB	Compaction	Conventional	SST Build	8367.962779	139.466046	0.246263	48075	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_run1/order1_kv1024_conventional/raw/compaction_breakdown.tsv
+1KB	Compaction	Conventional	Read	4463.099358	74.384989	0.131346	48075	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_run1/order1_kv1024_conventional/raw/compaction_breakdown.tsv
+1KB	Compaction	Conventional	Write	7405.896299	123.431605	0.217950	48075	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_run1/order1_kv1024_conventional/raw/compaction_breakdown.tsv
+1KB	Compaction	Conventional	Other	1609.781517	26.829692	0.047375	48075	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_run1/order1_kv1024_conventional/raw/compaction_breakdown.tsv
+91B	Flush	Flush-only	Sort	6628.207617	110.470127	0.562970	19347	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order2_kv91_nocomp/raw/flush_breakdown.tsv
+91B	Flush	Flush-only	SST Build	4598.297842	76.638297	0.390559	19347	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order2_kv91_nocomp/raw/flush_breakdown.tsv
+91B	Flush	Flush-only	Write	426.560856	7.109348	0.036230	19347	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order2_kv91_nocomp/raw/flush_breakdown.tsv
+91B	Flush	Flush-only	Other	120.571643	2.009527	0.010241	19347	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order2_kv91_nocomp/raw/flush_breakdown.tsv
+91B	Compaction	Conventional	Merge	34894.973460	581.582891	0.359383	55292	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order3_kv91_conventional/raw/compaction_breakdown.tsv
+91B	Compaction	Conventional	SST Build	38008.160139	633.469336	0.391446	55292	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order3_kv91_conventional/raw/compaction_breakdown.tsv
+91B	Compaction	Conventional	Read	3702.666560	61.711109	0.038134	55292	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order3_kv91_conventional/raw/compaction_breakdown.tsv
+91B	Compaction	Conventional	Write	7634.487353	127.241456	0.078628	55292	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order3_kv91_conventional/raw/compaction_breakdown.tsv
+91B	Compaction	Conventional	Other	12856.533474	214.275558	0.132409	55292	1000	1	experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order3_kv91_conventional/raw/compaction_breakdown.tsv

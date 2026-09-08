@@ -1,0 +1,37 @@
+{
+  "device_waf": 0.7918578109741211,
+  "device_write_bytes": 850250850304,
+  "elapsed_sec": 134.7306969165802,
+  "final_db_dir": "/work/vcomp/exp/paper_ch23_common_260907_f2_completion1/full/f2load_1kb",
+  "limitations": [
+    "One repetition per cell",
+    "F2Load measured after the earlier control campaign, not interleaved",
+    "F2Load format 6; conventional loaders format 7",
+    "Approximate key membership; no claim of controlled layout-only speedup",
+    "Checkpoint preparation and between-phase cache reset excluded from both measured process times"
+  ],
+  "materialized_db_dir": "/work/vcomp/exp/paper_ch23_common_260907_f2_completion1/full/f2load_1kb_materialized",
+  "materialized_process_sec": 96.95702600479126,
+  "pending_after_settle": 0,
+  "pending_before_settle": 17255557663,
+  "phases": [
+    {
+      "binary_sha256": "c5964e54fb0afc4779fd17b82f7366bdd8d19be9bd2acae33dd26c77e55019cd",
+      "elapsed_sec": 96.95702600479126,
+      "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260907_f2_completion1/full/f2load_1kb/phase1",
+      "peak_rss_kb": 1521092
+    },
+    {
+      "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+      "elapsed_sec": 37.77367091178894,
+      "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260907_f2_completion1/full/f2load_1kb/phase2",
+      "peak_rss_kb": 5351752
+    }
+  ],
+  "protocol": "materialize_then_clean_automatic_settle",
+  "reused_load_states": 7,
+  "reused_read_cells": 20,
+  "settle_compaction_read_bytes": 23238713571,
+  "settle_compaction_write_bytes": 20995141632,
+  "settle_process_sec": 37.77367091178894
+}

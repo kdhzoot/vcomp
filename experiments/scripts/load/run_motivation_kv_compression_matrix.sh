@@ -16,6 +16,7 @@ EXP_DIR="${LOG_ROOT:-${ARTIFACT_ROOT}/log_loads/motivation_kv_compression_${RUN_
 SUMMARY_FILE="${EXP_DIR}/summary.tsv"
 BREAKDOWN_ALL_FILE="${EXP_DIR}/compaction_breakdown_all.tsv"
 BREAKDOWN_REP_FILE="${EXP_DIR}/compaction_breakdown_representative.tsv"
+FLUSH_BREAKDOWN_ALL_FILE="${EXP_DIR}/flush_breakdown_all.tsv"
 RUN_LOG="${EXP_DIR}/run.log"
 IOSTAT_PID=""
 
@@ -154,6 +155,66 @@ PY
   printf '%s\t%s\t%s\n' "${jobs}" "${tsv_file}" "${raw_file}"
 }
 
+extract_flush_breakdown() {
+  local case_name="$1"
+  local run_dir="$2"
+  local db_dir="$3"
+  local bench_out="$4"
+  local raw_dir="${run_dir}/raw"
+  local raw_file="${raw_dir}/flush_breakdown.raw"
+  local tsv_file="${raw_dir}/flush_breakdown.tsv"
+
+  : > "${raw_file}"
+  if compgen -G "${db_dir}/LOG*" >/dev/null; then
+    rg --no-filename "VCOMP_PERF_FLUSH_BREAKDOWN" "${db_dir}"/LOG* >> "${raw_file}" || true
+  fi
+  rg --no-filename "VCOMP_PERF_FLUSH_BREAKDOWN" "${bench_out}" >> "${raw_file}" || true
+  awk '!seen[$0]++' "${raw_file}" > "${raw_file}.dedup"
+  mv "${raw_file}.dedup" "${raw_file}"
+
+  python3 - "${case_name}" "${raw_file}" "${tsv_file}" \
+    "${FLUSH_BREAKDOWN_ALL_FILE}" <<'PY'
+import os
+import re
+import sys
+
+case_name, raw_file, case_tsv, all_tsv = sys.argv[1:]
+fields = [
+    "case", "job", "cf", "reason", "memtables", "input_entries",
+    "input_bytes", "output_files", "output_bytes", "status", "mempurge",
+    "sort_us", "sst_build_us", "write_us", "compress_us", "other_us",
+    "total_tracked_us", "compression",
+]
+
+rows = []
+if os.path.exists(raw_file):
+    with open(raw_file, "r", encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            if "VCOMP_PERF_FLUSH_BREAKDOWN" not in line:
+                continue
+            row = dict(re.findall(r"([A-Za-z0-9_]+)=([^ \t\r\n]+)", line))
+            if row:
+                row["case"] = case_name
+                rows.append(row)
+
+def write_rows(path, rows_to_write, append=False):
+    need_header = (not append) or (not os.path.exists(path)) or os.path.getsize(path) == 0
+    mode = "a" if append else "w"
+    with open(path, mode, encoding="utf-8") as out:
+        if need_header:
+            out.write("\t".join(fields) + "\n")
+        for row in rows_to_write:
+            out.write("\t".join(row.get(field, "") for field in fields) + "\n")
+
+write_rows(case_tsv, rows)
+write_rows(all_tsv, rows, append=True)
+PY
+
+  local jobs=0
+  jobs="$(wc -l < "${raw_file}" | tr -d ' ')"
+  printf '%s\t%s\t%s\n' "${jobs}" "${tsv_file}" "${raw_file}"
+}
+
 run_one() {
   local case_name="$1"
   local value_size="$2"
@@ -170,6 +231,7 @@ run_one() {
   local total_write_gb="" sectors_start="" sectors_end=""
   local extra_args=()
   local breakdown_jobs=0 breakdown_tsv="" breakdown_raw=""
+  local flush_breakdown_jobs=0 flush_breakdown_tsv="" flush_breakdown_raw=""
 
   if [[ -n "${EXTRA_DB_BENCH_ARGS}" ]]; then
     read -r -a extra_args <<< "${EXTRA_DB_BENCH_ARGS}"
@@ -256,6 +318,9 @@ run_one() {
   IFS=$'\t' read -r breakdown_jobs breakdown_tsv breakdown_raw < <(
     extract_breakdown "${case_name}" "${run_dir}" "${db_dir}" "${out_file}"
   )
+  IFS=$'\t' read -r flush_breakdown_jobs flush_breakdown_tsv flush_breakdown_raw < <(
+    extract_flush_breakdown "${case_name}" "${run_dir}" "${db_dir}" "${out_file}"
+  )
 
   status=ok
   [[ "${rc}" -eq 0 ]] || status="failed:${rc}"
@@ -266,12 +331,13 @@ run_one() {
   comp_gb="$(compaction_gb "${out_file}")"
   wamp="$(write_amp "${out_file}")"
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "${case_name}" "${TARGET_DB_GB}" "${KEY_SIZE}" "${value_size}" "${compression_type}" \
     "1" "vector" "${status}" "${elapsed}" "${peak_rss_kb}" "${peak_rss_gb}" \
     "${fill_sec}" "${fill_ops}" \
     "${db_size}" "${DISKSTAT_DEV}" "${total_write_gb}" "${ingest}" "${comp_gb}" "${wamp}" \
     "${breakdown_jobs}" "${breakdown_tsv}" "${run_dir}" "${db_dir}" \
+    "${flush_breakdown_jobs}" "${flush_breakdown_tsv}" \
     >> "${SUMMARY_FILE}"
 
   {
@@ -286,12 +352,15 @@ run_one() {
     echo "Breakdown jobs: ${breakdown_jobs}"
     echo "Breakdown TSV:  ${breakdown_tsv}"
     echo "Breakdown raw:  ${breakdown_raw}"
+    echo "Flush jobs:     ${flush_breakdown_jobs}"
+    echo "Flush TSV:      ${flush_breakdown_tsv}"
+    echo "Flush raw:      ${flush_breakdown_raw}"
     echo "Log:            ${run_dir}"
     echo "DB:             ${db_dir}"
     echo "Exit code:      ${rc}"
   } | tee -a "${out_file}" >/dev/null
 
-  log "END ${case_name} status=${status} elapsed=${elapsed}s fill_sec=${fill_sec} breakdown_jobs=${breakdown_jobs} db=${db_size}"
+  log "END ${case_name} status=${status} elapsed=${elapsed}s fill_sec=${fill_sec} breakdown_jobs=${breakdown_jobs} flush_jobs=${flush_breakdown_jobs} db=${db_size}"
   [[ "${rc}" -eq 0 ]]
 }
 
@@ -303,9 +372,10 @@ require_no_db_bench "motivation KV/compression matrix"
 [[ ! -e "${EXP_DIR}" ]] || die "Log output already exists: ${EXP_DIR}"
 mkdir -p "${EXP_DIR}"
 
-printf 'case\ttarget_db_gb\tkey_size\tvalue_size\tcompression_type\tthreads\tmemtable\tstatus\telapsed_sec\tpeak_rss_kb\tpeak_rss_gb\tfillrandom_sec\tfillrandom_ops_sec\tdb_size\tdiskstat_dev\ttotal_write_gb\tingest_gb\tcompaction_write_gb\tcompaction_wamp\tbreakdown_jobs\tbreakdown_tsv\tlog_dir\tdb_dir\n' > "${SUMMARY_FILE}"
+printf 'case\ttarget_db_gb\tkey_size\tvalue_size\tcompression_type\tthreads\tmemtable\tstatus\telapsed_sec\tpeak_rss_kb\tpeak_rss_gb\tfillrandom_sec\tfillrandom_ops_sec\tdb_size\tdiskstat_dev\ttotal_write_gb\tingest_gb\tcompaction_write_gb\tcompaction_wamp\tbreakdown_jobs\tbreakdown_tsv\tlog_dir\tdb_dir\tflush_breakdown_jobs\tflush_breakdown_tsv\n' > "${SUMMARY_FILE}"
 : > "${BREAKDOWN_ALL_FILE}"
 : > "${BREAKDOWN_REP_FILE}"
+: > "${FLUSH_BREAKDOWN_ALL_FILE}"
 
 log "Starting motivation KV/compression matrix with compaction breakdown extraction"
 log "RUN_ID=${RUN_ID}"
@@ -326,3 +396,4 @@ log "Finished motivation KV/compression matrix"
 log "Summary: ${SUMMARY_FILE}"
 log "All compaction breakdowns: ${BREAKDOWN_ALL_FILE}"
 log "Representative compaction breakdowns: ${BREAKDOWN_REP_FILE}"
+log "All flush breakdowns: ${FLUSH_BREAKDOWN_ALL_FILE}"

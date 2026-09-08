@@ -1,0 +1,21 @@
+kv	dataset_gib	system	loading_sec	loading_hour	point_type	figure_annotation_min	source	audit_note
+1KB	500	baseline	2245	0.623611111	measured		eval-vcomp/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv	
+1KB	500	F2Load	50	0.013888889	measured	1	eval-vcomp/log_loads/motivation_vcomp_speedup_1kb_260609_vcomp1kb_reload/motivation_vcomp_speedup_summary.tsv	
+1KB	1000	baseline	4889	1.358055556	measured		eval-vcomp/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv	
+1KB	1000	F2Load	102	0.028333333	measured	2	eval-vcomp/log_loads/motivation_vcomp_speedup_1kb_260609_vcomp1kb_reload/motivation_vcomp_speedup_summary.tsv	
+1KB	2000	baseline	10203	2.834166667	measured		eval-vcomp/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv	
+1KB	2000	F2Load	229	0.063611111	measured	4	eval-vcomp/log_loads/motivation_vcomp_speedup_1kb_260609_vcomp1kb_reload/motivation_vcomp_speedup_summary.tsv	
+1KB	4000	baseline	21406	5.946111111	measured		eval-vcomp/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv	
+1KB	4000	F2Load	695	0.193055556	measured	12	eval-vcomp/log_loads/motivation_vcomp_speedup_1kb_260609_vcomp1kb_reload/motivation_vcomp_speedup_summary.tsv	
+1KB	8000	baseline	47704	13.251111111	measured		eval-vcomp/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv	
+1KB	8000	F2Load	2881	0.800277778	measured	48	eval-vcomp/log_loads/motivation_vcomp_speedup_1kb_260609_vcomp1kb_reload/motivation_vcomp_speedup_summary.tsv	
+91B	500	baseline	9842	2.733888889	measured		experiments/artifacts/log_loads/exp_260604_exp91b_baseline/scaling_91b_none/scaling_91b_summary.tsv	
+91B	500	F2Load	377.321	0.104811389	measured	6	experiments/artifacts/log_loads/motivation_vcomp_speedup_91b_260610/speedup_91b_summary.tsv	
+91B	1000	baseline	20151	5.597500000	measured		experiments/artifacts/log_loads/exp_260604_exp91b_baseline/scaling_91b_none/scaling_91b_summary.tsv	
+91B	1000	F2Load	754.725	0.209645833	measured	13	experiments/artifacts/log_loads/motivation_vcomp_speedup_91b_260610/speedup_91b_summary.tsv	
+91B	2000	baseline	40448	11.235555556	measured		experiments/artifacts/log_loads/exp_260604_exp91b_baseline/scaling_91b_none/scaling_91b_summary.tsv	
+91B	2000	F2Load	1494.266	0.415073889	measured	25	experiments/artifacts/log_loads/motivation_vcomp_speedup_91b_260610/speedup_91b_summary.tsv	
+91B	4000	baseline	85269	23.685833333	measured		experiments/artifacts/log_loads/exp_260604_exp91b_baseline/scaling_91b_none/scaling_91b_summary.tsv	
+91B	4000	F2Load	3089.037	0.858065833	measured	51	experiments/artifacts/log_loads/motivation_vcomp_speedup_91b_260610/speedup_91b_summary.tsv	
+91B	8000	baseline	169200	47	projected		trend from measured 500-4000 GiB runs	Current paper asset is hatched and manuscript states 47 hours.
+91B	8000	F2Load	6830.974	1.897492778	measured_candidate	103	experiments/artifacts/log_loads/motivation_vcomp_speedup_91b_260610/speedup_91b_summary.tsv	Paper PNG annotates 103 min, but the retained 260610 run is 6830.974 s (113.85 min); exact source log for the 103-min annotation is not identified.

@@ -1,0 +1,9 @@
+series	replicates	category	time_us	time_sec	time_hour	fraction	tracked_total_us	tracked_total_hour	jobs	status	source
+1KB	1	SST Build	2852919321	2852.919321	0.792477589	0.221870002	12858517560	3.571810433	22020	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o1_r1_1kb/compaction_breakdown_all.tsv
+1KB	1	Merge	6747057655	6747.057655	1.874182682	0.524715048	12858517560	3.571810433	22020	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o1_r1_1kb/compaction_breakdown_all.tsv
+1KB	1	I/O	2710958157	2710.958157	0.753043933	0.210829759	12858517560	3.571810433	22020	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o1_r1_1kb/compaction_breakdown_all.tsv
+1KB	1	Other	547582427	547.582427	0.152106230	0.042585191	12858517560	3.571810433	22020	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o1_r1_1kb/compaction_breakdown_all.tsv
+91B	1	SST Build	15428176400	15428.176400	4.285604556	0.391214075	39436659860	10.954627739	24624	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o2_r1_91b/compaction_breakdown_all.tsv
+91B	1	Merge	15856557953	15856.557953	4.404599431	0.402076596	39436659860	10.954627739	24624	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o2_r1_91b/compaction_breakdown_all.tsv
+91B	1	I/O	2768070843	2768.070843	0.768908568	0.070190296	39436659860	10.954627739	24624	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o2_r1_91b/compaction_breakdown_all.tsv
+91B	1	Other	5383854664	5383.854664	1.495515184	0.136519033	39436659860	10.954627739	24624	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o2_r1_91b/compaction_breakdown_all.tsv

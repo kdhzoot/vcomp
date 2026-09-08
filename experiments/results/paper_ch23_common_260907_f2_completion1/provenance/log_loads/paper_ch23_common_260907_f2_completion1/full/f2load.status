@@ -1,0 +1,74 @@
+ M experiments/docs/EXPERIMENTS_PLANNED.md
+ M experiments/docs/MOTIVATION_LOAD_SCALING.md
+ M experiments/docs/RESULTS.md
+ M experiments/scripts/load/load.sh
+ M experiments/scripts/load/run_motivation_kv_compression_matrix.sh
+ M experiments/scripts/load/run_motivation_load_scaling.sh
+ M experiments/scripts/read/run_q3_read_workloads.sh
+?? experiments/analysis/ch23_paper_update.py
+?? experiments/analysis/export_paper_ch23_tikz.py
+?? experiments/analysis/make_paper_91b_scaling.py
+?? experiments/analysis/paper_alternative_tikz.py
+?? experiments/analysis/plot_figure2_redraw.py
+?? experiments/analysis/plot_paper_figure4_uniform_read_cache.py
+?? experiments/analysis/promote_paper_ch23_common.py
+?? experiments/analysis/summarize_flush_breakdown.py
+?? experiments/analysis/summarize_paper_background_breakdown.py
+?? experiments/analysis/summarize_paper_figure4_uniform_read_cache.py
+?? experiments/analysis/validate_figure2_profile.py
+?? experiments/docs/BASELINE_BATCH_SIZE_500GB.md
+?? experiments/docs/FILLRANDOM_SST_COVERAGE_100GB_1TB.md
+?? experiments/docs/FLUSH_PROFILER_INSTRUMENTATION.md
+?? experiments/docs/PAPER_ADOC_FILLSEQ_OVERWRITE_1TB.md
+?? experiments/docs/PAPER_ADOC_WB16_1TB.md
+?? experiments/docs/PAPER_ARTIFACT_BASELINE_COMPARISON.md
+?? experiments/docs/PAPER_BACKGROUND_MOTIVATION_EVIDENCE.md
+?? experiments/docs/PAPER_BASELINE_BGJOBS_100GB.md
+?? experiments/docs/PAPER_BASELINE_VECTOR_1TB.md
+?? experiments/docs/PAPER_BASELINE_WB16_1TB.md
+?? experiments/docs/PAPER_BLOBDB_100GB_QUALIFICATION.md
+?? experiments/docs/PAPER_BLOBDB_WB16_1TB.md
+?? experiments/docs/PAPER_CHAPTER23_COMMON_BASELINE.md
+?? experiments/docs/PAPER_CHAPTER23_COMMON_RESULTS.md
+?? experiments/docs/PAPER_CHAPTER23_F2_COMPLETION.md
+?? experiments/docs/PAPER_CHAPTER23_OVERNIGHT_PLAN.md
+?? experiments/docs/PAPER_CLEAN_ROCKSDB_FILLSEQ_ONLY_1TB.md
+?? experiments/docs/PAPER_CLEAN_ROCKSDB_FILLSEQ_OVERWRITE_1TB.md
+?? experiments/docs/PAPER_FIGURE2_FLUSH_COMPACTION.md
+?? experiments/docs/PAPER_FIGURE4_DB_INVENTORY.md
+?? experiments/docs/PAPER_FIGURE4_FIXED_CONFIGURATION.md
+?? experiments/docs/PAPER_FIGURE4_UNIFORM_READ_CACHE_MATRIX.md
+?? experiments/docs/PAPER_FIGURE_EVIDENCE_BUNDLES.md
+?? experiments/docs/PAPER_FILLSEQ_OVERWRITE_WB16_1TB.md
+?? experiments/docs/PAPER_FILLSEQ_WB16_1TB.md
+?? experiments/docs/PAPER_LASTCOMP_FLUSHONLY_WB16_1TB.md
+?? experiments/docs/PAPER_LASTCOMP_WB16_1TB.md
+?? experiments/docs/PAPER_LAST_COMPACTION_SUBCOMPACTIONS.md
+?? experiments/docs/PAPER_NOCOMP_WB16_1TB.md
+?? experiments/lib/ch23_common.py
+?? experiments/paper_evidence/
+?? experiments/results/paper_adoc_1tb_single.tsv
+?? experiments/results/paper_artifact_smoke_260824.tsv
+?? experiments/results/paper_background_compaction_breakdown.tsv
+?? experiments/results/paper_blobdb_100gb_qualification.tsv
+?? experiments/results/paper_ch23_common_260905_approved_run3/
+?? experiments/results/paper_clean_rocksdb_subcompaction_500gb_260825.tsv
+?? experiments/results/paper_figure2_compaction_breakdown_preliminary_500gib.tsv
+?? experiments/results/paper_figure2_loading_waf.tsv
+?? experiments/results/paper_figure2_phase_breakdown.tsv
+?? experiments/results/paper_figure3_loading_time_1tb_single.tsv
+?? experiments/results/paper_figure4_loading_time_1tb_single.tsv
+?? experiments/results/paper_figure4_uniform_read_cache_5m_single.tsv
+?? experiments/results/paper_figure4_uniform_read_cache_figures/
+?? experiments/results/paper_subcompaction_100gb_260824.tsv
+?? experiments/results/paper_subcompaction_500gb_260824.tsv
+?? experiments/scripts/artifact_baselines/
+?? experiments/scripts/load/run_baseline_batch_size_matrix.sh
+?? experiments/scripts/load/run_lastcomp_flushonly_wb16_1tb.sh
+?? experiments/scripts/load/run_lastcomp_subcompaction_100gb.sh
+?? experiments/scripts/load/run_paper_background_breakdown.sh
+?? experiments/scripts/load/run_paper_figure2_fourcell_1tb.sh
+?? experiments/scripts/load/run_paper_subcompaction_sweep.sh
+?? experiments/scripts/monitor/
+?? experiments/scripts/paper/
+?? experiments/scripts/read/run_paper_figure4_uniform_cache_matrix.sh

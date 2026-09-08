@@ -1,0 +1,3 @@
+# Preserve archived evidence and its recorded hashes across Git checkouts.
+results/** -text
+paper_evidence/** -text

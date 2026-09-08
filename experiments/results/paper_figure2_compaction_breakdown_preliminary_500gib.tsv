@@ -1,0 +1,11 @@
+db_gib	kv_size	phase	category	time_us	time_sec	time_hour	fraction	jobs	replicates	status	source
+500	1KB	Compaction	Read	1169547806	1169.547806	0.324874391	0.090955104	22020	1	preliminary_500gib_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o1_r1_1kb/compaction_breakdown_all.tsv
+500	1KB	Compaction	Merge	6747057655	6747.057655	1.874182682	0.524715048	22020	1	preliminary_500gib_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o1_r1_1kb/compaction_breakdown_all.tsv
+500	1KB	Compaction	SST Build	2852919321	2852.919321	0.792477589	0.221870002	22020	1	preliminary_500gib_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o1_r1_1kb/compaction_breakdown_all.tsv
+500	1KB	Compaction	Write	1541410351	1541.410351	0.428169542	0.119874655	22020	1	preliminary_500gib_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o1_r1_1kb/compaction_breakdown_all.tsv
+500	1KB	Compaction	Other	547582427	547.582427	0.152106230	0.042585191	22020	1	preliminary_500gib_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o1_r1_1kb/compaction_breakdown_all.tsv
+500	91B	Compaction	Read	1244437604	1244.437604	0.345677112	0.031555350	24624	1	preliminary_500gib_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o2_r1_91b/compaction_breakdown_all.tsv
+500	91B	Compaction	Merge	15856557953	15856.557953	4.404599431	0.402076596	24624	1	preliminary_500gib_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o2_r1_91b/compaction_breakdown_all.tsv
+500	91B	Compaction	SST Build	15428176400	15428.176400	4.285604556	0.391214075	24624	1	preliminary_500gib_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o2_r1_91b/compaction_breakdown_all.tsv
+500	91B	Compaction	Write	1523633239	1523.633239	0.423231455	0.038634946	24624	1	preliminary_500gib_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o2_r1_91b/compaction_breakdown_all.tsv
+500	91B	Compaction	Other	5383854664	5383.854664	1.495515184	0.136519033	24624	1	preliminary_500gib_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o2_r1_91b/compaction_breakdown_all.tsv

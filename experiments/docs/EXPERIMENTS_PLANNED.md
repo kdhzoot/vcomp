@@ -1,5 +1,169 @@
 # Planned Experiments
 
+**2026-09-07 current Chapter 2/3 results:** F2Load loading and all four reads completed and were reflected in Figures 4/5 and dependent prose. The combined comparison has eight validated load states and twenty-four reads, reusing the previous seven load controls and twenty reads unchanged. F2Load is 134.731 s including final physical completion (pending bytes zero). Use [PAPER_CHAPTER23_COMMON_RESULTS.md](PAPER_CHAPTER23_COMMON_RESULTS.md). Only the previously deferred size-scaling and instrumentation follow-ups remain outside this campaign.
+
+**2026-09-06 common Chapter 2/3 update:** Seven load states and twenty reads completed and were reflected in Figures 2(b), 4 and 5 and their prose. Use [PAPER_CHAPTER23_COMMON_RESULTS.md](PAPER_CHAPTER23_COMMON_RESULTS.md) for the current shared baseline. Earlier paper values below are historical for these comparisons. F2Load recovery/reads and the scaling/breakdown follow-ups remain deferred.
+
+## 2026-09-03: Paired No-Comp and Last-Comp at 16 Write Buffers
+
+**Status:** Completed and validated. No-comp was 973 seconds; its preserved
+checkpoint took 4,053 seconds for one-shot compaction, producing a 5,026-second
+Last-comp total.
+
+The selected No-comp result is the completed 973-second, 16-buffer L0-only DB.
+Preserve it and hard-link-checkpoint its immutable SSTs into a metadata-private
+Last-comp DB. Run exactly one synchronous full-range `compact` on the
+checkpoint. Report Last-comp as 973 seconds plus the separately timed one-shot
+compaction, and verify that the No-comp source is unchanged.
+
+Both states use vector memtables, 64 MiB write buffers,
+`max_write_buffer_number=16`, 48 background jobs, one subcompaction, direct
+I/O, no WAL, and no compression. Run the one-shot path on the retained 1 GiB
+pilot before the full checkpoint and preserve both final DBs. Detailed boundaries and rejection
+criteria are in `PAPER_NOCOMP_WB16_1TB.md` and
+`PAPER_LASTCOMP_WB16_1TB.md`.
+
+## 2026-09-03: Fillseq + 10% Overwrite, 16 Write Buffers
+
+**Status:** Completed and validated. Total time was 1,745 seconds: 1,272
+seconds for Fillseq and 473 seconds for overwrite.
+
+Repeat the fixed 1,000 GiB clean-RocksDB Fillseq + 10% random-overwrite
+workload with the original binary and all original settings preserved, except
+for `max_write_buffer_number=16` in both phases. Run a complete 1 GiB pilot
+first, execute only on an idle machine, retain the final DB, and compare both
+phase-local stalls as well as combined wall time against the 2,014-second
+two-buffer control. The exact configuration, boundaries, reserved paths,
+metrics, and rejection gates are in `PAPER_FILLSEQ_OVERWRITE_WB16_1TB.md`.
+
+## 2026-09-03: Figure 2 Four-Load Flush/Compaction Study
+
+**Status:** Completed and validated. The 1 KB Conventional cell completed in
+`figure2_1tb_fourcell_260903_run1`. After the first 91 B Flush-only attempt was
+interrupted and excluded, fresh 91 B Flush-only, 91 B Conventional, and 1 KB
+Flush-only cells completed in `figure2_1tb_fourcell_260903_resume1`. All four
+accepted cells passed the profiler accounting gates. Final summaries are
+`results/paper_figure2_loading_waf.tsv` and
+`results/paper_figure2_phase_breakdown.tsv`; Figure 2 was updated on
+2026-09-04.
+
+The complete four-cell 100 GiB profiler smoke passed on 2026-09-03. All
+operation counts and flush/compaction accounting invariants matched; both
+No-comp cells emitted zero compaction records, and both Conventional cells
+ended with zero pending compaction bytes. This is a functional/scale gate only
+and does not count as any of the four 1,000 GiB paper loads. See
+`PAPER_FIGURE2_FLUSH_COMPACTION.md` for the full record.
+
+Run exactly four single-run cells at the existing Figure 2 `1 TB` point
+(`TARGET_DB_GB=1000`, i.e., 1,000 GiB in the harness): Conventional and No
+compaction for both 24 B + 1000 B and 48 B + 43 B KV pairs. Use the same
+`vcomp-prof/db_bench` binary and common RocksDB configuration in all cells.
+
+Panel (b) uses loading time and standard input-normalized WAF from all four
+loads. Panel (c) uses the No-compaction runs for isolated Flush bars and the
+Conventional runs for Compaction bars; Conventional flush data is retained as
+a sensitivity check. This is a single-run design with no variance or profiler
+overhead estimate.
+
+The exact order, controls, operation counts, completion rules, WAF definition,
+and validation gates are in `PAPER_FIGURE2_FLUSH_COMPACTION.md`. The source-level
+justification and limitations of every flush timer are in
+`FLUSH_PROFILER_INSTRUMENTATION.md`.
+
+## 2026-09-03: Figure 4 16-Buffer Configuration Freeze
+
+**Status:** Completed and fixed.
+
+The author explicitly reopened Figure 4 and selected the complete 16-buffer
+set for all conventional `db_bench` paths. The figure now includes Baseline,
+ADOC, BlobDB GC-off, Flush-only, Last-comp, Fillseq, Fillseq plus 10% overwrite,
+and F2Load. F2Load retains its 102-second `fillvirtual` measurement because its
+custom loading path does not use RocksDB's write-buffer-count option. Figure 4
+is fixed to the promoted measurements and exact per-method configurations in
+`PAPER_FIGURE4_FIXED_CONFIGURATION.md`.
+
+The historical 4,889-second SkipList and two-buffer Figure 4 results remain
+preserved but are no longer plotted. Do not promote other ADOC thread,
+memtable, or pending-limit sweeps without reopening the figure again.
+
+## 2026-09-04: Figure 4 Uniform-Read Cache Matrix
+
+**Status:** Completed and validated on 2026-09-05 UTC. The original five-state
+matrix produced 20 successful runs, and a separately logged conventional
+Baseline supplement produced four successful runs. The promoted 24-run summary
+is `results/paper_figure4_uniform_read_cache_5m_single.tsv`.
+
+Run 300-second, 48-thread uniform YCSB-C against the retained 1,000-GiB
+Flush-only, Last-comp, Fillseq, Fillseq+OW, and same-option F2Load DBs under a
+2x2 metadata-placement/block-cache matrix. Add conventional Baseline under the
+same four configurations so final-state divergence is measured directly
+rather than inferred. All runs are read-only, use direct reads, disable
+automatic compaction, and execute serially.
+
+The resulting paper panels separate logical filter checks, key-set fidelity,
+and absolute throughput. Flush-only checks about 10.3K filters per lookup and
+remains 210x slower than Baseline even with pinned metadata and a 50-GiB data
+cache. Fillseq variants have 100% successful lookups, unlike random loading.
+F2Load's 61.761% successful-lookup ratio is 1.453 percentage points below
+Baseline because its current descriptor-based materialization reconstructs an
+approximate key set; its throughput is therefore contextual rather than a
+controlled layout-only comparison. Full commands, provenance, interpretation,
+and limitations are in `PAPER_FIGURE4_UNIFORM_READ_CACHE_MATRIX.md`.
+
+## 2026-08-23: Artifact Baseline Comparison for the Background Figure
+
+**Status**: Planned. The active 8 TB true-91 B rerun was stopped on 2026-08-24
+after confirming that a completed first run had unintentionally restarted.
+Recoverable logs and the incident record are preserved under
+`artifacts/log_loads/exp_260822_paper_bg_91b_8tb_direct/`. The incomplete DB was
+deleted. Before using the 46.2-hour first-run result in the paper, decide
+whether its brief overlap with the 100 GB diagnostic is acceptable or whether
+an isolated rerun is required. Device write amplification requires a clean
+rerun because the start counters were overwritten.
+
+The baseline-selection matrix, reproduction gates, matched-baseline
+normalization, 1 GB/10 GB/100 GB/1 TB run sequence, and intended figure are
+specified in `PAPER_ARTIFACT_BASELINE_COMPARISON.md`.
+
+- Primary pilot candidates: ADOC and DiffKV.
+- Functional smoke status (2026-08-24): ADOC/ADOC-off and DiffKV/Titan passed
+  1 GB load, persistence, and reopen checks. These results are not usable for
+  performance; ADOC still needs a release build, and the DiffKV smoke uses the
+  documented single-thread explicit-flush wrapper required by its small-load
+  lifecycle. See `PAPER_ARTIFACT_BASELINE_COMPARISON.md` and
+  `results/paper_artifact_smoke_260824.tsv`.
+- Direct design-alternative queue: ADOC with its ADOC-off baseline, DiffKV
+  with its Titan baseline, no-compaction, and last-compaction with natural
+  RocksDB as the matched baseline.
+- Subcompaction policy: qualify a safe setting on 100 GB before artifact
+  paper runs. Apply the selected value symmetrically within every
+  compaction-bearing matched pair. No-compaction reports subcompactions as
+  `N/A` and an actual scheduled count of zero.
+- Last-compaction qualification: compare `1, 4, 8, 16, 32`; retain 48 only as
+  a diagnostic point because the concurrent 100 GB run scheduled 35 ranges
+  but consumed 113.1 GiB peak RSS. Select the fastest setting that remains
+  within the memory gate in `PAPER_ARTIFACT_BASELINE_COMPARISON.md`.
+- Qualification result (2026-08-24): cap 32 was fastest at 100 GB but failed
+  the 500 GB memory gate at 243.2 GiB under a 240 GiB active-abort threshold.
+  Cap 16 passed at 500 GB (179.67 GiB for last-comp; 3.34 GiB for baseline),
+  with zero swap and 10,000/10,000 reopen reads. Cap 16 is the selected safe
+  setting for larger current-RocksDB pairs.
+- Clean-engine validation (2026-08-25): a matched 500 GB pair on unmodified
+  RocksDB 11.1.0 completed in 2,314 s at cap 1 and 1,107 s at cap 16. Cap 16
+  reduced loading time by 52.2% and write-stall time by 74.8%, with only 0.74%
+  more device writes. Both runs had zero benchmark-local/system swap, zero
+  pending compaction bytes, and 10,000/10,000 reopen reads. This single ordered
+  pair is a qualification result; alternate repetitions before reporting an
+  exact speedup with error bars.
+- Conditional candidate: SpanDB, currently blocked because every experiment
+  NVMe device belongs to `/dev/md0` and SPDK requires a dedicated raw device.
+- Citation-only due to specialized hardware: MatrixKV, ListDB, Pacman,
+  DecouKV, and AegonKV.
+- Citation-only due to deployment scope: HATS and Calcspar.
+- Primary figure metric: treatment loading time normalized to a same-artifact,
+  version-matched baseline. Do not pool absolute times from different
+  RocksDB/Titan versions as a direct ranking.
+
 ## 2026-06-04: Paper Experiment Plan
 
 **Status**: Planned.

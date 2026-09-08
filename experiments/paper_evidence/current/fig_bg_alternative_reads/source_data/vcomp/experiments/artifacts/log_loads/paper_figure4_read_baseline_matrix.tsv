@@ -1,0 +1,2 @@
+system	case_id	size_gb	kv_label	key_size	value_size	distribution	unique_ratio	zipf_alpha	db_dir	load_log_dir	source_summary
+baseline	figure4_baseline	1000	1024B	24	1000	uniform	0.632	0.0	/work/vcomp/exp/paper_clean_vector_wb16_1000gib_260903_run1/baseline_bg48	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_clean_vector_wb16_1000gib_260903_run1	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_clean_vector_wb16_1000gib_260903_run1/validated_summary.tsv

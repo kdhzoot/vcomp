@@ -1,0 +1,11 @@
+{
+  "completion_marker": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260907_f2_completion1/full/COMPLETED",
+  "f2load_excluded": false,
+  "full_campaign_complete": true,
+  "reused_methods": [
+    "ADOC",
+    "BlobDB (GC off)"
+  ],
+  "validated_loads": 8,
+  "validated_reads": 24
+}

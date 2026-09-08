@@ -1,0 +1,12 @@
+paper_label	bundle	kind	status
+fig:LSM-Tree	NA	conceptual	no numeric data
+fig:bg-loading (+ scale/breakdown subfigures)	fig_bg_loading	empirical	bundled
+fig:bg-naive-lsm-states	NA	conceptual	no numeric data
+fig:bg-compaction-alternatives	fig_bg_compaction_alternatives	empirical	bundled
+fig:bg-alternative-reads (+ lookup-work/hit/throughput subfigures)	fig_bg_alternative_reads	empirical	bundled; single run per configuration
+fig:ds-overview	NA	conceptual	no numeric data
+fig:ds-learned-index (+ model/merge subfigures)	NA	conceptual/example	no experiment data
+fig:eval-speedup	fig_eval_speedup	empirical	bundled; 8 TiB 91B annotation source mismatch flagged
+fig:eval-vcomp (+ count/byte subfigures)	fig_eval_vcomp	empirical	bundled
+fig:exp-scale (+ throughput/latency/read/write subfigures)	fig_exp_scale	empirical	bundled
+fig:eval-sweep	fig_eval_sweep	empirical	bundled

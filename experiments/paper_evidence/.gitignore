@@ -1,0 +1,5 @@
+# Keep large copied logs and duplicate rendered assets local. The builder,
+# displayed TSVs, source-data snapshots, and provenance manifests remain visible
+# to Git so the evidence mapping can be reviewed and promoted deliberately.
+current/*/source_logs/
+current/*/figure_assets/

@@ -1,0 +1,5 @@
+family	system	artifact_commit	run_id	status	logical_records	value_bytes	final_db_bytes	reopen_checks	mechanism_evidence	performance_usable	caveat
+adoc	adoc_off	5ed60f50d6cd8259b94e7f842ff06c6ab4df40a1	260824_smoke2	pass	1048576	1000	689719731	10000/10000	matched feature-off path	no	artifact debug build; functional smoke only
+adoc	adoc_on	5ed60f50d6cd8259b94e7f842ff06c6ab4df40a1	260824_smoke2	pass	1048576	1000	689719297	10000/10000	FEAT tuner plus FEA and TEA trigger logs	no	artifact debug build; functional smoke only
+diffkv	titan	f37ea7c94b6c22d082312b288c8a81c22acf100d	260824_smoke3	pass	1048576	1000	1122784001	258 sampled values	Titan matched backend	no	single-thread wrapper adds synchronous flush before close
+diffkv	diffkv	f37ea7c94b6c22d082312b288c8a81c22acf100d	260824_smoke3	pass	1048576	1000	1095660473	258 sampled values	DiffKV config enables level/range/lazy merge	no	single-thread wrapper adds synchronous flush before close

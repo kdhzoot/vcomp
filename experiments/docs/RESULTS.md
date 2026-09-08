@@ -1,9 +1,15 @@
 # VComp Measurements
 
-This document holds the **current best measurements** for vcomp vs.
-baseline. Stale numbers are deleted, not preserved — historical context
-lives in [README.md Part 2](../../README.md#part-2--changelog). Algorithm specification lives in
-[../../README.md](../../README.md).
+**2026-09-07 current Chapter 2/3 results:** F2Load loading and all four reads completed and were reflected in Figures 4/5 and dependent prose. The combined comparison has eight validated load states and twenty-four reads, reusing the previous seven load controls and twenty reads unchanged. F2Load is 134.731 s including final physical completion (pending bytes zero). Use [PAPER_CHAPTER23_COMMON_RESULTS.md](PAPER_CHAPTER23_COMMON_RESULTS.md). Only the previously deferred size-scaling and instrumentation follow-ups remain outside this campaign.
+
+**2026-09-06 common Chapter 2/3 update:** Seven load states and twenty reads completed and were reflected in Figures 2(b), 4 and 5 and their prose. Use [PAPER_CHAPTER23_COMMON_RESULTS.md](PAPER_CHAPTER23_COMMON_RESULTS.md) for the current shared baseline. Earlier paper values below are historical for these comparisons. F2Load recovery/reads and the scaling/breakdown follow-ups remain deferred.
+
+This document is the measurement notebook for vcomp vs. baseline. The
+[published result index](../results/README.md) identifies the latest validated
+campaign and its Git-tracked data. Dated measurements below retain their
+original configurations and caveats; do not combine them with newer controls
+without checking comparability. Implementation history and the algorithm
+specification live in [../../README.md](../../README.md).
 
 Every measurement section labels:
 
@@ -127,6 +133,34 @@ The historical breakdown plot is not retained. Regenerate it with
 Raw load logs:
 - [artifacts/log_loads/baseline_260414_1305_250gb/](../artifacts/log_loads/baseline_260414_1305_250gb/)
 - `artifacts/log_loads/vcomp_260414_1648_250gb/` (not retained)
+
+### 1.4 Paper design alternatives: 1-TB uniform point reads
+
+**When**: primary matrix 2026-09-04, conventional-Baseline supplement
+2026-09-05. **Workload**: one 300-second uniform YCSB-C run per cell, 48
+threads, direct reads, read-only open, automatic compaction disabled. The four
+cells per DB cross cached/pinned filter-index metadata with a one-byte/50-GiB
+LRU data cache. Pinned cells use additional memory outside the cache.
+
+The central result is structural, not a read-speed ranking. Conventional
+Baseline checks 3.62 SST filters per lookup. Flush-only checks 10,253 and is
+178--1,517x slower than Baseline across the four cache settings; even the
+pinned/50-GiB case is only 3,883 ops/s versus Baseline's 813,716. Last-comp
+checks one filter and can run faster than Baseline because its single-level
+state is artificially easy to search. Fillseq and Fillseq+OW have 100%
+successful lookups, unlike the approximately 63.2% random-load states.
+
+The shape-only F2Load DB checks 3.57 filters per lookup, close to Baseline, but
+its successful-lookup ratio is 61.761% versus Baseline's 63.214%. Both use the
+same nominal operation count and key domain; the gap comes from approximate
+descriptor-based key-set reconstruction and is not sampling noise. Therefore
+its throughput is contextual evidence, not a controlled layout-only
+comparison.
+
+Promoted data and full caveats:
+
+- [paper_figure4_uniform_read_cache_5m_single.tsv](../results/paper_figure4_uniform_read_cache_5m_single.tsv)
+- [PAPER_FIGURE4_UNIFORM_READ_CACHE_MATRIX.md](PAPER_FIGURE4_UNIFORM_READ_CACHE_MATRIX.md)
 
 ---
 

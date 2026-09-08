@@ -1,0 +1,633 @@
+diff --git a/experiments/docs/EXPERIMENTS_PLANNED.md b/experiments/docs/EXPERIMENTS_PLANNED.md
+index 73f9239556..23038bedb1 100644
+--- a/experiments/docs/EXPERIMENTS_PLANNED.md
++++ b/experiments/docs/EXPERIMENTS_PLANNED.md
+@@ -1,5 +1,167 @@
+ # Planned Experiments
+ 
++**2026-09-06 common Chapter 2/3 update:** Seven load states and twenty reads completed and were reflected in Figures 2(b), 4 and 5 and their prose. Use [PAPER_CHAPTER23_COMMON_RESULTS.md](PAPER_CHAPTER23_COMMON_RESULTS.md) for the current shared baseline. Earlier paper values below are historical for these comparisons. F2Load recovery/reads and the scaling/breakdown follow-ups remain deferred.
++
++## 2026-09-03: Paired No-Comp and Last-Comp at 16 Write Buffers
++
++**Status:** Completed and validated. No-comp was 973 seconds; its preserved
++checkpoint took 4,053 seconds for one-shot compaction, producing a 5,026-second
++Last-comp total.
++
++The selected No-comp result is the completed 973-second, 16-buffer L0-only DB.
++Preserve it and hard-link-checkpoint its immutable SSTs into a metadata-private
++Last-comp DB. Run exactly one synchronous full-range `compact` on the
++checkpoint. Report Last-comp as 973 seconds plus the separately timed one-shot
++compaction, and verify that the No-comp source is unchanged.
++
++Both states use vector memtables, 64 MiB write buffers,
++`max_write_buffer_number=16`, 48 background jobs, one subcompaction, direct
++I/O, no WAL, and no compression. Run the one-shot path on the retained 1 GiB
++pilot before the full checkpoint and preserve both final DBs. Detailed boundaries and rejection
++criteria are in `PAPER_NOCOMP_WB16_1TB.md` and
++`PAPER_LASTCOMP_WB16_1TB.md`.
++
++## 2026-09-03: Fillseq + 10% Overwrite, 16 Write Buffers
++
++**Status:** Completed and validated. Total time was 1,745 seconds: 1,272
++seconds for Fillseq and 473 seconds for overwrite.
++
++Repeat the fixed 1,000 GiB clean-RocksDB Fillseq + 10% random-overwrite
++workload with the original binary and all original settings preserved, except
++for `max_write_buffer_number=16` in both phases. Run a complete 1 GiB pilot
++first, execute only on an idle machine, retain the final DB, and compare both
++phase-local stalls as well as combined wall time against the 2,014-second
++two-buffer control. The exact configuration, boundaries, reserved paths,
++metrics, and rejection gates are in `PAPER_FILLSEQ_OVERWRITE_WB16_1TB.md`.
++
++## 2026-09-03: Figure 2 Four-Load Flush/Compaction Study
++
++**Status:** Completed and validated. The 1 KB Conventional cell completed in
++`figure2_1tb_fourcell_260903_run1`. After the first 91 B Flush-only attempt was
++interrupted and excluded, fresh 91 B Flush-only, 91 B Conventional, and 1 KB
++Flush-only cells completed in `figure2_1tb_fourcell_260903_resume1`. All four
++accepted cells passed the profiler accounting gates. Final summaries are
++`results/paper_figure2_loading_waf.tsv` and
++`results/paper_figure2_phase_breakdown.tsv`; Figure 2 was updated on
++2026-09-04.
++
++The complete four-cell 100 GiB profiler smoke passed on 2026-09-03. All
++operation counts and flush/compaction accounting invariants matched; both
++No-comp cells emitted zero compaction records, and both Conventional cells
++ended with zero pending compaction bytes. This is a functional/scale gate only
++and does not count as any of the four 1,000 GiB paper loads. See
++`PAPER_FIGURE2_FLUSH_COMPACTION.md` for the full record.
++
++Run exactly four single-run cells at the existing Figure 2 `1 TB` point
++(`TARGET_DB_GB=1000`, i.e., 1,000 GiB in the harness): Conventional and No
++compaction for both 24 B + 1000 B and 48 B + 43 B KV pairs. Use the same
++`vcomp-prof/db_bench` binary and common RocksDB configuration in all cells.
++
++Panel (b) uses loading time and standard input-normalized WAF from all four
++loads. Panel (c) uses the No-compaction runs for isolated Flush bars and the
++Conventional runs for Compaction bars; Conventional flush data is retained as
++a sensitivity check. This is a single-run design with no variance or profiler
++overhead estimate.
++
++The exact order, controls, operation counts, completion rules, WAF definition,
++and validation gates are in `PAPER_FIGURE2_FLUSH_COMPACTION.md`. The source-level
++justification and limitations of every flush timer are in
++`FLUSH_PROFILER_INSTRUMENTATION.md`.
++
++## 2026-09-03: Figure 4 16-Buffer Configuration Freeze
++
++**Status:** Completed and fixed.
++
++The author explicitly reopened Figure 4 and selected the complete 16-buffer
++set for all conventional `db_bench` paths. The figure now includes Baseline,
++ADOC, BlobDB GC-off, Flush-only, Last-comp, Fillseq, Fillseq plus 10% overwrite,
++and F2Load. F2Load retains its 102-second `fillvirtual` measurement because its
++custom loading path does not use RocksDB's write-buffer-count option. Figure 4
++is fixed to the promoted measurements and exact per-method configurations in
++`PAPER_FIGURE4_FIXED_CONFIGURATION.md`.
++
++The historical 4,889-second SkipList and two-buffer Figure 4 results remain
++preserved but are no longer plotted. Do not promote other ADOC thread,
++memtable, or pending-limit sweeps without reopening the figure again.
++
++## 2026-09-04: Figure 4 Uniform-Read Cache Matrix
++
++**Status:** Completed and validated on 2026-09-05 UTC. The original five-state
++matrix produced 20 successful runs, and a separately logged conventional
++Baseline supplement produced four successful runs. The promoted 24-run summary
++is `results/paper_figure4_uniform_read_cache_5m_single.tsv`.
++
++Run 300-second, 48-thread uniform YCSB-C against the retained 1,000-GiB
++Flush-only, Last-comp, Fillseq, Fillseq+OW, and same-option F2Load DBs under a
++2x2 metadata-placement/block-cache matrix. Add conventional Baseline under the
++same four configurations so final-state divergence is measured directly
++rather than inferred. All runs are read-only, use direct reads, disable
++automatic compaction, and execute serially.
++
++The resulting paper panels separate logical filter checks, key-set fidelity,
++and absolute throughput. Flush-only checks about 10.3K filters per lookup and
++remains 210x slower than Baseline even with pinned metadata and a 50-GiB data
++cache. Fillseq variants have 100% successful lookups, unlike random loading.
++F2Load's 61.761% successful-lookup ratio is 1.453 percentage points below
++Baseline because its current descriptor-based materialization reconstructs an
++approximate key set; its throughput is therefore contextual rather than a
++controlled layout-only comparison. Full commands, provenance, interpretation,
++and limitations are in `PAPER_FIGURE4_UNIFORM_READ_CACHE_MATRIX.md`.
++
++## 2026-08-23: Artifact Baseline Comparison for the Background Figure
++
++**Status**: Planned. The active 8 TB true-91 B rerun was stopped on 2026-08-24
++after confirming that a completed first run had unintentionally restarted.
++Recoverable logs and the incident record are preserved under
++`artifacts/log_loads/exp_260822_paper_bg_91b_8tb_direct/`. The incomplete DB was
++deleted. Before using the 46.2-hour first-run result in the paper, decide
++whether its brief overlap with the 100 GB diagnostic is acceptable or whether
++an isolated rerun is required. Device write amplification requires a clean
++rerun because the start counters were overwritten.
++
++The baseline-selection matrix, reproduction gates, matched-baseline
++normalization, 1 GB/10 GB/100 GB/1 TB run sequence, and intended figure are
++specified in `PAPER_ARTIFACT_BASELINE_COMPARISON.md`.
++
++- Primary pilot candidates: ADOC and DiffKV.
++- Functional smoke status (2026-08-24): ADOC/ADOC-off and DiffKV/Titan passed
++  1 GB load, persistence, and reopen checks. These results are not usable for
++  performance; ADOC still needs a release build, and the DiffKV smoke uses the
++  documented single-thread explicit-flush wrapper required by its small-load
++  lifecycle. See `PAPER_ARTIFACT_BASELINE_COMPARISON.md` and
++  `results/paper_artifact_smoke_260824.tsv`.
++- Direct design-alternative queue: ADOC with its ADOC-off baseline, DiffKV
++  with its Titan baseline, no-compaction, and last-compaction with natural
++  RocksDB as the matched baseline.
++- Subcompaction policy: qualify a safe setting on 100 GB before artifact
++  paper runs. Apply the selected value symmetrically within every
++  compaction-bearing matched pair. No-compaction reports subcompactions as
++  `N/A` and an actual scheduled count of zero.
++- Last-compaction qualification: compare `1, 4, 8, 16, 32`; retain 48 only as
++  a diagnostic point because the concurrent 100 GB run scheduled 35 ranges
++  but consumed 113.1 GiB peak RSS. Select the fastest setting that remains
++  within the memory gate in `PAPER_ARTIFACT_BASELINE_COMPARISON.md`.
++- Qualification result (2026-08-24): cap 32 was fastest at 100 GB but failed
++  the 500 GB memory gate at 243.2 GiB under a 240 GiB active-abort threshold.
++  Cap 16 passed at 500 GB (179.67 GiB for last-comp; 3.34 GiB for baseline),
++  with zero swap and 10,000/10,000 reopen reads. Cap 16 is the selected safe
++  setting for larger current-RocksDB pairs.
++- Clean-engine validation (2026-08-25): a matched 500 GB pair on unmodified
++  RocksDB 11.1.0 completed in 2,314 s at cap 1 and 1,107 s at cap 16. Cap 16
++  reduced loading time by 52.2% and write-stall time by 74.8%, with only 0.74%
++  more device writes. Both runs had zero benchmark-local/system swap, zero
++  pending compaction bytes, and 10,000/10,000 reopen reads. This single ordered
++  pair is a qualification result; alternate repetitions before reporting an
++  exact speedup with error bars.
++- Conditional candidate: SpanDB, currently blocked because every experiment
++  NVMe device belongs to `/dev/md0` and SPDK requires a dedicated raw device.
++- Citation-only due to specialized hardware: MatrixKV, ListDB, Pacman,
++  DecouKV, and AegonKV.
++- Citation-only due to deployment scope: HATS and Calcspar.
++- Primary figure metric: treatment loading time normalized to a same-artifact,
++  version-matched baseline. Do not pool absolute times from different
++  RocksDB/Titan versions as a direct ranking.
++
+ ## 2026-06-04: Paper Experiment Plan
+ 
+ **Status**: Planned.
+diff --git a/experiments/docs/MOTIVATION_LOAD_SCALING.md b/experiments/docs/MOTIVATION_LOAD_SCALING.md
+index 5342465145..4a0ffde9c0 100644
+--- a/experiments/docs/MOTIVATION_LOAD_SCALING.md
++++ b/experiments/docs/MOTIVATION_LOAD_SCALING.md
+@@ -15,7 +15,7 @@ Motivation은 세 가지 결과로 정리한다.
+ - KV/compression + breakdown 실험은 timer가 들어간 `$VCOMP_PROF_DB_BENCH` 사용.
+ - key size는 24B.
+ - write thread는 1개.
+-- memtable representation은 `vector`.
++- baseline runner의 memtable representation은 `vector`로 고정한다.
+ - WAL disabled.
+ - direct I/O enabled for read/flush/compaction.
+ - Bloom bits 10.
+@@ -58,6 +58,11 @@ RUN_ID=260602_motivation BG_JOBS=48 SIZES_GB="500 1000 2000 4000 8000" \
+ 
+ `artifacts/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv`
+ 
++주의: 이 historical artifact의 저장된 `load_cmd.sh`에는
++`--memtablerep`가 없으며 `bench.out`은 `Memtablerep: SkipListFactory`를
++기록한다. 따라서 이 artifact의 500GB--8TB 결과는 문서의 이전 표기와 달리
++clean RocksDB 기본값인 `skip_list` 결과로 해석해야 한다.
++
+ ## Experiment 2: KV Size and Compression
+ 
+ 질문:
+diff --git a/experiments/docs/RESULTS.md b/experiments/docs/RESULTS.md
+index d46281016f..53bbdb3f2d 100644
+--- a/experiments/docs/RESULTS.md
++++ b/experiments/docs/RESULTS.md
+@@ -1,5 +1,7 @@
+ # VComp Measurements
+ 
++**2026-09-06 common Chapter 2/3 update:** Seven load states and twenty reads completed and were reflected in Figures 2(b), 4 and 5 and their prose. Use [PAPER_CHAPTER23_COMMON_RESULTS.md](PAPER_CHAPTER23_COMMON_RESULTS.md) for the current shared baseline. Earlier paper values below are historical for these comparisons. F2Load recovery/reads and the scaling/breakdown follow-ups remain deferred.
++
+ This document holds the **current best measurements** for vcomp vs.
+ baseline. Stale numbers are deleted, not preserved — historical context
+ lives in [README.md Part 2](../../README.md#part-2--changelog). Algorithm specification lives in
+@@ -128,6 +130,34 @@ Raw load logs:
+ - [artifacts/log_loads/baseline_260414_1305_250gb/](../artifacts/log_loads/baseline_260414_1305_250gb/)
+ - `artifacts/log_loads/vcomp_260414_1648_250gb/` (not retained)
+ 
++### 1.4 Paper design alternatives: 1-TB uniform point reads
++
++**When**: primary matrix 2026-09-04, conventional-Baseline supplement
++2026-09-05. **Workload**: one 300-second uniform YCSB-C run per cell, 48
++threads, direct reads, read-only open, automatic compaction disabled. The four
++cells per DB cross cached/pinned filter-index metadata with a one-byte/50-GiB
++LRU data cache. Pinned cells use additional memory outside the cache.
++
++The central result is structural, not a read-speed ranking. Conventional
++Baseline checks 3.62 SST filters per lookup. Flush-only checks 10,253 and is
++178--1,517x slower than Baseline across the four cache settings; even the
++pinned/50-GiB case is only 3,883 ops/s versus Baseline's 813,716. Last-comp
++checks one filter and can run faster than Baseline because its single-level
++state is artificially easy to search. Fillseq and Fillseq+OW have 100%
++successful lookups, unlike the approximately 63.2% random-load states.
++
++The shape-only F2Load DB checks 3.57 filters per lookup, close to Baseline, but
++its successful-lookup ratio is 61.761% versus Baseline's 63.214%. Both use the
++same nominal operation count and key domain; the gap comes from approximate
++descriptor-based key-set reconstruction and is not sampling noise. Therefore
++its throughput is contextual evidence, not a controlled layout-only
++comparison.
++
++Promoted data and full caveats:
++
++- [paper_figure4_uniform_read_cache_5m_single.tsv](../results/paper_figure4_uniform_read_cache_5m_single.tsv)
++- [PAPER_FIGURE4_UNIFORM_READ_CACHE_MATRIX.md](PAPER_FIGURE4_UNIFORM_READ_CACHE_MATRIX.md)
++
+ ---
+ 
+ ## 2. Tree shape — 30×30 coverage comparison
+diff --git a/experiments/scripts/load/load.sh b/experiments/scripts/load/load.sh
+index 525bc557b5..aa91a369a7 100755
+--- a/experiments/scripts/load/load.sh
++++ b/experiments/scripts/load/load.sh
+@@ -27,13 +27,24 @@ case "${MODE}" in
+   *) echo "[ERROR] MODE must be 'baseline', 'vcomp', 'l0only', or 'l0compact'" >&2; exit 1 ;;
+ esac
+ require_executable "${DB_BENCH}" "db_bench"
+-require_no_db_bench "${MODE} load"
++if [[ "${ALLOW_CONCURRENT_DB_BENCH:-0}" == "1" ]]; then
++  echo "[WARN] ALLOW_CONCURRENT_DB_BENCH=1: result may contain CPU/I/O interference" >&2
++else
++  require_no_db_bench "${MODE} load"
++fi
+ 
+ # ── Common parameters ──
+ KEY_SIZE="${KEY_SIZE:-24}"
+ VALUE_SIZE="${VALUE_SIZE:-1000}"
++BATCH_SIZE="${BATCH_SIZE:-1}"
++MEMTABLE_REP="${MEMTABLE_REP:-vector}"
+ require_positive_uint KEY_SIZE
+ require_positive_uint VALUE_SIZE
++require_positive_uint BATCH_SIZE
++[[ -n "${MEMTABLE_REP}" ]] || die "MEMTABLE_REP must not be empty"
++if [[ "${MODE}" == "baseline" && "${MEMTABLE_REP}" != "vector" ]]; then
++  die "Baseline loads require MEMTABLE_REP=vector"
++fi
+ KV_SIZE=$((KEY_SIZE + VALUE_SIZE))
+ 
+ RUN_TS="$(date '+%y%m%d_%H%M%S')"
+@@ -62,6 +73,7 @@ NKEYS=$((TARGET_DB_GB * 1024 * 1024 * 1024 / KV_SIZE))
+ PLR_ERROR_BOUND="${PLR_ERROR_BOUND:-8}"
+ MEMTABLE_FLUSH_MB="${MEMTABLE_FLUSH_MB:-64}"
+ BG_JOBS="${BG_JOBS:-$(nproc)}"
++SUBCOMPACTIONS="${SUBCOMPACTIONS:-1}"
+ VCOMP_REGISTER_BATCH_MAX="${VCOMP_REGISTER_BATCH_MAX:-256}"
+ VCOMP_VISIBLE_L0_BATCH_MB="${VCOMP_VISIBLE_L0_BATCH_MB:-0}"
+ VCOMP_LOG_APPLY_TIMING="${VCOMP_LOG_APPLY_TIMING:-true}"
+@@ -69,6 +81,44 @@ VCOMP_SORT_DETAIL_TIMING="${VCOMP_SORT_DETAIL_TIMING:-false}"
+ VCOMP_PHASE1_SHARDS="${VCOMP_PHASE1_SHARDS:-8}"
+ VCOMP_MATERIALIZE_WORKERS="${VCOMP_MATERIALIZE_WORKERS:-48}"
+ COMPRESSION_TYPE="${COMPRESSION_TYPE:-none}"
++WRITE_BUFFER_SIZE="${WRITE_BUFFER_SIZE:-67108864}"
++MAX_WRITE_BUFFER_NUMBER="${MAX_WRITE_BUFFER_NUMBER:-2}"
++MIN_WRITE_BUFFER_NUMBER_TO_MERGE="${MIN_WRITE_BUFFER_NUMBER_TO_MERGE:-1}"
++ALLOW_CONCURRENT_MEMTABLE_WRITE="${ALLOW_CONCURRENT_MEMTABLE_WRITE:-true}"
++USE_DIRECT_READS="${USE_DIRECT_READS:-true}"
++USE_DIRECT_IO_FOR_FLUSH_AND_COMPACTION="${USE_DIRECT_IO_FOR_FLUSH_AND_COMPACTION:-true}"
++ENABLE_BLOB_FILES="${ENABLE_BLOB_FILES:-false}"
++MIN_BLOB_SIZE="${MIN_BLOB_SIZE:-0}"
++BLOB_FILE_SIZE="${BLOB_FILE_SIZE:-268435456}"
++BLOB_COMPRESSION_TYPE="${BLOB_COMPRESSION_TYPE:-none}"
++ENABLE_BLOB_GARBAGE_COLLECTION="${ENABLE_BLOB_GARBAGE_COLLECTION:-false}"
++BLOB_GARBAGE_COLLECTION_AGE_CUTOFF="${BLOB_GARBAGE_COLLECTION_AGE_CUTOFF:-0.25}"
++BLOB_GARBAGE_COLLECTION_FORCE_THRESHOLD="${BLOB_GARBAGE_COLLECTION_FORCE_THRESHOLD:-1.0}"
++BLOB_COMPACTION_READAHEAD_SIZE="${BLOB_COMPACTION_READAHEAD_SIZE:-0}"
++BLOB_FILE_STARTING_LEVEL="${BLOB_FILE_STARTING_LEVEL:-0}"
++require_positive_uint SUBCOMPACTIONS
++require_positive_uint WRITE_BUFFER_SIZE
++require_positive_uint MAX_WRITE_BUFFER_NUMBER
++require_positive_uint MIN_WRITE_BUFFER_NUMBER_TO_MERGE
++[[ "${ALLOW_CONCURRENT_MEMTABLE_WRITE}" == "true" || \
++   "${ALLOW_CONCURRENT_MEMTABLE_WRITE}" == "false" ]] || \
++  die "ALLOW_CONCURRENT_MEMTABLE_WRITE must be true or false"
++for io_flag in USE_DIRECT_READS USE_DIRECT_IO_FOR_FLUSH_AND_COMPACTION; do
++  [[ "${!io_flag}" == "true" || "${!io_flag}" == "false" ]] || \
++    die "${io_flag} must be true or false: ${!io_flag}"
++done
++for blob_flag in ENABLE_BLOB_FILES ENABLE_BLOB_GARBAGE_COLLECTION; do
++  [[ "${!blob_flag}" == "true" || "${!blob_flag}" == "false" ]] || \
++    die "${blob_flag} must be true or false: ${!blob_flag}"
++done
++require_uint MIN_BLOB_SIZE
++require_positive_uint BLOB_FILE_SIZE
++require_uint BLOB_COMPACTION_READAHEAD_SIZE
++require_uint BLOB_FILE_STARTING_LEVEL
++if [[ "${ENABLE_BLOB_GARBAGE_COLLECTION}" == "true" && \
++      "${ENABLE_BLOB_FILES}" != "true" ]]; then
++  die "Blob garbage collection requires ENABLE_BLOB_FILES=true"
++fi
+ 
+ [[ ! -e "${DB_DIR}" ]] || die "DB output already exists: ${DB_DIR}"
+ [[ ! -e "${RUN_DIR}" ]] || die "Log output already exists: ${RUN_DIR}"
+@@ -88,18 +138,38 @@ cmd=(
+   --bloom_bits=10
+   --disable_wal=true
+   --max_background_jobs="${BG_JOBS}"
++  --subcompactions="${SUBCOMPACTIONS}"
++  --write_buffer_size="${WRITE_BUFFER_SIZE}"
++  --max_write_buffer_number="${MAX_WRITE_BUFFER_NUMBER}"
++  --min_write_buffer_number_to_merge="${MIN_WRITE_BUFFER_NUMBER_TO_MERGE}"
+   --num="${NKEYS}"
+   --key_size="${KEY_SIZE}"
+   --value_size="${VALUE_SIZE}"
++  --batch_size="${BATCH_SIZE}"
+   --threads=1
+-  --memtablerep=vector
++  --memtablerep="${MEMTABLE_REP}"
++  --allow_concurrent_memtable_write="${ALLOW_CONCURRENT_MEMTABLE_WRITE}"
+   --seed=12345678
+   --db="${DB_DIR}"
+-  --use_direct_reads=true
+-  --use_direct_io_for_flush_and_compaction=true
++  --use_direct_reads="${USE_DIRECT_READS}"
++  --use_direct_io_for_flush_and_compaction="${USE_DIRECT_IO_FOR_FLUSH_AND_COMPACTION}"
+   --compression_type="${COMPRESSION_TYPE}"
+ )
+ 
++if [[ "${ENABLE_BLOB_FILES}" == "true" ]]; then
++  cmd+=(
++    --enable_blob_files=true
++    --min_blob_size="${MIN_BLOB_SIZE}"
++    --blob_file_size="${BLOB_FILE_SIZE}"
++    --blob_compression_type="${BLOB_COMPRESSION_TYPE}"
++    --enable_blob_garbage_collection="${ENABLE_BLOB_GARBAGE_COLLECTION}"
++    --blob_garbage_collection_age_cutoff="${BLOB_GARBAGE_COLLECTION_AGE_CUTOFF}"
++    --blob_garbage_collection_force_threshold="${BLOB_GARBAGE_COLLECTION_FORCE_THRESHOLD}"
++    --blob_compaction_readahead_size="${BLOB_COMPACTION_READAHEAD_SIZE}"
++    --blob_file_starting_level="${BLOB_FILE_STARTING_LEVEL}"
++  )
++fi
++
+ if [[ "${MODE}" == "baseline" ]]; then
+   # compact0 before waitforcompaction so follow-on L1→L2 triggers are waited
+   # for; leaves the tree in a fully settled state.
+@@ -191,7 +261,11 @@ echo "Mode:      ${MODE}"
+ echo "DB Size:   ${db_size}"
+ echo "Keys:      ${NKEYS}"
+ echo "Threads:   1"
+-echo "Memtable:  vector"
++echo "Memtable:  ${MEMTABLE_REP}"
++echo "Buffers:   ${MAX_WRITE_BUFFER_NUMBER} x ${WRITE_BUFFER_SIZE} bytes; min_merge=${MIN_WRITE_BUFFER_NUMBER_TO_MERGE}"
++echo "Subcomp.:  ${SUBCOMPACTIONS}"
++echo "Direct I/O: reads=${USE_DIRECT_READS}, flush/compaction=${USE_DIRECT_IO_FOR_FLUSH_AND_COMPACTION}"
++echo "BlobDB:    enabled=${ENABLE_BLOB_FILES}, gc=${ENABLE_BLOB_GARBAGE_COLLECTION}, min_blob=${MIN_BLOB_SIZE}, blob_file=${BLOB_FILE_SIZE}"
+ echo "Elapsed:   ${elapsed} sec"
+ echo "Peak RSS:  ${peak_rss_gb:-NA} GiB (${peak_rss_kb:-NA} KB)"
+ echo "Log:       ${RUN_DIR}"
+diff --git a/experiments/scripts/load/run_motivation_kv_compression_matrix.sh b/experiments/scripts/load/run_motivation_kv_compression_matrix.sh
+index 3bf78fcb70..d640c71eee 100755
+--- a/experiments/scripts/load/run_motivation_kv_compression_matrix.sh
++++ b/experiments/scripts/load/run_motivation_kv_compression_matrix.sh
+@@ -16,6 +16,7 @@ EXP_DIR="${LOG_ROOT:-${ARTIFACT_ROOT}/log_loads/motivation_kv_compression_${RUN_
+ SUMMARY_FILE="${EXP_DIR}/summary.tsv"
+ BREAKDOWN_ALL_FILE="${EXP_DIR}/compaction_breakdown_all.tsv"
+ BREAKDOWN_REP_FILE="${EXP_DIR}/compaction_breakdown_representative.tsv"
++FLUSH_BREAKDOWN_ALL_FILE="${EXP_DIR}/flush_breakdown_all.tsv"
+ RUN_LOG="${EXP_DIR}/run.log"
+ IOSTAT_PID=""
+ 
+@@ -154,6 +155,66 @@ PY
+   printf '%s\t%s\t%s\n' "${jobs}" "${tsv_file}" "${raw_file}"
+ }
+ 
++extract_flush_breakdown() {
++  local case_name="$1"
++  local run_dir="$2"
++  local db_dir="$3"
++  local bench_out="$4"
++  local raw_dir="${run_dir}/raw"
++  local raw_file="${raw_dir}/flush_breakdown.raw"
++  local tsv_file="${raw_dir}/flush_breakdown.tsv"
++
++  : > "${raw_file}"
++  if compgen -G "${db_dir}/LOG*" >/dev/null; then
++    rg --no-filename "VCOMP_PERF_FLUSH_BREAKDOWN" "${db_dir}"/LOG* >> "${raw_file}" || true
++  fi
++  rg --no-filename "VCOMP_PERF_FLUSH_BREAKDOWN" "${bench_out}" >> "${raw_file}" || true
++  awk '!seen[$0]++' "${raw_file}" > "${raw_file}.dedup"
++  mv "${raw_file}.dedup" "${raw_file}"
++
++  python3 - "${case_name}" "${raw_file}" "${tsv_file}" \
++    "${FLUSH_BREAKDOWN_ALL_FILE}" <<'PY'
++import os
++import re
++import sys
++
++case_name, raw_file, case_tsv, all_tsv = sys.argv[1:]
++fields = [
++    "case", "job", "cf", "reason", "memtables", "input_entries",
++    "input_bytes", "output_files", "output_bytes", "status", "mempurge",
++    "sort_us", "sst_build_us", "write_us", "compress_us", "other_us",
++    "total_tracked_us", "compression",
++]
++
++rows = []
++if os.path.exists(raw_file):
++    with open(raw_file, "r", encoding="utf-8", errors="replace") as handle:
++        for line in handle:
++            if "VCOMP_PERF_FLUSH_BREAKDOWN" not in line:
++                continue
++            row = dict(re.findall(r"([A-Za-z0-9_]+)=([^ \t\r\n]+)", line))
++            if row:
++                row["case"] = case_name
++                rows.append(row)
++
++def write_rows(path, rows_to_write, append=False):
++    need_header = (not append) or (not os.path.exists(path)) or os.path.getsize(path) == 0
++    mode = "a" if append else "w"
++    with open(path, mode, encoding="utf-8") as out:
++        if need_header:
++            out.write("\t".join(fields) + "\n")
++        for row in rows_to_write:
++            out.write("\t".join(row.get(field, "") for field in fields) + "\n")
++
++write_rows(case_tsv, rows)
++write_rows(all_tsv, rows, append=True)
++PY
++
++  local jobs=0
++  jobs="$(wc -l < "${raw_file}" | tr -d ' ')"
++  printf '%s\t%s\t%s\n' "${jobs}" "${tsv_file}" "${raw_file}"
++}
++
+ run_one() {
+   local case_name="$1"
+   local value_size="$2"
+@@ -170,6 +231,7 @@ run_one() {
+   local total_write_gb="" sectors_start="" sectors_end=""
+   local extra_args=()
+   local breakdown_jobs=0 breakdown_tsv="" breakdown_raw=""
++  local flush_breakdown_jobs=0 flush_breakdown_tsv="" flush_breakdown_raw=""
+ 
+   if [[ -n "${EXTRA_DB_BENCH_ARGS}" ]]; then
+     read -r -a extra_args <<< "${EXTRA_DB_BENCH_ARGS}"
+@@ -256,6 +318,9 @@ run_one() {
+   IFS=$'\t' read -r breakdown_jobs breakdown_tsv breakdown_raw < <(
+     extract_breakdown "${case_name}" "${run_dir}" "${db_dir}" "${out_file}"
+   )
++  IFS=$'\t' read -r flush_breakdown_jobs flush_breakdown_tsv flush_breakdown_raw < <(
++    extract_flush_breakdown "${case_name}" "${run_dir}" "${db_dir}" "${out_file}"
++  )
+ 
+   status=ok
+   [[ "${rc}" -eq 0 ]] || status="failed:${rc}"
+@@ -266,12 +331,13 @@ run_one() {
+   comp_gb="$(compaction_gb "${out_file}")"
+   wamp="$(write_amp "${out_file}")"
+ 
+-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
++  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+     "${case_name}" "${TARGET_DB_GB}" "${KEY_SIZE}" "${value_size}" "${compression_type}" \
+     "1" "vector" "${status}" "${elapsed}" "${peak_rss_kb}" "${peak_rss_gb}" \
+     "${fill_sec}" "${fill_ops}" \
+     "${db_size}" "${DISKSTAT_DEV}" "${total_write_gb}" "${ingest}" "${comp_gb}" "${wamp}" \
+     "${breakdown_jobs}" "${breakdown_tsv}" "${run_dir}" "${db_dir}" \
++    "${flush_breakdown_jobs}" "${flush_breakdown_tsv}" \
+     >> "${SUMMARY_FILE}"
+ 
+   {
+@@ -286,12 +352,15 @@ run_one() {
+     echo "Breakdown jobs: ${breakdown_jobs}"
+     echo "Breakdown TSV:  ${breakdown_tsv}"
+     echo "Breakdown raw:  ${breakdown_raw}"
++    echo "Flush jobs:     ${flush_breakdown_jobs}"
++    echo "Flush TSV:      ${flush_breakdown_tsv}"
++    echo "Flush raw:      ${flush_breakdown_raw}"
+     echo "Log:            ${run_dir}"
+     echo "DB:             ${db_dir}"
+     echo "Exit code:      ${rc}"
+   } | tee -a "${out_file}" >/dev/null
+ 
+-  log "END ${case_name} status=${status} elapsed=${elapsed}s fill_sec=${fill_sec} breakdown_jobs=${breakdown_jobs} db=${db_size}"
++  log "END ${case_name} status=${status} elapsed=${elapsed}s fill_sec=${fill_sec} breakdown_jobs=${breakdown_jobs} flush_jobs=${flush_breakdown_jobs} db=${db_size}"
+   [[ "${rc}" -eq 0 ]]
+ }
+ 
+@@ -303,9 +372,10 @@ require_no_db_bench "motivation KV/compression matrix"
+ [[ ! -e "${EXP_DIR}" ]] || die "Log output already exists: ${EXP_DIR}"
+ mkdir -p "${EXP_DIR}"
+ 
+-printf 'case\ttarget_db_gb\tkey_size\tvalue_size\tcompression_type\tthreads\tmemtable\tstatus\telapsed_sec\tpeak_rss_kb\tpeak_rss_gb\tfillrandom_sec\tfillrandom_ops_sec\tdb_size\tdiskstat_dev\ttotal_write_gb\tingest_gb\tcompaction_write_gb\tcompaction_wamp\tbreakdown_jobs\tbreakdown_tsv\tlog_dir\tdb_dir\n' > "${SUMMARY_FILE}"
++printf 'case\ttarget_db_gb\tkey_size\tvalue_size\tcompression_type\tthreads\tmemtable\tstatus\telapsed_sec\tpeak_rss_kb\tpeak_rss_gb\tfillrandom_sec\tfillrandom_ops_sec\tdb_size\tdiskstat_dev\ttotal_write_gb\tingest_gb\tcompaction_write_gb\tcompaction_wamp\tbreakdown_jobs\tbreakdown_tsv\tlog_dir\tdb_dir\tflush_breakdown_jobs\tflush_breakdown_tsv\n' > "${SUMMARY_FILE}"
+ : > "${BREAKDOWN_ALL_FILE}"
+ : > "${BREAKDOWN_REP_FILE}"
++: > "${FLUSH_BREAKDOWN_ALL_FILE}"
+ 
+ log "Starting motivation KV/compression matrix with compaction breakdown extraction"
+ log "RUN_ID=${RUN_ID}"
+@@ -326,3 +396,4 @@ log "Finished motivation KV/compression matrix"
+ log "Summary: ${SUMMARY_FILE}"
+ log "All compaction breakdowns: ${BREAKDOWN_ALL_FILE}"
+ log "Representative compaction breakdowns: ${BREAKDOWN_REP_FILE}"
++log "All flush breakdowns: ${FLUSH_BREAKDOWN_ALL_FILE}"
+diff --git a/experiments/scripts/load/run_motivation_load_scaling.sh b/experiments/scripts/load/run_motivation_load_scaling.sh
+index 7ed1bb21ac..0a0c0e64c7 100755
+--- a/experiments/scripts/load/run_motivation_load_scaling.sh
++++ b/experiments/scripts/load/run_motivation_load_scaling.sh
+@@ -11,6 +11,7 @@ RUN_ID="${RUN_ID:-$(date '+%y%m%d_%H%M%S')}"
+ SIZES_GB_STR="${SIZES_GB:-500 1000 2000 4000 8000}"
+ BG_JOBS="${BG_JOBS:-48}"
+ DISKSTAT_DEV="${DISKSTAT_DEV:-md0}"
++MEMTABLE_REP="vector"
+ 
+ EXP_DIR="${LOG_ROOT:-${ARTIFACT_ROOT}/log_loads/motivation_load_scaling_${RUN_ID}}"
+ SUMMARY_FILE="${EXP_DIR}/summary.tsv"
+@@ -19,6 +20,7 @@ RUN_LOG="${EXP_DIR}/run.log"
+ require_executable "${LOAD_SH}" "load runner"
+ require_executable "${DB_BENCH}" "clean RocksDB db_bench"
+ require_positive_uint BG_JOBS
++[[ -n "${MEMTABLE_REP}" ]] || die "MEMTABLE_REP must not be empty"
+ require_no_db_bench "motivation load scaling"
+ [[ ! -e "${EXP_DIR}" ]] || die "Log output already exists: ${EXP_DIR}"
+ mkdir -p "${EXP_DIR}"
+@@ -78,7 +80,7 @@ append_summary() {
+   fi
+ 
+   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+-    "${size_gb}" "1" "vector" "${status}" "${elapsed_sec}" "${peak_rss_kb}" "${peak_rss_gb}" \
++    "${size_gb}" "1" "${MEMTABLE_REP}" "${status}" "${elapsed_sec}" "${peak_rss_kb}" "${peak_rss_gb}" \
+     "${bench_sec}" "${db_size}" \
+     "${DISKSTAT_DEV}" "${total_write_gb}" "${ingest_gb}" \
+     "${compaction_write_gb}" "${compaction_wamp}" "${run_dir}" "${db_dir}" >> "${SUMMARY_FILE}"
+@@ -90,7 +92,7 @@ log "DB_ROOT=${DB_ROOT}"
+ log "SIZES_GB=${SIZES_GB_STR}"
+ log "BG_JOBS=${BG_JOBS}"
+ log "THREADS=1"
+-log "MEMTABLE_REP=vector"
++log "MEMTABLE_REP=${MEMTABLE_REP}"
+ log "DB_BENCH=${DB_BENCH}"
+ log "DISKSTAT_DEV=${DISKSTAT_DEV}"
+ 
+@@ -117,6 +119,7 @@ for size_gb in ${SIZES_GB_STR}; do
+   LOG_DIR="${run_dir}" \
+   RUN_TAG="motivation_${RUN_ID}_${size_gb}gb" \
+   BG_JOBS="${BG_JOBS}" \
++  MEMTABLE_REP="${MEMTABLE_REP}" \
+   bash "${LOAD_SH}" 2>&1 | tee -a "${RUN_LOG}"
+   exit_code=${PIPESTATUS[0]}
+   set -e
+diff --git a/experiments/scripts/read/run_q3_read_workloads.sh b/experiments/scripts/read/run_q3_read_workloads.sh
+index bac5a27bb5..9854600d90 100755
+--- a/experiments/scripts/read/run_q3_read_workloads.sh
++++ b/experiments/scripts/read/run_q3_read_workloads.sh
+@@ -25,6 +25,7 @@ DURATION="${DURATION:-60}"
+ READS="${READS:-0}"
+ CACHE_PCT="${CACHE_PCT:-0}"
+ KEEP_RUN_DB="${KEEP_RUN_DB:-0}"
++YCSB_REQUEST_DISTRIBUTION="${YCSB_REQUEST_DISTRIBUTION:-}"
+ 
+ require_executable "${DB_BENCH}" "db_bench"
+ require_positive_uint THREADS
+@@ -34,6 +35,10 @@ require_uint CACHE_PCT
+ (( CACHE_PCT <= 100 )) || die "CACHE_PCT must be between 0 and 100"
+ [[ "${KEEP_RUN_DB}" == "0" || "${KEEP_RUN_DB}" == "1" ]] ||
+   die "KEEP_RUN_DB must be 0 or 1"
++case "${YCSB_REQUEST_DISTRIBUTION}" in
++  ""|uniform|zipfian|latest) ;;
++  *) die "Unsupported YCSB_REQUEST_DISTRIBUTION: ${YCSB_REQUEST_DISTRIBUTION}" ;;
++esac
+ for workload in ${WORKLOADS}; do
+   case "${workload}" in
+     workloada|workloadb|workloadc|workloadd|workloade|workloadf|mixgraph) ;;
+@@ -189,6 +194,10 @@ log "THREADS=${THREADS}"
+ log "DURATION=${DURATION}"
+ log "READS=${READS}"
+ log "CACHE_PCT=${CACHE_PCT}"
++log "FORCE_CACHE_BYTES=${FORCE_CACHE_BYTES:-<unset>}"
++log "CACHE_INDEX_FILTER=${CACHE_INDEX_FILTER:-<unset>}"
++log "CACHE_TYPE=${CACHE_TYPE:-hyper_clock_cache}"
++log "YCSB_REQUEST_DISTRIBUTION=${YCSB_REQUEST_DISTRIBUTION:-<db_bench default>}"
+ 
+ run_count=0
+ while IFS=$'\t' read -r system case_id size_gb kv_label key_size value_size distribution unique_ratio zipf_alpha db_dir load_log_dir source_summary; do
+@@ -271,6 +280,7 @@ while IFS=$'\t' read -r system case_id size_gb kv_label key_size value_size dist
+       --report_file="${result_dir}/report.rep"
+       --threads="${THREADS}"
+       --duration="${DURATION}"
++      --ops_between_duration_checks=1
+       --reads="${workload_reads}"
+       --num="${num_keys}"
+       --key_size="${key_size}"
+@@ -282,12 +292,16 @@ while IFS=$'\t' read -r system case_id size_gb kv_label key_size value_size dist
+       --cache_type="${CACHE_TYPE:-hyper_clock_cache}"
+       --open_files="${OPEN_FILES:--1}"
+       --bloom_bits=10
++      --disable_auto_compactions=true
+       --max_background_jobs=48
+       --use_direct_reads=true
+       --use_direct_io_for_flush_and_compaction=true
+       --compression_type=none
+     )
+     [[ -n "${readonly_arg}" ]] && cmd+=("${readonly_arg}")
++    if [[ "${workload}" == workload? && -n "${YCSB_REQUEST_DISTRIBUTION}" ]]; then
++      cmd+=(--ycsb_requestdistribution="${YCSB_REQUEST_DISTRIBUTION}")
++    fi
+     cmd+=("${bench_opts[@]}")
+ 
+     { printf '#!/usr/bin/env bash\n'; printf '%q ' "${cmd[@]}"; echo; } > "${raw_dir}/run_cmd.sh"

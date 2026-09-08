@@ -1,0 +1,19 @@
+panel	series	dataset_gib	category	value	unit	point_type	source
+a	1KB	500	Loading time	0.623611111	hour	measured	experiments/artifacts/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv
+a	1KB	1000	Loading time	1.358055556	hour	measured	experiments/artifacts/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv
+a	1KB	2000	Loading time	2.834166667	hour	measured	experiments/artifacts/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv
+a	1KB	4000	Loading time	5.946111111	hour	measured	experiments/artifacts/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv
+a	1KB	8000	Loading time	13.251111111	hour	measured	experiments/artifacts/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv
+a	91B	500	Loading time	2.733888889	hour	measured	experiments/artifacts/log_loads/exp_260604_exp91b_baseline/scaling_91b_none/scaling_91b_summary.tsv
+a	91B	1000	Loading time	5.597500000	hour	measured	experiments/artifacts/log_loads/exp_260604_exp91b_baseline/scaling_91b_none/scaling_91b_summary.tsv
+a	91B	2000	Loading time	11.235555556	hour	measured	experiments/artifacts/log_loads/exp_260604_exp91b_baseline/scaling_91b_none/scaling_91b_summary.tsv
+a	91B	4000	Loading time	23.685833333	hour	measured	experiments/artifacts/log_loads/exp_260604_exp91b_baseline/scaling_91b_none/scaling_91b_summary.tsv
+a	91B	8000	Loading time	46.226027778	hour	measured	experiments/artifacts/log_loads/exp_260822_paper_bg_91b_8tb_direct/preserved/bench.first_complete.out
+b	1KB	500	SST Build	0.792477589	hour	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o1_r1_1kb/compaction_breakdown_all.tsv
+b	1KB	500	Merge	1.874182682	hour	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o1_r1_1kb/compaction_breakdown_all.tsv
+b	1KB	500	I/O	0.753043933	hour	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o1_r1_1kb/compaction_breakdown_all.tsv
+b	1KB	500	Other	0.152106230	hour	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o1_r1_1kb/compaction_breakdown_all.tsv
+b	91B	500	SST Build	4.285604556	hour	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o2_r1_91b/compaction_breakdown_all.tsv
+b	91B	500	Merge	4.404599431	hour	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o2_r1_91b/compaction_breakdown_all.tsv
+b	91B	500	I/O	0.768908568	hour	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o2_r1_91b/compaction_breakdown_all.tsv
+b	91B	500	Other	1.495515184	hour	ok_single_run	experiments/artifacts/log_loads/paper_bg_breakdown_260831_034107/o2_r1_91b/compaction_breakdown_all.tsv

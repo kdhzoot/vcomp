@@ -1,0 +1,11 @@
+series	key_size_B	value_size_B	kv_size_B	dataset_GiB	elapsed_sec	elapsed_hour	fillrandom_sec	fillrandom_hour	status	point_type	compression	memtable	elapsed_basis	source
+1KB	24	1000	1024	500	2245	0.623611111	2220.101	0.616694722	ok	measured	none	skip_list	runner_wall_clock	experiments/artifacts/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv
+1KB	24	1000	1024	1000	4889	1.358055556	4862.919	1.350810833	ok	measured	none	skip_list	runner_wall_clock	experiments/artifacts/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv
+1KB	24	1000	1024	2000	10203	2.834166667	10174.392	2.826220000	ok	measured	none	skip_list	runner_wall_clock	experiments/artifacts/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv
+1KB	24	1000	1024	4000	21406	5.946111111	21381.248	5.939235556	ok	measured	none	skip_list	runner_wall_clock	experiments/artifacts/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv
+1KB	24	1000	1024	8000	47704	13.251111111	47667.155	13.240876389	ok	measured	none	skip_list	runner_wall_clock	experiments/artifacts/log_loads/motivation_load_scaling_260602_cleanrocksdb_motivation/summary.tsv
+91B	48	43	91	500	9842	2.733888889	9750.197	2.708388056	ok	measured	none	vector	runner_wall_clock	experiments/artifacts/log_loads/exp_260604_exp91b_baseline/scaling_91b_none/scaling_91b_summary.tsv
+91B	48	43	91	1000	20151	5.597500000	20091.197	5.580888056	ok	measured	none	vector	runner_wall_clock	experiments/artifacts/log_loads/exp_260604_exp91b_baseline/scaling_91b_none/scaling_91b_summary.tsv
+91B	48	43	91	2000	40448	11.235555556	40357.810	11.210502778	ok_recovered	measured	none	vector	runner_wall_clock	experiments/artifacts/log_loads/exp_260604_exp91b_baseline/scaling_91b_none/scaling_91b_summary.tsv
+91B	48	43	91	4000	85269	23.685833333	85157.895	23.654970833	ok	measured	none	vector	runner_wall_clock	experiments/artifacts/log_loads/exp_260604_exp91b_baseline/scaling_91b_none/scaling_91b_summary.tsv
+91B	48	43	91	8000	166413.7	46.226027778	166310.973	46.197492500	ok_log_recovered_nonisolated	measured	none	vector	final_rocksdb_uptime	experiments/artifacts/log_loads/exp_260822_paper_bg_91b_8tb_direct/preserved/bench.first_complete.out

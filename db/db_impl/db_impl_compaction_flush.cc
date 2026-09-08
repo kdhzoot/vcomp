@@ -5445,6 +5445,134 @@ Status DBImpl::RegisterVirtualL0File(
   return s;
 }
 
+Status DBImpl::InstallVirtualCompactionMaterialization(VersionEdit* edit) {
+  if (edit == nullptr) {
+    return Status::InvalidArgument("Missing materialization VersionEdit");
+  }
+  SuperVersionContext sv_context(/*create_superversion=*/true);
+  Status status;
+  {
+    InstrumentedMutexLock l(&mutex_);
+    // LogAndApply releases mutex_. Serialize with both write queues so that
+    // sequence allocation and publication follow normal ingestion semantics.
+    WriteThread::Writer writer;
+    write_thread_.EnterUnbatched(&writer, &mutex_);
+    WriteThread::Writer nonmem_writer;
+    if (two_write_queues_) {
+      nonmem_write_thread_.EnterUnbatched(&nonmem_writer, &mutex_);
+    }
+    WaitForPendingWrites();
+
+    status = [&]() -> Status {
+      auto* cfd = static_cast<ColumnFamilyHandleImpl*>(
+                      DefaultColumnFamily())->cfd();
+      if (bg_work_paused_ == 0 || !cfd->mem()->IsEmpty() ||
+          cfd->imm()->NumNotFlushed() != 0) {
+        return Status::InvalidArgument(
+            "Materialization requires paused background work and empty "
+            "memtables");
+      }
+      if (edit->GetColumnFamily() != cfd->GetID() ||
+          std::string(cfd->GetLatestMutableCFOptions().table_factory->Name()) !=
+              TableFactory::kBlockBasedTableName() ||
+          cfd->user_comparator()->timestamp_size() != 0) {
+        return Status::NotSupported(
+            "Materialization requires the default CF, block-based external "
+            "SSTs, and no user timestamps");
+      }
+      const auto* storage = cfd->current()->storage_info();
+      for (int level = 0; level < storage->num_levels(); ++level) {
+        for (const auto* file : storage->LevelFiles(level)) {
+          if (edit->GetDeletedFiles().count({level, file->fd.GetNumber()}) == 0) {
+            return Status::InvalidArgument(
+                "Materialization must replace every current file");
+          }
+        }
+      }
+
+      auto& files = edit->GetMutableNewFiles();
+      std::vector<size_t> order;
+      order.reserve(files.size());
+      for (size_t i = 0; i < files.size(); ++i) {
+        const auto& [level, file] = files[i];
+        ParsedInternalKey smallest, largest;
+        Status s = ParseInternalKey(file.smallest.Encode(), &smallest, false);
+        if (s.ok()) {
+          s = ParseInternalKey(file.largest.Encode(), &largest, false);
+        }
+        if (!s.ok()) return s;
+        if (level < 0 || level >= storage->num_levels() ||
+            file.fd.smallest_seqno != 0 || file.fd.largest_seqno != 0 ||
+            smallest.sequence != 0 || largest.sequence != 0 ||
+            smallest.type != kTypeValue || largest.type != kTypeValue ||
+            cfd->user_comparator()->Compare(smallest.user_key,
+                                             largest.user_key) > 0) {
+          return Status::InvalidArgument(
+              "Invalid sequence-zero materialization file metadata");
+        }
+        order.push_back(i);
+      }
+      // A point lookup searches lower-numbered levels first. Within L0 it
+      // searches newest epoch/file first. Match that precedence with distinct
+      // sequences, including overlapping L0 files, so Get and DBIter agree.
+      std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        if (files[a].first != files[b].first) {
+          return files[a].first > files[b].first;
+        }
+        if (files[a].second.epoch_number != files[b].second.epoch_number) {
+          return files[a].second.epoch_number < files[b].second.epoch_number;
+        }
+        return files[a].second.fd.GetNumber() < files[b].second.fd.GetNumber();
+      });
+      SequenceNumber sequence =
+          std::max({versions_->LastSequence(),
+                    versions_->LastAllocatedSequence(),
+                    versions_->LastPublishedSequence()});
+      // kMaxSequenceNumber denotes an unknown sequence when opening an
+      // external SST. Never assign that sentinel as a file-global sequence.
+      if (sequence >= kMaxSequenceNumber ||
+          files.size() >= kMaxSequenceNumber - sequence) {
+        return Status::InvalidArgument("Materialization sequence space exhausted");
+      }
+      for (size_t i : order) {
+        auto& file = files[i].second;
+        ++sequence;
+        file.fd.smallest_seqno = sequence;
+        file.fd.largest_seqno = sequence;
+        UpdateInternalKey(file.smallest.rep(), sequence, kTypeValue);
+        UpdateInternalKey(file.largest.rep(), sequence, kTypeValue);
+      }
+      // Mutating existing AddFile records does not update edit.last_sequence.
+      // Persist the assigned maximum for recovery, just as ingestion does.
+      edit->SetLastSequence(sequence);
+      const ReadOptions ro;
+      const WriteOptions wo;
+      Status s = versions_->LogAndApply(cfd, ro, wo, edit, &mutex_,
+                                        directories_.GetDbDir());
+      if (s.ok()) {
+        // Publish only after the MANIFEST commit. Snapshots taken while the
+        // mutex was released must keep their previous sequence boundary.
+        versions_->SetLastAllocatedSequence(sequence);
+        versions_->SetLastPublishedSequence(sequence);
+        versions_->SetLastSequence(sequence);
+        InstallSuperVersionAndScheduleWork(cfd, &sv_context);
+      }
+      return s;
+    }();
+
+    if (!status.ok() && versions_->io_status().IsIOError()) {
+      error_handler_.SetBGError(versions_->io_status(),
+                               BackgroundErrorReason::kManifestWrite);
+    }
+    if (two_write_queues_) {
+      nonmem_write_thread_.ExitUnbatched(&nonmem_writer);
+    }
+    write_thread_.ExitUnbatched(&writer);
+  }
+  sv_context.Clean();
+  return status;
+}
+
 Status DBImpl::CommitVirtualCompactionEdit(
     Compaction* c, ColumnFamilyData* cfd, VersionEdit* edit,
     const std::vector<VirtualCompactionPendingOutput>& pending_outputs,
@@ -5768,6 +5896,12 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   uint64_t global_min = std::numeric_limits<uint64_t>::max();
   uint64_t global_max = 0;
   for (size_t i = 0; i < models.size(); i++) {
+    if (num_entries_vec[i] > UINT64_MAX - naive_entries) {
+      Status s = Status::InvalidArgument("virtual input count overflow");
+      mutex_.Lock();
+      release_compaction(s);
+      return s;
+    }
     naive_entries += num_entries_vec[i];
     global_min = std::min(global_min, key_mins_vec[i]);
     global_max = std::max(global_max, key_maxs_vec[i]);
@@ -5777,11 +5911,21 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   uint64_t total_entries = 0;
   PLRModel merged;
   const bool use_kmv = VirtualSSTKMVEnabled();
+  Status merge_status;
   if (use_kmv) {
-    merged = NWayMergeKMVRangeAware(input_vsst_ptrs, &total_entries);
+    merged = NWayMergeKMVRangeAware(input_vsst_ptrs, &total_entries,
+                                   /*kmv_samples=*/0, &merge_status);
   } else {
     merged = NWayMergePLR(models, num_entries_vec, key_mins_vec, key_maxs_vec,
                           /*dedup=*/true, &total_entries);
+  }
+  if (!merge_status.ok() || (naive_entries > 0 && merged.Empty())) {
+    Status s = merge_status.ok()
+                   ? Status::Corruption("empty virtual merge result")
+                   : merge_status;
+    mutex_.Lock();
+    release_compaction(s);
+    return s;
   }
   uint64_t merge_us = immutable_db_options_.clock->NowMicros() - merge_t0;
 
@@ -5836,6 +5980,29 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
       merged, total_entries, target_sst_size, avg_entry_size, global_min,
       global_max, output_level, gp_boundaries,
       use_kmv ? &input_vsst_ptrs : nullptr);
+  if (merged.DiscreteModel() != nullptr) {
+    unsigned __int128 output_count = 0;
+    bool valid = !output_vssts.empty();
+    uint64_t previous_max = 0;
+    bool have_previous = false;
+    for (const auto& output : output_vssts) {
+      const auto* model = output.plr_model.DiscreteModel();
+      valid = valid && model != nullptr && model->Count() == output.num_entries &&
+              output.key_min <= output.key_max &&
+              static_cast<unsigned __int128>(output.num_entries) <=
+                  static_cast<unsigned __int128>(output.key_max) - output.key_min + 1 &&
+              (!have_previous || output.key_min > previous_max);
+      output_count += output.num_entries;
+      previous_max = output.key_max;
+      have_previous = true;
+    }
+    if (!valid || output_count != total_entries) {
+      Status s = Status::Corruption("invalid discrete virtual split");
+      mutex_.Lock();
+      release_compaction(s);
+      return s;
+    }
+  }
   uint64_t split_us = immutable_db_options_.clock->NowMicros() - split_t0;
 
   auto key_width = [](uint64_t key_min, uint64_t key_max) -> uint64_t {

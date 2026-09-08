@@ -1,0 +1,16 @@
+{
+  "launcher_pid": 1662856,
+  "started": "2026-09-08T04:57:10.762166+00:00",
+  "argv": [
+    "/usr/bin/python3",
+    "/home/smrc/virtual_compaction/vcomp/experiments/scripts/trace/run_fidelity_dataset_sweep.py",
+    "--run-id",
+    "fidelity_100gib_20260908_seqfix_run3",
+    "--phase",
+    "all"
+  ],
+  "state": "finished",
+  "runner_pid": 1662857,
+  "exit_code": 0,
+  "finished": "2026-09-08T05:23:04.752116+00:00"
+}

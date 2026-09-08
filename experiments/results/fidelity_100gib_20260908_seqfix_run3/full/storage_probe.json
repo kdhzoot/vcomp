@@ -1,0 +1,8 @@
+{
+  "db_root": "/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3",
+  "finished": "2026-09-08T04:57:42.771324+00:00",
+  "md0_array_state": "clean",
+  "probe_directory": "/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3/storage_probe_full_1788843462758286818",
+  "started": "2026-09-08T04:57:42.756668+00:00",
+  "status": "passed"
+}

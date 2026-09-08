@@ -1,0 +1,7 @@
+case	jobs	output_files	estimated_dedup_sum	observed_descriptor_decrease	ledger_closes	infeasible_outputs	sibling_overlaps
+s100gib_1024B_uniform50_f2load	2110	9807	42839625	42839625	True	0	188
+s100gib_1024B_unique100_f2load	2723	12491	2715775	2715775	True	52	25
+s100gib_1024B_zipf99_50_f2load	1388	7074	27942115	27942115	True	0	89
+s100gib_91B_uniform50_f2load	2077	10195	487695848	487695848	True	1	1078
+s100gib_91B_unique100_f2load	2702	12282	32134614	32134614	True	58	11
+s100gib_91B_zipf99_50_f2load	1351	7018	283827640	283827640	True	0	572

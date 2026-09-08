@@ -6,8 +6,10 @@
 
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <vector>
 
+#include "db/virtual_compaction/discrete_cdf.h"
 #include "rocksdb/rocksdb_namespace.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -45,9 +47,18 @@ class PLRModel {
   const PLRSegment& GetSegmentAt(uint64_t key) const;
 
   size_t NumSegments() const { return segments_.size(); }
-  bool Empty() const { return segments_.empty(); }
+  bool Empty() const {
+    return discrete_model_ ? discrete_model_->Empty() : segments_.empty();
+  }
 
   const std::vector<PLRSegment>& Segments() const { return segments_; }
+
+  // Exact count/select certificate for the reconstructed model. It does not
+  // claim exact membership of the original logical input keys.
+  const DiscreteCDF* DiscreteModel() const { return discrete_model_.get(); }
+  void SetDiscreteModel(DiscreteCDF model) {
+    discrete_model_ = std::make_shared<const DiscreteCDF>(std::move(model));
+  }
 
   // Key range of the entire model.
   uint64_t KeyMin() const;
@@ -55,6 +66,7 @@ class PLRModel {
 
  private:
   std::vector<PLRSegment> segments_;
+  std::shared_ptr<const DiscreteCDF> discrete_model_;
 };
 
 // Build a PLR model from sorted keys using the Greedy-PLR algorithm.

@@ -1,0 +1,275 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-09-08T05:16:37.842668+00:00",
+  "run_id": "vcomp_accuracy_20260908",
+  "original_artifact_root": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908",
+  "bundle_root": "/home/smrc/virtual_compaction/vcomp/experiments/results/vcomp_accuracy_20260908",
+  "scope": [
+    "canonical single-stage native CPU oracle",
+    "four-round fixed-original-set closure control"
+  ],
+  "excluded_scope": [
+    "rank_prototype",
+    "run2 entry ledger",
+    "DB fidelity load results",
+    "preliminary portable compilation"
+  ],
+  "measured_static_library_sha256": "d0fc6439d78880351943275a663a2e9a30bc0f2f18426c87a81289bdc0361014",
+  "included_files": [
+    {
+      "bundle_path": "native/REPORT.md",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/native/REPORT.md",
+      "sha256": "bea4e686627996444410b4df6687dd736a2c0fc6bb69fe0a795efae4c8e20f08",
+      "size_bytes": 6101,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "native/manifest.json",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/native/manifest.json",
+      "sha256": "b5c4544e34c86fd7d3e82a713b1e7321c14dce8b24eb033d9344d3c7aa2faa17",
+      "size_bytes": 3095,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "native/probe.jsonl",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/native/probe.jsonl",
+      "sha256": "96d6989dc4d784380362efc3a2a9dc558c491410909dc8b2895df5a882ded43e",
+      "size_bytes": 396031,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "native/pipeline_results.csv",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/native/pipeline_results.csv",
+      "sha256": "2f72095da20b39747bcb73f2dda0881c3159a84148c669363d88fd053fcc2e51",
+      "size_bytes": 40500,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "native/hash_offset_trials.csv",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/native/hash_offset_trials.csv",
+      "sha256": "4b7d0092de9a8cfd4be9af3d7fe4b541254d267da73e4693484f77937b38193f",
+      "size_bytes": 23377,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "native/hash_offset_summary.csv",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/native/hash_offset_summary.csv",
+      "sha256": "dc3cb1545fbb80bb8e910102e3bf93edb6917d6423c0aecaa9665341e0f10ab6",
+      "size_bytes": 855,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "native/hash_offset_summary.json",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/native/hash_offset_summary.json",
+      "sha256": "e31e992d96352ef20ee943b6e84191ac8cb6a1b6e87b851ae0a3cbb35e6eb17c",
+      "size_bytes": 2360,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "native/summarize_probe.py",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/native/summarize_probe.py",
+      "sha256": "cc4007f09f85a1c87de9cb310fc3d3e34f35ca16e1e3f2fe28c429e68b419d61",
+      "size_bytes": 8594,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "native/probe_source.cc",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/native/probe_source.cc",
+      "sha256": "a439b708d6654333538f87e63db2748be5eed4a20b343f6db311f538a9cb4d49",
+      "size_bytes": 13725,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "chain/REPORT.md",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/chain/REPORT.md",
+      "sha256": "d77d4017213dfe239a378f5524f24e8dc6873858f0bd5552d769d5187bae2d50",
+      "size_bytes": 6668,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "chain/manifest.json",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/chain/manifest.json",
+      "sha256": "55a4265cbabed91bf3c8fc8791935ec73b32d6aa017c0fd6738459b583acdc30",
+      "size_bytes": 2661,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "chain/probe.jsonl",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/chain/probe.jsonl",
+      "sha256": "20150763e5e4d1ebc71136e014ded4987c11ea4d992da60a0597721442a8d137",
+      "size_bytes": 116899,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "chain/results.csv",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/chain/results.csv",
+      "sha256": "e1670995a007afb1b06864873a105227422c38afdebfa16d58427b18416080c0",
+      "size_bytes": 16781,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "chain/stage_summary.csv",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/chain/stage_summary.csv",
+      "sha256": "62069d8d073cd56336c5e0b1ca332df3527395d72a08c1fd217c4fc57a3cd05a",
+      "size_bytes": 4247,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "chain/summarize_chain.py",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/chain/summarize_chain.py",
+      "sha256": "8df4b7d67aa43c6c838a5c1044e63d80b8bd69216795a4f06ebe7e7a35746474",
+      "size_bytes": 8881,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "chain/virtual_compaction_accuracy_chain_probe.cc",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/chain/virtual_compaction_accuracy_chain_probe.cc",
+      "sha256": "5e6d78667a560832ad1d434d88ef2863f23bd8ca503161a1d4b7ff11122ea79b",
+      "size_bytes": 4520,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "chain/virtual_compaction_accuracy_probe.cc",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/chain/virtual_compaction_accuracy_probe.cc",
+      "sha256": "a439b708d6654333538f87e63db2748be5eed4a20b343f6db311f538a9cb4d49",
+      "size_bytes": 13725,
+      "role": "measurement evidence",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "source_snapshot/db/virtual_compaction/virtual_sst.cc",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/db/virtual_compaction/virtual_sst.cc",
+      "sha256": "b0ff3ab10ff487e6c0a3c509cc2a5f3bd4e2e02fb942e6fc305156cbb9a59027",
+      "size_bytes": 32255,
+      "role": "executed library API source snapshot, hash checked against measurement manifest",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "source_snapshot/db/virtual_compaction/virtual_sst.h",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/db/virtual_compaction/virtual_sst.h",
+      "sha256": "aabf5c1b868f3a8373f7dec65d9a69607dd6cba7f9f7b12fb393205d1356dcc1",
+      "size_bytes": 4804,
+      "role": "executed library API source snapshot, hash checked against measurement manifest",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "source_snapshot/db/virtual_compaction/plr_model.cc",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/db/virtual_compaction/plr_model.cc",
+      "sha256": "94c8e06fa1934c897f2f127872ec4b34ea001606f7a3a32e313e300663ea708c",
+      "size_bytes": 12204,
+      "role": "executed library API source snapshot, hash checked against measurement manifest",
+      "copy_byte_identical": true
+    },
+    {
+      "bundle_path": "source_snapshot/db/virtual_compaction/plr_model.h",
+      "original_path": "/home/smrc/virtual_compaction/vcomp/db/virtual_compaction/plr_model.h",
+      "sha256": "b36f2863f22796fd2a5e32508e5670dd9af5899f565593cd850d2d5f3fe8084f",
+      "size_bytes": 3005,
+      "role": "executed library API source snapshot, hash checked against measurement manifest",
+      "copy_byte_identical": true
+    }
+  ],
+  "excluded_files": [
+    {
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/native/probe",
+      "sha256": "91c96d3bc362c2d1e1a2b6b15a691802af7d805c9a57288d6e6cc4d991d83eec",
+      "size_bytes": 1424112,
+      "reason": "binary omitted"
+    },
+    {
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/native/build.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "reason": "empty build/runtime log; argv and exit status retained in manifest.json"
+    },
+    {
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/native/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "reason": "empty build/runtime log; argv and exit status retained in manifest.json"
+    },
+    {
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/native/results.json",
+      "sha256": "4541571b06c5cd0583ed4d759c4899be646f231c06705585580c40a8120c264d",
+      "size_bytes": 470456,
+      "reason": "redundant pretty JSON; all raw records preserved in probe.jsonl and summaries"
+    },
+    {
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/chain/probe",
+      "sha256": "337de7fcfaacfb7d36fef0e843534ea56ba56eba6ae4f7cf5d7b2eaeb9562d12",
+      "size_bytes": 1437760,
+      "reason": "binary omitted"
+    },
+    {
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/chain/build.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "reason": "empty build/runtime log; argv and exit status retained in manifest.json"
+    },
+    {
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/chain/stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "reason": "empty build/runtime log; argv and exit status retained in manifest.json"
+    },
+    {
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/chain/results.json",
+      "sha256": "95c66d698f6385f924644c748e986ea3c701f971152fafa431821f98bb10333d",
+      "size_bytes": 133750,
+      "reason": "redundant pretty JSON; all raw records preserved in probe.jsonl and summaries"
+    },
+    {
+      "original_path": "/home/smrc/virtual_compaction/vcomp/librocksdb.a",
+      "sha256": "d0fc6439d78880351943275a663a2e9a30bc0f2f18426c87a81289bdc0361014",
+      "size_bytes": 1317618344,
+      "reason": "large static library; original measured SHA256 retained in both manifests"
+    },
+    {
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/probe_manifest.json",
+      "sha256": "4a590707131bd018aa406ea4bbb9ef620204cd546a45d494b6c9da594c9b1a80",
+      "size_bytes": 2484,
+      "reason": "preliminary portable-build attempt; canonical native-flag rerun retained instead"
+    },
+    {
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/probe_source_v1.cc",
+      "sha256": "b5c2e678ded491eac5402ed42927000db3c810ebe1df006a78589bb98bf33d05",
+      "size_bytes": 13023,
+      "reason": "preliminary portable-build attempt; canonical native-flag rerun retained instead"
+    },
+    {
+      "original_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/probe.jsonl",
+      "sha256": "5efe0805300766a77f0d25a3f8a841425642d3d968eeba25d2ffe3dbb7bcc07a",
+      "size_bytes": 343701,
+      "reason": "preliminary portable-build attempt; canonical native-flag rerun retained instead"
+    },
+    {
+      "original_path": "/home/smrc/virtual_compaction/vcomp/tools/db_bench_tool.cc",
+      "sha256": "9261451db12315888d33b5c15d947f7ee4c66ed03a04f0a718aa4aecb64f7801",
+      "size_bytes": 452904,
+      "reason": "loader-reference source only; not called by CPU probe; reference walk is included in probe source snapshots"
+    }
+  ],
+  "generated_bundle_files": [
+    "README.md",
+    "bundle_manifest.json",
+    "ORIGIN_INVENTORY.json",
+    "validate_bundle.py"
+  ],
+  "note": "Copied source reports and measurement records retain original paths and original numeric values unchanged."
+}

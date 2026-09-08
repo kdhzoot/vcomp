@@ -1,0 +1,8 @@
+[
+  "g++-11",
+  "-O3",
+  "-std=c++17",
+  "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/generate_load_trace_fast.cc",
+  "-o",
+  "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/bin/generate_load_trace_fast"
+]

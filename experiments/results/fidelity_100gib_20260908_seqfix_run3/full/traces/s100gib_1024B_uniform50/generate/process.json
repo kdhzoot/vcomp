@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/bin/generate_load_trace_fast",
+    "/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_uniform50.vload",
+    "--num",
+    "104857600",
+    "--key-size",
+    "24",
+    "--value-size",
+    "1000",
+    "--key-domain",
+    "104857600",
+    "--unique-count",
+    "52428800",
+    "--zipf-alpha",
+    "0",
+    "--seed",
+    "12345678"
+  ],
+  "elapsed_sec": 1.9895544052124023,
+  "exit_code": 0,
+  "finished": "2026-09-08T04:57:44.767326+00:00",
+  "pid": 1665909,
+  "started": "2026-09-08T04:57:42.792869+00:00",
+  "state": "finished"
+}

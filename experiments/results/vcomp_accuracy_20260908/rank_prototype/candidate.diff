@@ -1,0 +1,29 @@
+--- original_virtual_sst.cc
++++ candidate_virtual_sst.cc
+@@ -352,7 +352,7 @@
+   if (breakpoints.size() == 1) {
+     if (adjusted_total != nullptr) *adjusted_total = kmv_total_entries;
+     return PLRModel({PLRSegment{breakpoints[0], breakpoints[0], 0.0,
+-                                static_cast<double>(kmv_total_entries) / 2.0}});
++                                0.0}});
+   }
+ 
+   std::vector<size_t> model_order(N);
+@@ -439,7 +439,7 @@
+ 
+   if (kmv_total_entries > 0 && raw_total_entries > 0.0L) {
+     const double scale =
+-        static_cast<double>(static_cast<long double>(kmv_total_entries) /
++        static_cast<double>(static_cast<long double>(kmv_total_entries > 0 ? kmv_total_entries - 1 : 0) /
+                             raw_total_entries);
+     for (auto& seg : merged) {
+       seg.slope *= scale;
+@@ -448,7 +448,7 @@
+     const long double width = std::max<long double>(
+         1.0L, static_cast<long double>(breakpoints.back() - breakpoints.front()));
+     const double slope =
+-        static_cast<double>(static_cast<long double>(kmv_total_entries) / width);
++        static_cast<double>(static_cast<long double>(kmv_total_entries > 0 ? kmv_total_entries - 1 : 0) / width);
+     for (auto& seg : merged) {
+       seg.slope = slope;
+     }

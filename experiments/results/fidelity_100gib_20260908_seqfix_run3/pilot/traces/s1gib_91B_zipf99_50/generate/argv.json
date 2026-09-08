@@ -1,0 +1,18 @@
+[
+  "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/bin/generate_load_trace_fast",
+  "/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_zipf99_50.vload",
+  "--num",
+  "11799360",
+  "--key-size",
+  "48",
+  "--value-size",
+  "43",
+  "--key-domain",
+  "11799360",
+  "--unique-count",
+  "5899680",
+  "--zipf-alpha",
+  "0.99",
+  "--seed",
+  "12345678"
+]

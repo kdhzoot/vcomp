@@ -1,0 +1,66 @@
+{
+  "case_id": "s100gib_91B_unique100",
+  "db_dir": "/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3/full/db/s100gib_91B_unique100_f2load",
+  "delta": -230319682,
+  "dropped_live_entries": 2701481,
+  "estimated_pending_compaction_bytes": 0,
+  "exact_unique_keys": 949616388,
+  "expected_unique_keys": 1179936070,
+  "fidelity_matches": false,
+  "input_operations": 1179936070,
+  "key_size": 48,
+  "levels": [
+    {
+      "level": 0,
+      "sst_bytes": 0,
+      "sst_count": 0,
+      "sst_entry_sum": 0
+    },
+    {
+      "level": 1,
+      "sst_bytes": 157405194,
+      "sst_count": 3,
+      "sst_entry_sum": 1604277
+    },
+    {
+      "level": 2,
+      "sst_bytes": 2635412418,
+      "sst_count": 44,
+      "sst_entry_sum": 26933908
+    },
+    {
+      "level": 3,
+      "sst_bytes": 26689190284,
+      "sst_count": 406,
+      "sst_entry_sum": 273060815
+    },
+    {
+      "level": 4,
+      "sst_bytes": 81129813213,
+      "sst_count": 1237,
+      "sst_entry_sum": 830122199
+    },
+    {
+      "level": 5,
+      "sst_bytes": 0,
+      "sst_count": 0,
+      "sst_entry_sum": 0
+    },
+    {
+      "level": 6,
+      "sst_bytes": 0,
+      "sst_count": 0,
+      "sst_entry_sum": 0
+    }
+  ],
+  "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_f2load",
+  "relative_error": -0.1951967465491584,
+  "size_gib": 100,
+  "sst_entry_sum": 1131721199,
+  "stage1_live_descriptor_entries": 1146031749,
+  "stage2_live_sst_keys_written": 1143330268,
+  "stage2_sst_keys_written": 1143330268,
+  "status": "validated",
+  "system": "f2load",
+  "value_size": 43
+}

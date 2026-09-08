@@ -4,6 +4,7 @@
 //  (found in the LICENSE.Apache file in the root directory).
 
 #include "db/virtual_compaction/virtual_sst.h"
+#include "db/virtual_compaction/discrete_merge.h"
 
 #include <algorithm>
 #include <cassert>
@@ -116,11 +117,31 @@ KMVSketch BuildKMVSketchFromSortedKeyRange(
 }  // namespace
 
 size_t VirtualSSTKMVSamples() {
-  return kDefaultKMVSamples;
+  const char* value = std::getenv("VCOMP_KMV_SAMPLES");
+  if (value == nullptr || *value == '\0') return kDefaultKMVSamples;
+  size_t parsed = 0;
+  for (const char* p = value; *p != '\0'; ++p) {
+    if (*p < '0' || *p > '9' ||
+        parsed > (std::numeric_limits<size_t>::max() - (*p - '0')) / 10) {
+      return kDefaultKMVSamples;
+    }
+    parsed = parsed * 10 + (*p - '0');
+  }
+  return parsed == 0 ? kDefaultKMVSamples : parsed;
 }
 
 size_t VirtualSSTKMVRangeBuckets() {
-  return kDefaultKMVRangeBuckets;
+  const char* value = std::getenv("VCOMP_KMV_RANGE_BUCKETS");
+  if (value == nullptr || *value == '\0') return kDefaultKMVRangeBuckets;
+  size_t parsed = 0;
+  for (const char* p = value; *p != '\0'; ++p) {
+    if (*p < '0' || *p > '9' ||
+        parsed > (std::numeric_limits<size_t>::max() - (*p - '0')) / 10) {
+      return kDefaultKMVRangeBuckets;
+    }
+    parsed = parsed * 10 + (*p - '0');
+  }
+  return parsed == 0 ? kDefaultKMVRangeBuckets : parsed;
 }
 
 bool VirtualSSTKMVEnabled() {
@@ -132,6 +153,32 @@ bool VirtualSSTKMVEnabled() {
   std::transform(v.begin(), v.end(), v.begin(),
                  [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return !(v == "0" || v == "false" || v == "off" || v == "no");
+}
+
+bool VirtualSSTDiscreteCDFEnabled() {
+  const char* value = std::getenv("VCOMP_DISCRETE_CDF_ENABLED");
+  if (value == nullptr || *value == '\0') return true;
+  std::string v(value);
+  std::transform(v.begin(), v.end(), v.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return !(v == "0" || v == "false" || v == "off" || v == "no");
+}
+
+Status CertifyVirtualSST(VirtualSST* vsst) {
+  if (vsst == nullptr) return Status::InvalidArgument("null virtual SST");
+  if (!VirtualSSTKMVEnabled() || !VirtualSSTDiscreteCDFEnabled() ||
+      vsst->num_entries == 0 || vsst->plr_model.DiscreteModel() != nullptr) {
+    return Status::OK();
+  }
+  PLRModel model;
+  uint64_t accepted = 0;
+  Status s = BuildDiscreteMergeModel({vsst}, vsst->num_entries, &model, &accepted);
+  if (!s.ok()) return s;
+  if (accepted != vsst->num_entries) {
+    return Status::Corruption("discrete flush changed its exact count");
+  }
+  vsst->plr_model = std::move(model);
+  return Status::OK();
 }
 
 KMVSketch BuildKMVSketchFromSortedKeys(const std::vector<uint64_t>& sorted_keys,
@@ -246,8 +293,10 @@ uint64_t EstimateKMVUnionEntriesForRange(
     if (!input->kmv_ranges.empty()) {
       for (const auto& range : input->kmv_ranges) {
         if (range.key_max < key_min || range.key_min > key_max) continue;
-        pieces.push_back(SketchPiece{&range.sketch, range.key_min,
-                                     range.key_max, range.num_entries});
+        pieces.push_back(SketchPiece{
+            &range.sketch, range.key_min, range.key_max,
+            range.entries_are_modeled ? range.raw_estimated_entries
+                                      : range.num_entries});
       }
     } else {
       pieces.push_back(SketchPiece{&input->kmv_sketch, input->key_min,
@@ -315,7 +364,9 @@ uint64_t EstimateKMVUnionEntriesForRange(
 
 PLRModel NWayMergeKMVRangeAware(const std::vector<const VirtualSST*>& inputs,
                                 uint64_t* adjusted_total,
-                                size_t kmv_samples) {
+                                size_t kmv_samples,
+                                Status* status) {
+  if (status != nullptr) *status = Status::OK();
   if (kmv_samples == 0) kmv_samples = VirtualSSTKMVSamples();
   if (adjusted_total != nullptr) *adjusted_total = 0;
   if (inputs.empty()) return PLRModel();
@@ -324,10 +375,29 @@ PLRModel NWayMergeKMVRangeAware(const std::vector<const VirtualSST*>& inputs,
   uint64_t naive_entries = 0;
   for (const auto* input : inputs) {
     if (input == nullptr) continue;
+    if (input->num_entries > UINT64_MAX - naive_entries) {
+      if (status != nullptr) {
+        *status = Status::InvalidArgument("virtual input count overflow");
+      }
+      return PLRModel();
+    }
     naive_entries += input->num_entries;
   }
   uint64_t kmv_total_entries =
       EstimateKMVUnionEntries(inputs, naive_entries, kmv_samples);
+
+  if (VirtualSSTDiscreteCDFEnabled()) {
+    PLRModel model;
+    uint64_t accepted = 0;
+    Status s = BuildDiscreteMergeModel(inputs, kmv_total_entries, &model,
+                                       &accepted);
+    if (!s.ok()) {
+      if (status != nullptr) *status = s;
+      return PLRModel();
+    }
+    if (adjusted_total != nullptr) *adjusted_total = accepted;
+    return model;
+  }
 
   std::vector<uint64_t> breakpoints;
   size_t total_bp = 0;
@@ -549,7 +619,8 @@ std::vector<KMVRangeSketch> MergeKMVRangeSketchesForOutput(
     uint64_t key_max,
     uint64_t num_entries,
     size_t max_samples,
-    size_t max_ranges) {
+    size_t max_ranges,
+    const DiscreteCDF* model = nullptr) {
   std::vector<KMVRangeSketch> ranges;
   if (inputs.empty() || num_entries == 0 || key_max < key_min) return ranges;
   if (max_samples == 0) max_samples = VirtualSSTKMVSamples();
@@ -564,6 +635,9 @@ std::vector<KMVRangeSketch> MergeKMVRangeSketchesForOutput(
   unsigned __int128 span =
       static_cast<unsigned __int128>(key_max) -
       static_cast<unsigned __int128>(key_min) + 1;
+  range_count = static_cast<size_t>(
+      std::min<unsigned __int128>(range_count, span));
+  samples_per_range = std::max<size_t>(1, max_samples / range_count);
   for (size_t i = 0; i < range_count; i++) {
     unsigned __int128 start_off = (span * i) / range_count;
     unsigned __int128 end_off = (span * (i + 1)) / range_count;
@@ -575,8 +649,13 @@ std::vector<KMVRangeSketch> MergeKMVRangeSketchesForOutput(
     KMVRangeSketch range;
     range.key_min = range_min;
     range.key_max = range_max;
-    range.num_entries =
+    range.raw_estimated_entries =
         EstimateKMVUnionEntriesForRange(inputs, range_min, range_max);
+    range.entries_are_modeled = model != nullptr;
+    range.num_entries = model == nullptr
+                            ? range.raw_estimated_entries
+                            : model->CountThrough(range_max) -
+                                  model->CountLessThan(range_min);
     range.sketch = MergeKMVSketchesForRange(inputs, range_min, range_max,
                                             samples_per_range);
     if (range.num_entries > 0 || !range.sketch.samples.empty()) {
@@ -612,6 +691,9 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
   std::vector<VirtualSST> result;
 
   if (total_entries == 0 || plr.Empty()) return result;
+  if (avg_entry_size == 0) return result;
+  const DiscreteCDF* discrete = plr.DiscreteModel();
+  if (discrete != nullptr && discrete->Count() != total_entries) return result;
 
   // Intra-L0 (target_level == 0): baseline RocksDB never splits L0 outputs.
   // See CompactionOutputs::ShouldStopBefore in
@@ -624,17 +706,18 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
   if (target_level == 0) {
     VirtualSST vsst;
     vsst.plr_model = plr;
-    vsst.key_min = global_min;
-    vsst.key_max = global_max;
+    vsst.key_min = discrete == nullptr ? global_min : discrete->Select(0);
+    vsst.key_max = discrete == nullptr ? global_max
+                                      : discrete->Select(total_entries - 1);
     vsst.num_entries = total_entries;
     vsst.level = 0;
     vsst.size_bytes = VirtualSST::EstimateSize(total_entries, avg_entry_size);
     if (kmv_inputs != nullptr) {
-      vsst.kmv_sketch = MergeKMVSketchesForRange(*kmv_inputs, global_min,
-                                                 global_max, kmv_samples);
+      vsst.kmv_sketch = MergeKMVSketchesForRange(*kmv_inputs, vsst.key_min,
+                                                 vsst.key_max, kmv_samples);
       vsst.kmv_ranges = MergeKMVRangeSketchesForOutput(
-          *kmv_inputs, global_min, global_max, total_entries, kmv_samples,
-          /*max_ranges=*/0);
+          *kmv_inputs, vsst.key_min, vsst.key_max, total_entries, kmv_samples,
+          /*max_ranges=*/0, discrete);
     }
     result.push_back(std::move(vsst));
     return result;
@@ -647,8 +730,9 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
   // Compaction::max_output_file_size_ computation.
   bool has_grandparents =
       !grandparent_boundaries.empty() && target_level > 0;
-  uint64_t max_sst_size =
-      has_grandparents ? 2 * target_sst_size : target_sst_size;
+  uint64_t max_sst_size = has_grandparents
+      ? (target_sst_size > UINT64_MAX / 2 ? UINT64_MAX : 2 * target_sst_size)
+      : target_sst_size;
 
   uint64_t keys_per_sst = max_sst_size / avg_entry_size;
   if (keys_per_sst == 0) keys_per_sst = 1;
@@ -665,6 +749,11 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
   if (!grandparent_boundaries.empty() && target_level > 0) {
     for (uint64_t bkey : grandparent_boundaries) {
       if (bkey <= global_min || bkey >= global_max) continue;
+      if (discrete != nullptr) {
+        const uint64_t pos = discrete->CountLessThan(bkey);
+        if (pos > 0 && pos < total_entries) gp_positions.push_back(pos);
+        continue;
+      }
       double pos_d = plr.Predict(bkey);
       if (pos_d > 0 && pos_d < static_cast<double>(total_entries)) {
         gp_positions.push_back(static_cast<uint64_t>(std::round(pos_d)));
@@ -696,7 +785,8 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
         // Size-based hard cut.
         split_positions.push_back(next_size_split);
         last_split = next_size_split;
-        next_size_split = last_split + keys_per_sst;
+        next_size_split = keys_per_sst > total_entries - last_split
+                              ? total_entries : last_split + keys_per_sst;
         switched = 0;
         // Skip grandparent boundaries we've passed.
         while (gp_idx < gp_positions.size() &&
@@ -706,13 +796,16 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
       } else if (next_gp < total_entries) {
         // GP boundary: count it, then evaluate dynamic threshold in BYTES.
         switched++;
-        uint64_t cur_bytes = (next_gp - last_split) * avg_entry_size;
+        unsigned __int128 cur_bytes =
+            static_cast<unsigned __int128>(next_gp - last_split) * avg_entry_size;
         uint64_t pct = 50 + std::min<uint64_t>(switched * 5, 40);
-        uint64_t threshold_bytes = (target_sst_size * pct) / 100;
-        if (cur_bytes >= threshold_bytes) {
+        unsigned __int128 threshold_bytes =
+            (static_cast<unsigned __int128>(target_sst_size) * pct) / 100;
+        if (next_gp > last_split && cur_bytes >= threshold_bytes) {
           split_positions.push_back(next_gp);
           last_split = next_gp;
-          next_size_split = last_split + keys_per_sst;
+          next_size_split = keys_per_sst > total_entries - last_split
+                                ? total_entries : last_split + keys_per_sst;
           switched = 0;
         }
         gp_idx++;
@@ -739,6 +832,10 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
         (i == num_ssts - 1)
             ? global_max
             : plr.Inverse(static_cast<double>(pos_end - 1));
+    if (discrete != nullptr) {
+      key_start = discrete->Select(pos_start);
+      key_end = discrete->Select(pos_end - 1);
+    }
 
     // File metadata should describe the actual keys in this output run, not a
     // gapless partition of the key space. Sparse random keys can have large
@@ -763,6 +860,9 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
 
     VirtualSST vsst;
     vsst.plr_model = PLRModel(std::move(sub_segments));
+    if (discrete != nullptr) {
+      vsst.plr_model.SetDiscreteModel(discrete->Slice(pos_start, n_entries));
+    }
     vsst.key_min = key_start;
     vsst.key_max = key_end;
     vsst.num_entries = n_entries;
@@ -773,7 +873,7 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
                                                  key_end, kmv_samples);
       vsst.kmv_ranges = MergeKMVRangeSketchesForOutput(
           *kmv_inputs, key_start, key_end, n_entries, kmv_samples,
-          /*max_ranges=*/0);
+          /*max_ranges=*/0, vsst.plr_model.DiscreteModel());
     }
 
     result.push_back(std::move(vsst));
@@ -786,6 +886,14 @@ std::vector<uint64_t> MaterializeKeys(const VirtualSST& vsst) {
   std::vector<uint64_t> keys;
   if (vsst.num_entries == 0 || vsst.plr_model.Empty()) return keys;
   keys.reserve(vsst.num_entries);
+  if (const auto* discrete = vsst.plr_model.DiscreteModel()) {
+    if (discrete->Count() != vsst.num_entries) return keys;
+    auto cursor = discrete->NewCursor();
+    uint64_t key;
+    while (cursor.Next(&key)) keys.push_back(key);
+    if (!cursor.status().ok()) keys.clear();
+    return keys;
+  }
 
   // Walk segments linearly since positions are sequential (0, 1, 2, ...).
   // Much faster than calling Inverse() with its per-call search.

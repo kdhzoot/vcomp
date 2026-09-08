@@ -1,0 +1,577 @@
+diff --git a/README.md b/README.md
+index c38965898..c8c1e9bfd 100644
+--- a/README.md
++++ b/README.md
+@@ -494,10 +494,21 @@ for i = 1..len(keys)-1:
+ # If +1 accumulation pushed past key_max, cap and dedup from the tail.
+ ```
+ 
+-Each VirtualSST is materialized independently — no cross-file merge is
+-needed because BG compaction has already ensured L1+ files have
+-non-overlapping key ranges. Materialization and SST writing are fused
+-into a single parallel step using direct I/O.
++Each VirtualSST is materialized independently. Non-overlap is a within-level
++property of L1+; different levels can still generate the same user key.
++Materialization and SST writing are fused into a single parallel step using
++direct I/O. This generation path does not guarantee global distinct cardinality
++or that every descriptor's planned count fits its generated key range.
++
++Final registration uses `InstallVirtualCompactionMaterialization()` to assign
++distinct positive file-global sequences through MANIFEST metadata. Higher
++levels in lookup order (smaller level numbers) receive higher sequences; L0
++files follow epoch/file precedence. The helper updates exact InternalKey
++bounds, commits the edit, publishes the sequence counters, and installs the
++new SuperVersion while writes are serialized. Clean RocksDB readers apply the
++external-SST global sequence override without an SST rewrite. This fixes
++duplicate iterator output while retaining the independently generated keys
++and chosen levels; it does not correct cardinality or key-distribution errors.
+ 
+ ---
+ 
+@@ -619,14 +630,14 @@ compaction — an infinite spin that hangs `WaitForCompact`.
+ | `options/db_options.{h,cc}` | `ImmutableDBOptions` mapping |
+ | `db/db_impl/db_impl.h` | `VirtualSSTRegistry`, pending L0 window state, refill/configuration APIs, virtual compaction commit queue |
+ | `db/db_impl/db_impl.cc` | Initialize registry when `use_virtual_compaction` is enabled |
+-| `db/db_impl/db_impl_compaction_flush.cc` | Real/virtual dispatch guard, `RegisterVirtualL0File()`, `RefillVirtualL0Window()`, `RunVirtualCompaction()`, commit batching, deferred obsolete cleanup |
++| `db/db_impl/db_impl_compaction_flush.cc` | Real/virtual dispatch guard, `RegisterVirtualL0File()`, `RefillVirtualL0Window()`, `RunVirtualCompaction()`, commit batching, deferred obsolete cleanup, sequence-safe `InstallVirtualCompactionMaterialization()` |
+ | `db/db_impl/db_impl_files.cc` | Skip disk deletion for virtual files |
+ | `db/version_set.cc` | Skip `LoadTableHandlers` / `VerifyFileMetadata` for virtual files; use per-level score inputs to avoid rescanning unchanged Version append paths |
+ | `db/compaction/compaction_picker*.cc` | Use registered L0 files directly; no virtual eligibility filtering |
+ | `db/virtual_compaction/virtual_sst.{h,cc}` | `SplitIntoSSTs` (dynamic threshold + GP), `MaterializeKeys`, `VirtualCompact` |
+ | `db/virtual_compaction/virtual_sst_registry.h` | Thread-safe `file_number → VirtualSST` registry |
+ | `db/virtual_compaction/plr_model.{h,cc}` | `GreedyPLRFit`, `NWayMergePLR` with optional dedup |
+-| `tools/db_bench_tool.cc` | `fillvirtual` benchmark with pending-window L0 registration, Phase 2 workers using direct I/O, `coverage` benchmark for per-level file-coverage probes; Phase 2b uses `kMaxSequenceNumber` for output `smallest` InternalKey to match `RegisterVirtualL0File`'s convention |
++| `tools/db_bench_tool.cc` | `fillvirtual` benchmark with pending-window L0 registration, Phase 2 workers using direct I/O, `coverage` benchmark for per-level file-coverage probes; Phase 2b supplies exact sequence-zero bounds to the materialization installer, which assigns effective file-global sequences |
+ 
+ ### Key optimizations in FillVirtual
+ 
+diff --git a/db/db_impl/db_impl.h b/db/db_impl/db_impl.h
+index 4a19d7e2a..bf1b3f3be 100644
+--- a/db/db_impl/db_impl.h
++++ b/db/db_impl/db_impl.h
+@@ -1189,6 +1189,15 @@ class DBImpl : public DB {
+   void ReleaseVirtualCompactionMaterializationOutputs(
+       std::unique_ptr<std::list<uint64_t>::iterator>& v);
+ 
++  // Install fillvirtual's complete materialization of the default CF. The
++  // caller must pause background work, replace every current file, and protect
++  // the new outputs from deletion. Memtables must be empty. New files must be
++  // block-based SstFileWriter outputs (external version 2, global sequence 0),
++  // with exact value-key bounds and zero sequence metadata in the edit.
++  // Assigns file-global sequences in read-precedence order without rewriting
++  // SSTs or changing levels/keys. Must NOT hold mutex when calling.
++  Status InstallVirtualCompactionMaterialization(VersionEdit* edit);
++
+   // Initialize a brand new DB. The DB directory is expected to be empty before
+   // calling it. Push new manifest file name into `new_filenames`.
+   Status NewDB(std::vector<std::string>* new_filenames);
+diff --git a/db/db_impl/db_impl_compaction_flush.cc b/db/db_impl/db_impl_compaction_flush.cc
+index ad355fe74..989571ec6 100644
+--- a/db/db_impl/db_impl_compaction_flush.cc
++++ b/db/db_impl/db_impl_compaction_flush.cc
+@@ -5445,6 +5445,134 @@ Status DBImpl::RegisterVirtualL0File(
+   return s;
+ }
+ 
++Status DBImpl::InstallVirtualCompactionMaterialization(VersionEdit* edit) {
++  if (edit == nullptr) {
++    return Status::InvalidArgument("Missing materialization VersionEdit");
++  }
++  SuperVersionContext sv_context(/*create_superversion=*/true);
++  Status status;
++  {
++    InstrumentedMutexLock l(&mutex_);
++    // LogAndApply releases mutex_. Serialize with both write queues so that
++    // sequence allocation and publication follow normal ingestion semantics.
++    WriteThread::Writer writer;
++    write_thread_.EnterUnbatched(&writer, &mutex_);
++    WriteThread::Writer nonmem_writer;
++    if (two_write_queues_) {
++      nonmem_write_thread_.EnterUnbatched(&nonmem_writer, &mutex_);
++    }
++    WaitForPendingWrites();
++
++    status = [&]() -> Status {
++      auto* cfd = static_cast<ColumnFamilyHandleImpl*>(
++                      DefaultColumnFamily())->cfd();
++      if (bg_work_paused_ == 0 || !cfd->mem()->IsEmpty() ||
++          cfd->imm()->NumNotFlushed() != 0) {
++        return Status::InvalidArgument(
++            "Materialization requires paused background work and empty "
++            "memtables");
++      }
++      if (edit->GetColumnFamily() != cfd->GetID() ||
++          std::string(cfd->GetLatestMutableCFOptions().table_factory->Name()) !=
++              TableFactory::kBlockBasedTableName() ||
++          cfd->user_comparator()->timestamp_size() != 0) {
++        return Status::NotSupported(
++            "Materialization requires the default CF, block-based external "
++            "SSTs, and no user timestamps");
++      }
++      const auto* storage = cfd->current()->storage_info();
++      for (int level = 0; level < storage->num_levels(); ++level) {
++        for (const auto* file : storage->LevelFiles(level)) {
++          if (edit->GetDeletedFiles().count({level, file->fd.GetNumber()}) == 0) {
++            return Status::InvalidArgument(
++                "Materialization must replace every current file");
++          }
++        }
++      }
++
++      auto& files = edit->GetMutableNewFiles();
++      std::vector<size_t> order;
++      order.reserve(files.size());
++      for (size_t i = 0; i < files.size(); ++i) {
++        const auto& [level, file] = files[i];
++        ParsedInternalKey smallest, largest;
++        Status s = ParseInternalKey(file.smallest.Encode(), &smallest, false);
++        if (s.ok()) {
++          s = ParseInternalKey(file.largest.Encode(), &largest, false);
++        }
++        if (!s.ok()) return s;
++        if (level < 0 || level >= storage->num_levels() ||
++            file.fd.smallest_seqno != 0 || file.fd.largest_seqno != 0 ||
++            smallest.sequence != 0 || largest.sequence != 0 ||
++            smallest.type != kTypeValue || largest.type != kTypeValue ||
++            cfd->user_comparator()->Compare(smallest.user_key,
++                                             largest.user_key) > 0) {
++          return Status::InvalidArgument(
++              "Invalid sequence-zero materialization file metadata");
++        }
++        order.push_back(i);
++      }
++      // A point lookup searches lower-numbered levels first. Within L0 it
++      // searches newest epoch/file first. Match that precedence with distinct
++      // sequences, including overlapping L0 files, so Get and DBIter agree.
++      std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
++        if (files[a].first != files[b].first) {
++          return files[a].first > files[b].first;
++        }
++        if (files[a].second.epoch_number != files[b].second.epoch_number) {
++          return files[a].second.epoch_number < files[b].second.epoch_number;
++        }
++        return files[a].second.fd.GetNumber() < files[b].second.fd.GetNumber();
++      });
++      SequenceNumber sequence =
++          std::max({versions_->LastSequence(),
++                    versions_->LastAllocatedSequence(),
++                    versions_->LastPublishedSequence()});
++      // kMaxSequenceNumber denotes an unknown sequence when opening an
++      // external SST. Never assign that sentinel as a file-global sequence.
++      if (sequence >= kMaxSequenceNumber ||
++          files.size() >= kMaxSequenceNumber - sequence) {
++        return Status::InvalidArgument("Materialization sequence space exhausted");
++      }
++      for (size_t i : order) {
++        auto& file = files[i].second;
++        ++sequence;
++        file.fd.smallest_seqno = sequence;
++        file.fd.largest_seqno = sequence;
++        UpdateInternalKey(file.smallest.rep(), sequence, kTypeValue);
++        UpdateInternalKey(file.largest.rep(), sequence, kTypeValue);
++      }
++      // Mutating existing AddFile records does not update edit.last_sequence.
++      // Persist the assigned maximum for recovery, just as ingestion does.
++      edit->SetLastSequence(sequence);
++      const ReadOptions ro;
++      const WriteOptions wo;
++      Status s = versions_->LogAndApply(cfd, ro, wo, edit, &mutex_,
++                                        directories_.GetDbDir());
++      if (s.ok()) {
++        // Publish only after the MANIFEST commit. Snapshots taken while the
++        // mutex was released must keep their previous sequence boundary.
++        versions_->SetLastAllocatedSequence(sequence);
++        versions_->SetLastPublishedSequence(sequence);
++        versions_->SetLastSequence(sequence);
++        InstallSuperVersionAndScheduleWork(cfd, &sv_context);
++      }
++      return s;
++    }();
++
++    if (!status.ok() && versions_->io_status().IsIOError()) {
++      error_handler_.SetBGError(versions_->io_status(),
++                               BackgroundErrorReason::kManifestWrite);
++    }
++    if (two_write_queues_) {
++      nonmem_write_thread_.ExitUnbatched(&nonmem_writer);
++    }
++    write_thread_.ExitUnbatched(&writer);
++  }
++  sv_context.Clean();
++  return status;
++}
++
+ Status DBImpl::CommitVirtualCompactionEdit(
+     Compaction* c, ColumnFamilyData* cfd, VersionEdit* edit,
+     const std::vector<VirtualCompactionPendingOutput>& pending_outputs,
+diff --git a/tools/db_bench_tool.cc b/tools/db_bench_tool.cc
+index 7cf682d73..24c2976ca 100644
+--- a/tools/db_bench_tool.cc
++++ b/tools/db_bench_tool.cc
+@@ -41,6 +41,7 @@
+ #include <mutex>
+ #include <optional>
+ #include <queue>
++#include <sstream>
+ #include <thread>
+ #include <unordered_map>
+ 
+@@ -912,6 +913,10 @@ DEFINE_string(vcomp_accuracy_trace_dir, "",
+               "If not empty, run virtual compaction prediction alongside real "
+               "compactions and write per-job accuracy records to this directory.");
+ 
++DEFINE_string(vcomp_fidelity_report_dir, "",
++              "If not empty, write fillvirtual descriptor/materialization "
++              "cardinality diagnostics (fidelity.json and files.tsv) here.");
++
+ DEFINE_string(load_trace_file, "",
+               "Path to a VLOADTR1 binary key-id trace for baseload.");
+ DEFINE_int64(load_trace_max_ops, 0,
+@@ -6478,8 +6483,9 @@ class Benchmark {
+             (FLAGS_env->NowMicros() - obsolete_cleanup_start) / 1e6);
+ 
+     // ── Phase 2: Materialize each VirtualSST directly to a real SST file ──
+-    // BG compaction ensures L1+ files are non-overlapping, so each VirtualSST
+-    // can be materialized independently — no cross-file merge/dedup needed.
++    // BG compaction ensures non-overlap within each L1+ level. Different
++    // levels can contain the same generated key; final registration assigns
++    // file-global sequences so RocksDB exposes a single visible version.
+     fprintf(stderr, "FillVirtual: materializing to DB...\n");
+     auto phase2_start = FLAGS_env->NowMicros();
+ 
+@@ -6588,18 +6594,165 @@ class Benchmark {
+ 
+     // Parallel: materialize keys + write SST, one per VirtualSST.
+     struct SSTResult {
+-      uint64_t file_number;
+-      int level;
+-      uint64_t file_size;
+-      uint64_t keys_written;
++      uint64_t file_number = 0;
++      int level = 0;
++      uint64_t file_size = 0;
++      uint64_t keys_written = 0;
+       std::string first_key;
+       std::string last_key;
+-      bool ok;
++      bool ok = false;
+       uint64_t tail_size = 0;
++      uint64_t put_successes = 0;
++      uint64_t skipped_nonincreasing_keys = 0;
++      bool put_failed = false;
++      const char* report_status = "not_started";
++      const char* stop_reason = "none";
+     };
+     std::vector<SSTResult> results(tasks.size());
+     std::atomic<int64_t> total_written{0};
+ 
++    // These are physical-entry diagnostics, not a distinct live-key census:
++    // different levels may still contain the same user key. Capture both the
++    // registry and Version membership before workers or the final VersionEdit.
++    const bool fidelity_enabled = !FLAGS_vcomp_fidelity_report_dir.empty();
++    bool fidelity_version_applied = false;
++    bool fidelity_manifest_ok = false;
++    bool materialize_ok = true;
++    auto write_fidelity_report = [&](const char* phase, bool workers_done,
++                                     bool materialization_ok) {
++      if (!fidelity_enabled) return;
++      struct Counts {
++        uint64_t files = 0, planned = 0, written = 0, skipped = 0, failed = 0;
++      };
++      std::map<int, Counts> levels;
++      std::unordered_map<uint64_t, bool> registry_files;
++      uint64_t registry_entries = 0, live_entries = 0, live_files = 0;
++      uint64_t all_written = 0, live_written = 0;
++      uint64_t registry_only = 0, version_only = 0, level_mismatches = 0;
++      uint64_t failed_files = 0, skipped_files = 0, put_failed_files = 0;
++      std::ostringstream tsv;
++      tsv << "virtual_file\treal_file\tlevel\tregistry_level\tin_version"
++             "\tplanned_entries\tkey_min\tkey_max\tmaterialize_key_min"
++             "\tmaterialize_key_max\tkeys_written\tput_successes"
++             "\tskipped_nonincreasing_keys\tdropped_entries\tok"
++             "\tput_failed\tstatus\tstop_reason\n";
++      for (size_t i = 0; i < tasks.size(); ++i) {
++        const auto& task = tasks[i];
++        const auto& res = results[i];
++        registry_files[task.virtual_fnum] = true;
++        const bool live = file_level_map.count(task.virtual_fnum) != 0;
++        const uint64_t planned = task.vsst->num_entries;
++        registry_entries += planned;
++        all_written += res.keys_written;
++        const bool skipped = workers_done && res.ok && res.keys_written == 0;
++        const bool failed = workers_done && (!res.ok || res.put_failed);
++        skipped_files += skipped;
++        failed_files += failed;
++        put_failed_files += res.put_failed;
++        if (live) {
++          ++live_files;
++          live_entries += planned;
++          live_written += res.keys_written;
++          level_mismatches += task.level != task.vsst->level;
++          auto& count = levels[task.level];
++          ++count.files;
++          count.planned += planned;
++          count.written += res.keys_written;
++          count.skipped += skipped;
++          count.failed += failed;
++        } else {
++          ++registry_only;
++        }
++        tsv << task.virtual_fnum << '\t' << task.real_fnum << '\t'
++            << task.level << '\t' << task.vsst->level << '\t' << live << '\t'
++            << planned << '\t' << task.vsst->key_min << '\t'
++            << task.vsst->key_max << '\t' << task.materialize_key_min << '\t'
++            << task.materialize_key_max << '\t' << res.keys_written << '\t'
++            << res.put_successes << '\t' << res.skipped_nonincreasing_keys
++            << '\t' << (planned - res.keys_written) << '\t' << res.ok << '\t'
++            << res.put_failed << '\t' << res.report_status << '\t'
++            << res.stop_reason << '\n';
++      }
++      std::ostringstream missing;
++      bool first_missing = true;
++      for (const auto& file : file_level_map) {
++        if (registry_files.count(file.first) == 0) {
++          if (!first_missing) missing << ',';
++          missing << file.first;
++          first_missing = false;
++          ++version_only;
++        }
++      }
++      std::ostringstream json;
++      json << std::boolalpha
++           << "{\n  \"schema_version\": 1,\n  \"phase\": \"" << phase
++           << "\",\n  \"counts_are_distinct_live_keys\": false,"
++           << "\n  \"workers_done\": " << workers_done
++           << ",\n  \"input_operations\": " << total_keys_before_dedup
++           << ",\n  \"flush_local_unique_entries\": " << total_keys_after_dedup
++           << ",\n  \"trace_declared_unique_count\": ";
++      if (use_load_trace) json << load_trace_unique_count;
++      else json << "null";
++      json << ",\n  \"registry_descriptor_files\": " << tasks.size()
++           << ",\n  \"version_files\": " << file_level_map.size()
++           << ",\n  \"stage1_live_descriptor_files\": " << live_files
++           << ",\n  \"stage1_registry_descriptor_entries\": " << registry_entries
++           << ",\n  \"stage1_live_descriptor_entries\": " << live_entries
++           << ",\n  \"registry_only_files\": " << registry_only
++           << ",\n  \"version_only_files\": " << version_only
++           << ",\n  \"version_only_file_numbers\": [" << missing.str() << ']'
++           << ",\n  \"registry_level_mismatches\": " << level_mismatches
++           << ",\n  \"snapshot_complete\": "
++           << (registry_only == 0 && version_only == 0)
++           << ",\n  \"stage2_sst_keys_written\": " << all_written
++           << ",\n  \"stage2_live_sst_keys_written\": " << live_written
++           << ",\n  \"dropped_live_entries\": " << (live_entries - live_written)
++           << ",\n  \"stage2_skipped_files\": " << skipped_files
++           << ",\n  \"stage2_failed_files\": " << failed_files
++           << ",\n  \"stage2_put_failed_files\": " << put_failed_files
++           << ",\n  \"materialization_ok\": "
++           << (workers_done && materialization_ok && failed_files == 0)
++           << ",\n  \"version_edit_applied\": " << fidelity_version_applied
++           << ",\n  \"manifest_snapshot_ok\": " << fidelity_manifest_ok
++           << ",\n  \"by_level\": [";
++      bool first_level = true;
++      for (const auto& entry : levels) {
++        if (!first_level) json << ',';
++        const auto& count = entry.second;
++        json << "\n    {\"level\": " << entry.first
++             << ", \"live_descriptor_files\": " << count.files
++             << ", \"planned_entries\": " << count.planned
++             << ", \"keys_written\": " << count.written
++             << ", \"dropped_entries\": " << (count.planned - count.written)
++             << ", \"skipped_files\": " << count.skipped
++             << ", \"failed_files\": " << count.failed << '}';
++        first_level = false;
++      }
++      json << "\n  ]\n}\n";
++      Status report_s = FLAGS_env->CreateDirIfMissing(
++          FLAGS_vcomp_fidelity_report_dir);
++      auto save = [&](const char* name, const std::string& contents) {
++        if (!report_s.ok()) return;
++        const std::string path = FLAGS_vcomp_fidelity_report_dir + "/" + name;
++        const std::string temporary = path + ".tmp";
++        std::unique_ptr<WritableFile> file;
++        report_s = FLAGS_env->NewWritableFile(temporary, &file, EnvOptions());
++        if (!report_s.ok()) return;
++        report_s = file->Append(Slice(contents));
++        Status close_s = file->Close();
++        if (report_s.ok()) report_s = close_s;
++        if (report_s.ok()) report_s = FLAGS_env->RenameFile(temporary, path);
++      };
++      // Publish JSON last: its phase records which complete TSV it describes.
++      save("files.tsv", tsv.str());
++      save("fidelity.json", json.str());
++      if (!report_s.ok()) {
++        fprintf(stderr, "Fidelity report write failed: %s\n",
++                report_s.ToString().c_str());
++      }
++    };
++    write_fidelity_report("before_materialization", false, false);
++
+     auto phase2a_start = FLAGS_env->NowMicros();
+     {
+       std::vector<std::thread> threads;
+@@ -6634,6 +6787,12 @@ class Benchmark {
+             if (task.vsst->num_entries == 0 ||
+                 task.vsst->plr_model.Empty() ||
+                 task.materialize_key_min > task.materialize_key_max) {
++              res.report_status = "skipped";
++              res.stop_reason = task.vsst->num_entries == 0
++                                    ? "zero_planned_entries"
++                                    : (task.vsst->plr_model.Empty()
++                                           ? "empty_plr"
++                                           : "empty_materialize_range");
+               res.ok = true;
+               continue;
+             }
+@@ -6670,6 +6829,7 @@ class Benchmark {
+             SstFileWriter sst_writer(env_opts, sst_opts);
+             Status s = sst_writer.Open(sst_path);
+             if (!s.ok()) {
++              res.report_status = "open_failed";
+               fprintf(stderr, "SST Open failed: %s path=%s\n",
+                       s.ToString().c_str(), sst_path.c_str());
+               continue;
+@@ -6709,20 +6869,29 @@ class Benchmark {
+               k = std::max(k, task.materialize_key_min);
+               k = std::min(k, task.materialize_key_max);
+               if (has_prev_materialized_key && k <= prev_materialized_key) {
+-                if (prev_materialized_key == UINT64_MAX) break;
++                if (prev_materialized_key == UINT64_MAX) {
++                  res.stop_reason = "uint64_exhausted";
++                  break;
++                }
+                 k = prev_materialized_key + 1;
+               }
+-              if (k > task.materialize_key_max) break;
++              if (k > task.materialize_key_max) {
++                res.stop_reason = "range_exhausted";
++                break;
++              }
+ 
+               GenerateKeyFromInt(k, key_domain_for_keys, &local_key);
+               if (!prev_key_str.empty() &&
+                   memcmp(local_key.data(), prev_key_str.data(), key_size_) <= 0) {
++                ++res.skipped_nonincreasing_keys;
+                 prev_materialized_key = k;
+                 has_prev_materialized_key = true;
+                 continue;
+               }
+               s = sst_writer.Put(local_key, local_gen.Generate());
+               if (!s.ok()) {
++                res.put_failed = true;
++                res.stop_reason = "put_failed";
+                 static std::atomic<int> put_err_count{0};
+                 if (put_err_count.fetch_add(1) < 3) {
+                   fprintf(stderr, "SST Put failed: %s\n", s.ToString().c_str());
+@@ -6738,14 +6907,20 @@ class Benchmark {
+               has_prev_materialized_key = true;
+               keys_in_file++;
+             }
++            res.put_successes = keys_in_file;
+ 
+             if (keys_in_file == 0) {
++              res.report_status = "skipped";
++              if (strcmp(res.stop_reason, "none") == 0) {
++                res.stop_reason = "zero_written_entries";
++              }
+               FLAGS_env->DeleteFile(sst_path);
+               res.ok = true;
+               continue;
+             }
+             s = sst_writer.Finish();
+             if (!s.ok()) {
++              res.report_status = "finish_failed";
+               static std::atomic<int> fin_err_count{0};
+               if (fin_err_count.fetch_add(1) < 3) {
+                 fprintf(stderr, "SST Finish failed: %s\n", s.ToString().c_str());
+@@ -6771,6 +6946,7 @@ class Benchmark {
+               }
+             }
+             res.keys_written = keys_in_file;
++            res.report_status = "written";
+             res.ok = true;
+             total_written.fetch_add(keys_in_file);
+           }
+@@ -6781,13 +6957,14 @@ class Benchmark {
+       auto phase2a_end = FLAGS_env->NowMicros();
+       fprintf(stderr, "  Phase 2a (materialize + SST write): %.3f sec\n",
+               (phase2a_end - phase2a_start) / 1e6);
+-      bool materialize_ok = true;
++      materialize_ok = true;
+       for (const auto& res : results) {
+         if (!res.ok) {
+           materialize_ok = false;
+           break;
+         }
+       }
++      write_fidelity_report("after_materialization", true, materialize_ok);
+       if (!materialize_ok) {
+         fprintf(stderr, "Error: materialization failed; VersionEdit skipped\n");
+         {
+@@ -6811,14 +6988,10 @@ class Benchmark {
+       }
+     for (const auto& res : results) {
+       if (!res.ok || res.keys_written == 0) continue;
+-      // Match the seqno convention used by RegisterVirtualL0File: smallest
+-      // InternalKey uses kMaxSequenceNumber (the smallest internal key for
+-      // a given user_key), largest uses 0. Using 0 for smallest makes the
+-      // file's claimed smallest internal key larger than its actual smallest
+-      // content, leading to ordering/comparison inconsistencies that stall
+-      // subsequent compactions.
+-      InternalKey smallest(Slice(res.first_key), kMaxSequenceNumber,
+-                           kTypeValue);
++      // SstFileWriter emits sequence-zero external SSTs. The install helper
++      // assigns their effective global sequence and updates both exact bounds
++      // together with the file's sequence metadata before committing the edit.
++      InternalKey smallest(Slice(res.first_key), 0, kTypeValue);
+       InternalKey largest(Slice(res.last_key), 0, kTypeValue);
+       // Each output gets a unique epoch_number. Required for L0 because
+       // RocksDB's force_consistency_checks rejects multiple L0 files with
+@@ -6832,17 +7005,17 @@ class Benchmark {
+                    UniqueId64x2{}, 0, res.tail_size, true);
+     }
+     {
++      Status s = db_impl->InstallVirtualCompactionMaterialization(&edit);
+       ReadOptions ro;
+       WriteOptions wo;
+       InstrumentedMutexLock l(db_impl->mutex());
+-        Status s = versions->LogAndApply(cfd, ro, wo, &edit,
+-                                         db_impl->mutex(), nullptr);
+         db_impl->ReleaseVirtualCompactionMaterializationOutputs(
+             phase2_pending_outputs);
+         if (!s.ok()) {
+           fprintf(stderr, "Error applying VersionEdit: %s\n",
+                   s.ToString().c_str());
+         } else {
++          fidelity_version_applied = true;
+           // The edit above deletes virtual files and adds real SSTs, but the
+           // existing MANIFEST still contains earlier virtual-only records. A
+           // clean RocksDB recovery can roll back to the last complete point if
+@@ -6853,6 +7026,7 @@ class Benchmark {
+           Status snapshot_s = versions->LogAndApply(
+               cfd, ro, wo, &snapshot_edit, db_impl->mutex(), nullptr,
+               /*new_descriptor_log=*/true);
++          fidelity_manifest_ok = snapshot_s.ok();
+           if (!snapshot_s.ok()) {
+             fprintf(stderr, "Error writing final MANIFEST snapshot: %s\n",
+                     snapshot_s.ToString().c_str());
+@@ -6866,6 +7040,8 @@ class Benchmark {
+         }
+       }
+ 
++    write_fidelity_report("after_version_edit", true, materialize_ok);
++
+     // Resume BG compaction now that the version reflects only real SSTs.
+     {
+       Status resume_s = db_.db->ContinueBackgroundWork();
+@@ -6876,6 +7052,10 @@ class Benchmark {
+     }
+ 
+     auto phase2_end = FLAGS_env->NowMicros();
++    if (!fidelity_version_applied || !fidelity_manifest_ok) {
++      fprintf(stderr, "FillVirtual: materialization installation failed\n");
++      db_bench_exit(1);
++    }
+     double phase2_secs = (phase2_end - phase2_start) / 1e6;
+     double phase2a_secs = (phase2a_end - phase2a_start) / 1e6;
+     double phase2b_secs = (phase2_end - phase2b_start) / 1e6;

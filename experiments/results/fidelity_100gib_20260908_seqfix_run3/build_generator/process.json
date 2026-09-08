@@ -1,0 +1,16 @@
+{
+  "argv": [
+    "g++-11",
+    "-O3",
+    "-std=c++17",
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/generate_load_trace_fast.cc",
+    "-o",
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/bin/generate_load_trace_fast"
+  ],
+  "elapsed_sec": 0.7858552932739258,
+  "exit_code": 0,
+  "finished": "2026-09-08T04:57:12.141321+00:00",
+  "pid": 1662858,
+  "started": "2026-09-08T04:57:11.356479+00:00",
+  "state": "finished"
+}

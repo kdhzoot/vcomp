@@ -1,0 +1,7 @@
+[
+  "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/bin/verify_load_trace",
+  "--trace",
+  "/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_zipf99_50.vload",
+  "--output",
+  "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_zipf99_50/verification.json"
+]

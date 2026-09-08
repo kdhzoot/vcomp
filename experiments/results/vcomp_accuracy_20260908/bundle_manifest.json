@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "archive_created_utc": "2026-09-08T05:16:37.842668+00:00",
+  "run_id": "vcomp_accuracy_20260908",
+  "observations": {
+    "native_pipeline": 100,
+    "native_single_merge_offset_trials": 256,
+    "chain_rounds": 36
+  },
+  "compiler": "g++-11",
+  "build_mode": "release -O2 -DNDEBUG with PLATFORM_CXXFLAGS including -march=native",
+  "library_sha256": "d0fc6439d78880351943275a663a2e9a30bc0f2f18426c87a81289bdc0361014",
+  "archive_git_commit": "ee51a6e72172cef98a4e160cdd2beeeaaa75117c",
+  "archive_git_commit_note": "Repository HEAD at archival time; exact measured source content is identified by per-file hashes, not by a clean-tree assumption.",
+  "original_measurement_manifests": [
+    "native/manifest.json",
+    "chain/manifest.json"
+  ],
+  "units": {
+    "entry_counts": "integer rows/keys, never elapsed loading time",
+    "rank_error": "PLR rank positions",
+    "samples": "per-descriptor sample budget; range bucket allocation divides that budget",
+    "error_percent": "100*(estimated union/true union - 1)"
+  },
+  "read_only_analysis": true,
+  "database_or_sst_io": false,
+  "binary_files_included": false,
+  "rank_prototype_local_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype",
+  "original_cwd_for_native_compilation": "/home/smrc/virtual_compaction/vcomp",
+  "native_cwd_note": "Same repository working directory as the original invocation; manifest compiler inputs are relative to it."
+}

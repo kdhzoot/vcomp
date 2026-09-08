@@ -1,0 +1,29 @@
+{
+  "created": "2026-09-08T04:57:10.721667+00:00",
+  "argv": [
+    "/usr/bin/python3",
+    "/home/smrc/virtual_compaction/vcomp/experiments/scripts/trace/run_fidelity_dataset_sweep.py",
+    "--run-id",
+    "fidelity_100gib_20260908_seqfix_run3",
+    "--phase",
+    "all"
+  ],
+  "cwd": "/home/smrc/virtual_compaction/vcomp",
+  "artifact_root": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3",
+  "db_root": "/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3",
+  "fresh_roots": true,
+  "md0_array_state": "clean",
+  "free_work_bytes": 30729983021056,
+  "binary_sha256": {
+    "f2": "6eaa2903a15607912c9f9379951cdbaf9e454c61f1144ce403d644cea02a9e4a",
+    "clean": "433d951244e075e1a3c39e45bd4bbd21c72fcc51999d44c5f15b1dd1acb4c2bb"
+  },
+  "source_sha256": {
+    "db/db_impl/db_impl.h": "fbd86dc6431c6033fb1288c1316451f7d69a0042c024673124ce0a2d73093df3",
+    "db/db_impl/db_impl_compaction_flush.cc": "352fe64265aa26ab9fbaeabe82788d6b4c7103d6687388127179985d7467979b",
+    "tools/db_bench_tool.cc": "9261451db12315888d33b5c15d947f7ee4c66ed03a04f0a718aa4aecb64f7801"
+  },
+  "runner_sha256": "804b52146c689fa624ed1dbaeac21dfefeb09a6b9514ea9d794309f3fe3fd1a0",
+  "timing_interpretation": "Concurrent cardinality campaign; elapsed times operational only",
+  "authorization": "User explicitly authorized seq-fix 100GB repeat; original run2 preserved"
+}

@@ -1,0 +1,23 @@
+{
+  "argv": [
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/bin/db_fidelity_check",
+    "--db",
+    "/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3/full/db/s100gib_1024B_unique100_baseline",
+    "--key-size",
+    "24",
+    "--value-size",
+    "1000",
+    "--key-domain",
+    "104857600",
+    "--expected-unique",
+    "104857600",
+    "--output",
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_baseline/exact_cardinality.json"
+  ],
+  "elapsed_sec": 71.33341908454895,
+  "exit_code": 0,
+  "finished": "2026-09-08T05:07:22.356383+00:00",
+  "pid": 1671489,
+  "started": "2026-09-08T05:06:11.027450+00:00",
+  "state": "finished"
+}

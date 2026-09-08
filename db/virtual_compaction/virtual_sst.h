@@ -27,6 +27,10 @@ struct KMVRangeSketch {
   uint64_t key_min = 0;
   uint64_t key_max = 0;
   uint64_t num_entries = 0;
+  // A certified model count is not an upper bound on original membership.
+  // Retain the independent range estimate separately for later estimation.
+  uint64_t raw_estimated_entries = 0;
+  bool entries_are_modeled = false;
   KMVSketch sketch;
 };
 
@@ -58,6 +62,14 @@ size_t VirtualSSTKMVRangeBuckets();
 // VCOMP_KMV_ENABLED=0 to fall back to the pre-KMV PLR dedup path.
 bool VirtualSSTKMVEnabled();
 
+// Experimental discrete count/select path. Set VCOMP_DISCRETE_CDF_ENABLED=0
+// to reproduce the legacy approximate merge/split/materialization path.
+bool VirtualSSTDiscreteCDFEnabled();
+
+// Keep a flush's known entry count while making its reconstructed model
+// feasible and protecting retained KMV witnesses. Does not retain all keys.
+Status CertifyVirtualSST(VirtualSST* vsst);
+
 // Build a KMV sketch from sorted unique keys.
 KMVSketch BuildKMVSketchFromSortedKeys(const std::vector<uint64_t>& sorted_keys,
                                        size_t max_samples = 0);
@@ -75,12 +87,17 @@ uint64_t EstimateKMVUnionEntries(const std::vector<const VirtualSST*>& inputs,
                                  uint64_t naive_entries,
                                  size_t max_samples = 0);
 
+uint64_t EstimateKMVUnionEntriesForRange(
+    const std::vector<const VirtualSST*>& inputs, uint64_t key_min,
+    uint64_t key_max);
+
 // Merge input PLR shapes while estimating dedup cardinality using only KMV.
 // Global KMV determines total entries; range-local KMV distributes interval
 // mass without using PLR-based dedup fallback.
 PLRModel NWayMergeKMVRangeAware(const std::vector<const VirtualSST*>& inputs,
                                 uint64_t* adjusted_total,
-                                size_t kmv_samples = 0);
+                                size_t kmv_samples = 0,
+                                Status* status = nullptr);
 
 // Merge input sketches and retain only samples that fall in [key_min, key_max].
 KMVSketch MergeKMVSketchesForRange(const std::vector<const VirtualSST*>& inputs,

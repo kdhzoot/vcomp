@@ -1,0 +1,98 @@
+[
+  {
+    "case": "disjoint_interleaved",
+    "samples": 512,
+    "trials": 32,
+    "mean_error_percent": -0.8588790893554688,
+    "sample_stdev_percent": 1.3598011686641713,
+    "min_error_percent": -4.840087890625,
+    "max_error_percent": 0,
+    "under": 13,
+    "exact": 19,
+    "over": 0
+  },
+  {
+    "case": "disjoint_interleaved",
+    "samples": 2048,
+    "trials": 32,
+    "mean_error_percent": -0.244903564453125,
+    "sample_stdev_percent": 0.41426744340356625,
+    "min_error_percent": -1.812744140625,
+    "max_error_percent": 0,
+    "under": 13,
+    "exact": 19,
+    "over": 0
+  },
+  {
+    "case": "gapped_50",
+    "samples": 512,
+    "trials": 32,
+    "mean_error_percent": -0.6290435791015625,
+    "sample_stdev_percent": 2.695556929822038,
+    "min_error_percent": -6.8115234375,
+    "max_error_percent": 5.17578125,
+    "under": 20,
+    "exact": 0,
+    "over": 12
+  },
+  {
+    "case": "gapped_50",
+    "samples": 2048,
+    "trials": 32,
+    "mean_error_percent": -0.17547607421875,
+    "sample_stdev_percent": 0.8117372302207558,
+    "min_error_percent": -1.513671875,
+    "max_error_percent": 1.904296875,
+    "under": 18,
+    "exact": 0,
+    "over": 14
+  },
+  {
+    "case": "hot_shared_core",
+    "samples": 512,
+    "trials": 32,
+    "mean_error_percent": 0.676727294921875,
+    "sample_stdev_percent": 2.2742158777033206,
+    "min_error_percent": -3.662109375,
+    "max_error_percent": 4.5166015625,
+    "under": 11,
+    "exact": 0,
+    "over": 21
+  },
+  {
+    "case": "hot_shared_core",
+    "samples": 2048,
+    "trials": 32,
+    "mean_error_percent": 0.30670166015625,
+    "sample_stdev_percent": 1.1509315927340247,
+    "min_error_percent": -2.05078125,
+    "max_error_percent": 2.50244140625,
+    "under": 14,
+    "exact": 0,
+    "over": 18
+  },
+  {
+    "case": "uniform_50",
+    "samples": 512,
+    "trials": 32,
+    "mean_error_percent": 0.4291534423828125,
+    "sample_stdev_percent": 2.7791953199849995,
+    "min_error_percent": -6.9580078125,
+    "max_error_percent": 6.26220703125,
+    "under": 11,
+    "exact": 0,
+    "over": 21
+  },
+  {
+    "case": "uniform_50",
+    "samples": 2048,
+    "trials": 32,
+    "mean_error_percent": 0.2513885498046875,
+    "sample_stdev_percent": 1.0846251318087117,
+    "min_error_percent": -2.05078125,
+    "max_error_percent": 2.3681640625,
+    "under": 14,
+    "exact": 0,
+    "over": 18
+  }
+]

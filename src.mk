@@ -45,6 +45,8 @@ LIB_SOURCES =                                                   \
   db/compaction/compaction_trace_logger.cc                      \
   db/compaction/compaction_outputs.cc                           \
   db/virtual_compaction/plr_model.cc                            \
+  db/virtual_compaction/discrete_cdf.cc                         \
+  db/virtual_compaction/discrete_merge.cc                       \
   db/virtual_compaction/virtual_sst.cc                          \
   db/compaction/sst_partitioner.cc                              \
   db/compaction/subcompaction_state.cc                          \

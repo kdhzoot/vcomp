@@ -1,0 +1,175 @@
+{
+  "artifact_root": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3",
+  "baseline": "f2_db_bench baseload with virtual compaction disabled",
+  "binary_sha256": {
+    "clean_db_bench": "433d951244e075e1a3c39e45bd4bbd21c72fcc51999d44c5f15b1dd1acb4c2bb",
+    "db_fidelity_check": "95b11b85e5b0df955cfb4d6781c76783a1695478a3fa0e03f55bdfd212a9ce23",
+    "f2_db_bench": "6eaa2903a15607912c9f9379951cdbaf9e454c61f1144ce403d644cea02a9e4a",
+    "generate_load_trace_fast": "3bc405411455ec2b4bfc17a2d2b8c78bed63556e5463f367307d31496b58c54c",
+    "verify_load_trace": "1b8ee08a17e93c8c87e86ea0a94e35c210ec37d2d47e3a3c1d59e272aa5d188a"
+  },
+  "common_options": {
+    "batch_size": 1,
+    "bloom_bits": 10,
+    "compression_type": "none",
+    "disable_wal": true,
+    "enable_index_compression": false,
+    "format_version": 6,
+    "keys_per_prefix": 0,
+    "level_compaction_dynamic_level_bytes": false,
+    "max_background_jobs": 48,
+    "max_bytes_for_level_base": 268435456,
+    "max_bytes_for_level_multiplier": 10,
+    "max_write_buffer_number": 2,
+    "memtablerep": "vector",
+    "seed": 12345678,
+    "statistics": 1,
+    "stats_interval_seconds": 60,
+    "stats_per_interval": 1,
+    "subcompactions": 1,
+    "target_file_size_base": 67108864,
+    "threads": 1,
+    "use_direct_io_for_flush_and_compaction": true,
+    "use_direct_reads": true,
+    "write_buffer_size": 67108864
+  },
+  "concurrency": 12,
+  "created": "2026-09-08T04:57:12.228735+00:00",
+  "db_root": "/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3",
+  "endpoint": "clean RocksDB reopen, wait until settled, read-only exact iterator count",
+  "f2_options": {
+    "memtable_flush_size": 64,
+    "plr_error_bound": 8,
+    "use_virtual_compaction": true,
+    "vcomp_log_apply_timing": false,
+    "vcomp_materialize_workers": 48,
+    "vcomp_phase1_shards": 8,
+    "vcomp_register_batch_max": 256,
+    "vcomp_sort_detail_timing": false,
+    "vcomp_visible_l0_batch_mb": 0
+  },
+  "full_matrix": [
+    {
+      "case_id": "s100gib_1024B_unique100",
+      "distribution": "unique100",
+      "key_domain": 104857600,
+      "key_size": 24,
+      "num_records": 104857600,
+      "size_gib": 100,
+      "unique_count": 104857600,
+      "unique_ratio": 1,
+      "value_size": 1000,
+      "zipf_alpha": 0
+    },
+    {
+      "case_id": "s100gib_1024B_uniform50",
+      "distribution": "uniform50",
+      "key_domain": 104857600,
+      "key_size": 24,
+      "num_records": 104857600,
+      "size_gib": 100,
+      "unique_count": 52428800,
+      "unique_ratio": 0.5,
+      "value_size": 1000,
+      "zipf_alpha": 0
+    },
+    {
+      "case_id": "s100gib_1024B_zipf99_50",
+      "distribution": "zipf99_50",
+      "key_domain": 104857600,
+      "key_size": 24,
+      "num_records": 104857600,
+      "size_gib": 100,
+      "unique_count": 52428800,
+      "unique_ratio": 0.5,
+      "value_size": 1000,
+      "zipf_alpha": 0.99
+    },
+    {
+      "case_id": "s100gib_91B_unique100",
+      "distribution": "unique100",
+      "key_domain": 1179936070,
+      "key_size": 48,
+      "num_records": 1179936070,
+      "size_gib": 100,
+      "unique_count": 1179936070,
+      "unique_ratio": 1,
+      "value_size": 43,
+      "zipf_alpha": 0
+    },
+    {
+      "case_id": "s100gib_91B_uniform50",
+      "distribution": "uniform50",
+      "key_domain": 1179936070,
+      "key_size": 48,
+      "num_records": 1179936070,
+      "size_gib": 100,
+      "unique_count": 589968035,
+      "unique_ratio": 0.5,
+      "value_size": 43,
+      "zipf_alpha": 0
+    },
+    {
+      "case_id": "s100gib_91B_zipf99_50",
+      "distribution": "zipf99_50",
+      "key_domain": 1179936070,
+      "key_size": 48,
+      "num_records": 1179936070,
+      "size_gib": 100,
+      "unique_count": 589968035,
+      "unique_ratio": 0.5,
+      "value_size": 43,
+      "zipf_alpha": 0.99
+    }
+  ],
+  "input_protocol": "same verified VLOADTR1 file for each baseline/F2 pair",
+  "pilot_size_gib": 1,
+  "run_id": "fidelity_100gib_20260908_seqfix_run3",
+  "runner_sha256": "804b52146c689fa624ed1dbaeac21dfefeb09a6b9514ea9d794309f3fe3fd1a0",
+  "runtime": {
+    "effective_vcomp_environment": {
+      "VCOMP_BG_COMMIT_BATCH_MAX": "16",
+      "VCOMP_BG_COMMIT_DELAY_US": "100",
+      "VCOMP_KMV_ENABLED": "1"
+    },
+    "inherited_audited_vcomp_environment": {
+      "VCOMP_BG_COMMIT_BATCH_MAX": null,
+      "VCOMP_BG_COMMIT_DELAY_US": null,
+      "VCOMP_COV_PERFILE": null,
+      "VCOMP_KMV_ENABLED": null
+    },
+    "intentionally_unset": [
+      "VCOMP_COV_PERFILE"
+    ],
+    "removed_inherited_vcomp_names": [],
+    "rlimit_nofile_effective": {
+      "hard": 1048576,
+      "soft": 1048576
+    },
+    "rlimit_nofile_inherited": {
+      "hard": 1048576,
+      "soft": 1048576
+    },
+    "rlimit_nofile_required_minimum": 65536
+  },
+  "runtime_control_audit": {
+    "db/db_impl/db_impl_compaction_flush.cc": [
+      "VCOMP_BG_COMMIT_BATCH_MAX",
+      "VCOMP_BG_COMMIT_DELAY_US"
+    ],
+    "db/virtual_compaction/virtual_sst.cc": [
+      "VCOMP_KMV_ENABLED"
+    ],
+    "historical_wrapper_environment": "Runner passes explicit flags and removes inherited VCOMP_* variables",
+    "tools/db_bench_tool.cc": [
+      "VCOMP_COV_PERFILE"
+    ]
+  },
+  "scheduling_limit": "Concurrent scheduling can affect F2 approximate compaction outcomes",
+  "size_gib": 100,
+  "source_revisions": {
+    "clean": "0760803d5d3ac75731ae6cbdd0de862fab7b44b0",
+    "f2": "ee51a6e72172cef98a4e160cdd2beeeaaa75117c"
+  },
+  "timing_interpretation": "Concurrent cardinality experiment; elapsed times are operational only"
+}

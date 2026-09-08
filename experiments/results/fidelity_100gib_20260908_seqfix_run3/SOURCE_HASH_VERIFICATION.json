@@ -1,0 +1,68 @@
+{
+  "all_checks_passed": true,
+  "checks": [
+    {
+      "kind": "run_snapshot",
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/seqfix_source_snapshot/db/db_impl/db_impl.h",
+      "relative_source": "db/db_impl/db_impl.h",
+      "expected_sha256": "fbd86dc6431c6033fb1288c1316451f7d69a0042c024673124ce0a2d73093df3",
+      "actual_sha256": "fbd86dc6431c6033fb1288c1316451f7d69a0042c024673124ce0a2d73093df3",
+      "matches": true
+    },
+    {
+      "kind": "launch_snapshot",
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3_launch/source_snapshot/db/db_impl/db_impl.h",
+      "relative_source": "db/db_impl/db_impl.h",
+      "expected_sha256": "fbd86dc6431c6033fb1288c1316451f7d69a0042c024673124ce0a2d73093df3",
+      "actual_sha256": "fbd86dc6431c6033fb1288c1316451f7d69a0042c024673124ce0a2d73093df3",
+      "matches": true
+    },
+    {
+      "kind": "run_snapshot",
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/seqfix_source_snapshot/db/db_impl/db_impl_compaction_flush.cc",
+      "relative_source": "db/db_impl/db_impl_compaction_flush.cc",
+      "expected_sha256": "352fe64265aa26ab9fbaeabe82788d6b4c7103d6687388127179985d7467979b",
+      "actual_sha256": "352fe64265aa26ab9fbaeabe82788d6b4c7103d6687388127179985d7467979b",
+      "matches": true
+    },
+    {
+      "kind": "launch_snapshot",
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3_launch/source_snapshot/db/db_impl/db_impl_compaction_flush.cc",
+      "relative_source": "db/db_impl/db_impl_compaction_flush.cc",
+      "expected_sha256": "352fe64265aa26ab9fbaeabe82788d6b4c7103d6687388127179985d7467979b",
+      "actual_sha256": "352fe64265aa26ab9fbaeabe82788d6b4c7103d6687388127179985d7467979b",
+      "matches": true
+    },
+    {
+      "kind": "run_snapshot",
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/seqfix_source_snapshot/tools/db_bench_tool.cc",
+      "relative_source": "tools/db_bench_tool.cc",
+      "expected_sha256": "9261451db12315888d33b5c15d947f7ee4c66ed03a04f0a718aa4aecb64f7801",
+      "actual_sha256": "9261451db12315888d33b5c15d947f7ee4c66ed03a04f0a718aa4aecb64f7801",
+      "matches": true
+    },
+    {
+      "kind": "launch_snapshot",
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3_launch/source_snapshot/tools/db_bench_tool.cc",
+      "relative_source": "tools/db_bench_tool.cc",
+      "expected_sha256": "9261451db12315888d33b5c15d947f7ee4c66ed03a04f0a718aa4aecb64f7801",
+      "actual_sha256": "9261451db12315888d33b5c15d947f7ee4c66ed03a04f0a718aa4aecb64f7801",
+      "matches": true
+    },
+    {
+      "kind": "top_level_tool_snapshot",
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/db_bench_tool.cc",
+      "expected_sha256": "9261451db12315888d33b5c15d947f7ee4c66ed03a04f0a718aa4aecb64f7801",
+      "actual_sha256": "9261451db12315888d33b5c15d947f7ee4c66ed03a04f0a718aa4aecb64f7801",
+      "matches": true
+    },
+    {
+      "kind": "runner_snapshot",
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/run_fidelity_dataset_sweep.py",
+      "expected_sha256": "804b52146c689fa624ed1dbaeac21dfefeb09a6b9514ea9d794309f3fe3fd1a0",
+      "actual_sha256": "804b52146c689fa624ed1dbaeac21dfefeb09a6b9514ea9d794309f3fe3fd1a0",
+      "matches": true
+    }
+  ],
+  "scope": "Frozen source snapshots compared with pre-launch source fingerprints and manifest runner hash. Excluded binaries and traces were not rehashed during curation."
+}

@@ -1,0 +1,15 @@
+[
+  "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/bin/db_fidelity_check",
+  "--db",
+  "/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3/full/db/s100gib_1024B_zipf99_50_f2load",
+  "--key-size",
+  "24",
+  "--value-size",
+  "1000",
+  "--key-domain",
+  "104857600",
+  "--expected-unique",
+  "52428800",
+  "--output",
+  "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_f2load/exact_cardinality.json"
+]

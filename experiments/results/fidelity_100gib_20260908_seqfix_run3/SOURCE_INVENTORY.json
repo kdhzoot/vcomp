@@ -1,0 +1,2001 @@
+{
+  "curated_at_utc": "2026-09-08T05:28:31.906176+00:00",
+  "source_run_root": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3",
+  "source_launch_root": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3_launch",
+  "destination_root": "/home/smrc/virtual_compaction/vcomp/experiments/results/fidelity_100gib_20260908_seqfix_run3",
+  "copied_files": [
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/build_generator/argv.json",
+      "saved_relative_path": "build_generator/argv.json",
+      "bytes": 305,
+      "sha256": "727c34fa9ff25cb1c92d53e082e763e212e355ff2444079c0fb41650a9014372"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/build_generator/process.json",
+      "saved_relative_path": "build_generator/process.json",
+      "bytes": 528,
+      "sha256": "9535e7936055d15b9c3a328d94e26a9282ac470cf7369e530a847e0ccf059687"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/build_generator/runtime.json",
+      "saved_relative_path": "build_generator/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/clean.diff",
+      "saved_relative_path": "clean.diff",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/clean.status",
+      "saved_relative_path": "clean.status",
+      "bytes": 11,
+      "sha256": "5c0f5ee8e1be3a899b052970eda04f5ecd34e7169857840e07498af3a7bf2a99"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/db_bench_tool.cc",
+      "saved_relative_path": "db_bench_tool.cc",
+      "bytes": 452904,
+      "sha256": "9261451db12315888d33b5c15d947f7ee4c66ed03a04f0a718aa4aecb64f7801"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/db_fidelity_check.cc",
+      "saved_relative_path": "db_fidelity_check.cc",
+      "bytes": 9116,
+      "sha256": "851bb846845b4375a7640563125064b7226806059787bebda89185545857d4a1"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/environment.txt",
+      "saved_relative_path": "environment.txt",
+      "bytes": 3670,
+      "sha256": "f597db78c487ed127f1512f340f16b3c1a9699ba4e033f35f6fb8955c927cc1a"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/f2.diff",
+      "saved_relative_path": "f2.diff",
+      "bytes": 28556,
+      "sha256": "c8241c781c2f585b816e8a5ec1ace8fe35fe6c6b1044ea8175c82941e89bc627"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/f2.status",
+      "saved_relative_path": "f2.status",
+      "bytes": 400,
+      "sha256": "e0ad743c2e0580252eb6b733afb390d5c77a495027abe8d179504ad41906d37d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/COMPLETED",
+      "saved_relative_path": "full/COMPLETED",
+      "bytes": 33,
+      "sha256": "1b7a9e4648b49fb3a0378df40d0ff18e7de103fa71c38f74aeea9e3d3dcf336b"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/REPORT.md",
+      "saved_relative_path": "full/REPORT.md",
+      "bytes": 1570,
+      "sha256": "a1b7d46c465a85182639d2c96fe8da3697d7ff61bcc3bc791435cb5c09a86f6c"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_baseline/exact_cardinality.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_baseline/exact_cardinality.json",
+      "bytes": 1077,
+      "sha256": "ffa295c9d49e75fc709892c0b360a8e6af833990b4e54c9efa3ad85a68341571"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_baseline/load/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_baseline/load/argv.json",
+      "bytes": 1215,
+      "sha256": "25da346f5860804be75a54be4ac1fdcd6e2766b349c11a21be3c95889ba271e2"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_baseline/load/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_baseline/load/process.json",
+      "bytes": 1488,
+      "sha256": "8a5a0e806a5658976d32da44372a13febb3afd638ae67071e54c9303faffd9c2"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_baseline/load/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_baseline/load/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_baseline/options.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_baseline/options.json",
+      "bytes": 1079,
+      "sha256": "a0ce2c65496c08851ee38c1fa36bbc2512993e511133f5803cc5990837132ff6"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_baseline/result.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_baseline/result.json",
+      "bytes": 1441,
+      "sha256": "ff3001c42d5b49c6c6d1942f1827c3fbb195472938fff1c038308917d1f7dcc8"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_baseline/scan/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_baseline/scan/argv.json",
+      "bytes": 537,
+      "sha256": "e76a3dd332ab16b8202fd05d07be014b9467576093fae2f6d6a871b32e02522d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_baseline/scan/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_baseline/scan/process.json",
+      "bytes": 774,
+      "sha256": "5837ae4e45ef6323dbebd0d67208a95676004776db4912c5db332bf6b713ce2b"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_baseline/scan/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_baseline/scan/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_baseline/settle/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_baseline/settle/argv.json",
+      "bytes": 1068,
+      "sha256": "32f07ebc27931f0a8e4ca675d13093e070d0f9e9b8037e737359a609ad5ae9f9"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_baseline/settle/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_baseline/settle/process.json",
+      "bytes": 1337,
+      "sha256": "7cc6e653ad0f68ce3768171682ad91066c46a056e314fcd16209ea07e6ce0131"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_baseline/settle/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_baseline/settle/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_f2load/exact_cardinality.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_f2load/exact_cardinality.json",
+      "bytes": 1082,
+      "sha256": "fbf56fc8d92d6c98539501156e4fb2900b364bc7e6bdd2ea8925b1ac5c0beaa3"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_f2load/fidelity/fidelity.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_f2load/fidelity/fidelity.json",
+      "bytes": 1566,
+      "sha256": "458de9bf0a566ec2ffaab2af9d0baa59083ef2271e3f383edb1690f02091510b"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_f2load/load/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_f2load/load/argv.json",
+      "bytes": 1659,
+      "sha256": "24f0b4384a8b543ca7f927de7d3212d1746861b46a363159b79e7381402cef0c"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_f2load/load/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_f2load/load/process.json",
+      "bytes": 1950,
+      "sha256": "813d36b60ab36cba07f050564c270c366b9eb2cf1bee7c3c9a881dd264ffb29d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_f2load/load/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_f2load/load/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_f2load/options.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_f2load/options.json",
+      "bytes": 1516,
+      "sha256": "20e4b879a55f6672a04c4c5cb7760539ffa297496112022b4a6e5fc35b3ff528"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_f2load/result.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_f2load/result.json",
+      "bytes": 1621,
+      "sha256": "66666d7db17e385b4c4a02b99d61316700cde73c6d63bf37528d10e0ca226088"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_f2load/scan/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_f2load/scan/argv.json",
+      "bytes": 533,
+      "sha256": "3479b591fa711842eee0ba08db7fedc7c263748a31d24ca26fc920b36eec21b1"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_f2load/scan/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_f2load/scan/process.json",
+      "bytes": 769,
+      "sha256": "d51e4e0869cabe427bf80f9f83ab25ddf8212c59046796d3ea2a71d97bfda356"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_f2load/scan/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_f2load/scan/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_f2load/settle/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_f2load/settle/argv.json",
+      "bytes": 1066,
+      "sha256": "25f88a83954c3ffb7097dd22032a0396710c27a1764bf6c848b6a1b660b7b4f6"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_f2load/settle/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_f2load/settle/process.json",
+      "bytes": 1336,
+      "sha256": "d6576a90453706505c279688e68cd285994352130a04cabf5846ce64223ad86f"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_uniform50_f2load/settle/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_uniform50_f2load/settle/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_baseline/exact_cardinality.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_baseline/exact_cardinality.json",
+      "bytes": 1082,
+      "sha256": "cbadebf10b9a014caae04ff222b767ff7f1785a28db721e9c431a8d4d36c1f0a"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_baseline/load/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_baseline/load/argv.json",
+      "bytes": 1215,
+      "sha256": "c2dff2b05b798d38d5af925287051f1520549edc6a03c12cd4036e703232258b"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_baseline/load/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_baseline/load/process.json",
+      "bytes": 1487,
+      "sha256": "4a0343ceb5bea79a1cf3d959b40e6514aaa04a53fa111c64eaa8f8c6857f7a5d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_baseline/load/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_baseline/load/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_baseline/options.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_baseline/options.json",
+      "bytes": 1079,
+      "sha256": "abc9785d7eb68cd5ad138f196d282f7364e389cc78b6eba032d38df5af221678"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_baseline/result.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_baseline/result.json",
+      "bytes": 1445,
+      "sha256": "5fef0a572841409a4d8cd0cd5030dd21100b8029f4627a7e582ad23ab124147e"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_baseline/scan/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_baseline/scan/argv.json",
+      "bytes": 538,
+      "sha256": "d8858d1825814098659c6af6131929e0628342919f9bf2b48f847bcf9b8c8dd4"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_baseline/scan/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_baseline/scan/process.json",
+      "bytes": 774,
+      "sha256": "7dff532f2b7a6084a040fd90f177113f71ceca74c6e1d5218eabd0b304aea871"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_baseline/scan/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_baseline/scan/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_baseline/settle/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_baseline/settle/argv.json",
+      "bytes": 1068,
+      "sha256": "9b3c797373c68ad2756c152863b4df7c6424b89b55d56f188036744b50fe44db"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_baseline/settle/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_baseline/settle/process.json",
+      "bytes": 1338,
+      "sha256": "7f1907b7a61f1e2d0a3b125786c942e885f99db7e3727fd1bbc0be63e0295d21"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_baseline/settle/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_baseline/settle/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_f2load/exact_cardinality.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_f2load/exact_cardinality.json",
+      "bytes": 1088,
+      "sha256": "1d38547454a44e98892afb979384d3b0b67857a37cc23b20aec36936e5f4b7cb"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_f2load/fidelity/fidelity.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_f2load/fidelity/fidelity.json",
+      "bytes": 1576,
+      "sha256": "4d723bd603924485bce48d61ce7631f7c0c4327e28760c396f07faf28e98e6d3"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_f2load/load/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_f2load/load/argv.json",
+      "bytes": 1659,
+      "sha256": "8648cc86d7297773c5f1d19ca2a9070ea604e373c06293a6e609c57f9ed7a123"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_f2load/load/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_f2load/load/process.json",
+      "bytes": 1950,
+      "sha256": "390a075168cfb2ec3654f697f77c12cbb9cb4849d3df0810d8096eed1314acae"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_f2load/load/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_f2load/load/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_f2load/options.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_f2load/options.json",
+      "bytes": 1516,
+      "sha256": "5dc67b0631a64fcb25ce2b9e88e14ff40f7748a8a2d022b37b1d70b150059eed"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_f2load/result.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_f2load/result.json",
+      "bytes": 1629,
+      "sha256": "00c21fff9f8ffb7431b3366deb281f07de75c3ac3a1969f2cf76badd06e2ef3c"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_f2load/scan/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_f2load/scan/argv.json",
+      "bytes": 534,
+      "sha256": "a7cd2c10ca516a1d62b0f723e1ca32bfe3fb2d523fa166d01bfdeb3105b872e1"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_f2load/scan/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_f2load/scan/process.json",
+      "bytes": 770,
+      "sha256": "7acc68605357628fb0e5ea57968c946baec99e4771ddc7fd4a910ebd5b0b8cdb"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_f2load/scan/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_f2load/scan/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_f2load/settle/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_f2load/settle/argv.json",
+      "bytes": 1066,
+      "sha256": "224927fddadbde897e9f2b7bb9adf9cdee85cbaa70858981df1500dc9c4585a9"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_f2load/settle/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_f2load/settle/process.json",
+      "bytes": 1336,
+      "sha256": "c3681d75028a49cb6149f79ab1759a7b91e9a83725802846f33e0496376d975f"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_unique100_f2load/settle/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_unique100_f2load/settle/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_baseline/exact_cardinality.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_baseline/exact_cardinality.json",
+      "bytes": 1076,
+      "sha256": "cc4d8698e4bf928205b65f30f36af667d8bf8621d2d5646c7637f6bf07dbc303"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_baseline/load/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_baseline/load/argv.json",
+      "bytes": 1215,
+      "sha256": "4560935e5f257fd89b35f790190a21336b7842e56c827ab3324a9173b50e6e3c"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_baseline/load/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_baseline/load/process.json",
+      "bytes": 1488,
+      "sha256": "9c2b41fc4c6a35b76ea885822f458b383f501260858754703154c8807f168eb8"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_baseline/load/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_baseline/load/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_baseline/options.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_baseline/options.json",
+      "bytes": 1079,
+      "sha256": "e0a055c0576a978dc18b09ccfee23f572dfd16d8ebbe7e31371d139033a6bd1d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_baseline/result.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_baseline/result.json",
+      "bytes": 1441,
+      "sha256": "344fe555111220ba8fc824df448f906e667a0336647d1222d660b620500948e5"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_baseline/scan/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_baseline/scan/argv.json",
+      "bytes": 537,
+      "sha256": "8a29acdc6c3a331c5ec0fba911ed89586ba7646a362a43adcf78f4a4e0302f69"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_baseline/scan/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_baseline/scan/process.json",
+      "bytes": 773,
+      "sha256": "2d161fd0d61d0a3a305681bc9371bbb86ce826fc286fbfb64c1c3c95bc939a77"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_baseline/scan/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_baseline/scan/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_baseline/settle/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_baseline/settle/argv.json",
+      "bytes": 1068,
+      "sha256": "ce6a292019e00f15bf591d7e03916c0bd40b43ca40a09a20727e185f3fe5f06e"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_baseline/settle/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_baseline/settle/process.json",
+      "bytes": 1338,
+      "sha256": "f437997a1eab902e5cb1475e8416f16cb3af74fb3a800130018fed1ba7f43329"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_baseline/settle/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_baseline/settle/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_f2load/exact_cardinality.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_f2load/exact_cardinality.json",
+      "bytes": 1083,
+      "sha256": "4f16145be51e17d98c76e312b4e367947cb3740df8c0dc1b4d67dc7bde23678a"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_f2load/fidelity/fidelity.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_f2load/fidelity/fidelity.json",
+      "bytes": 1565,
+      "sha256": "275e14e4b9309234fd455b6f9c9fd87ce7d621752f77f18e5cace57dbc6355ea"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_f2load/load/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_f2load/load/argv.json",
+      "bytes": 1659,
+      "sha256": "7c27ec86d7b3e89d818b9e5b24ac8686604b49143cd8613d124080aa2778ec57"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_f2load/load/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_f2load/load/process.json",
+      "bytes": 1949,
+      "sha256": "fcf73239c76f0cba6cfc8f2b596d9b6483fd559fd9e2a3cb421a734c4ec886d2"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_f2load/load/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_f2load/load/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_f2load/options.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_f2load/options.json",
+      "bytes": 1516,
+      "sha256": "a771caa6ac12831f3aec6efc463a52c1c1ca5aaee228c60372453f4d1c03562d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_f2load/result.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_f2load/result.json",
+      "bytes": 1622,
+      "sha256": "5a234de6544353094147e38ba4b891d45473abc6ee5694eb450fdc74d845876c"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_f2load/scan/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_f2load/scan/argv.json",
+      "bytes": 533,
+      "sha256": "588aee4486a324c68c498b323286608a4c178236a11b6778506055d89d59e127"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_f2load/scan/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_f2load/scan/process.json",
+      "bytes": 770,
+      "sha256": "f3ef932c0a40c70dfe809e4555a515aee122ef78b3f7b4ecf3dd9830910f03b9"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_f2load/scan/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_f2load/scan/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_f2load/settle/argv.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_f2load/settle/argv.json",
+      "bytes": 1066,
+      "sha256": "49d6ba58a743d20562d14d5b2c3b147db275ba071e36b8223c0975168b1f45f0"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_f2load/settle/process.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_f2load/settle/process.json",
+      "bytes": 1336,
+      "sha256": "75c1093847a9c1db6666fc529c391fac8b874626d992d979ea2d919dcef82aa1"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_1024B_zipf99_50_f2load/settle/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_1024B_zipf99_50_f2load/settle/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_baseline/exact_cardinality.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_baseline/exact_cardinality.json",
+      "bytes": 1082,
+      "sha256": "bfc2818c1b0f8fa90a8998340b320e9868f89a7332328831e750cbff0ff91c58"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_baseline/load/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_baseline/load/argv.json",
+      "bytes": 1210,
+      "sha256": "abfd3a5383cf781e682ff05a48cead63f4554d7e6a6fc3c1fa77a783ead2a8f7"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_baseline/load/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_baseline/load/process.json",
+      "bytes": 1483,
+      "sha256": "e2ca182f2839bb0e014589733d5d4c383f478d972e30d99a976e85d6e40078bb"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_baseline/load/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_baseline/load/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_baseline/options.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_baseline/options.json",
+      "bytes": 1074,
+      "sha256": "580af8f3272e7e65a287b442fe83a10025bc4fa53d717f9aeaca423dca5f7194"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_baseline/result.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_baseline/result.json",
+      "bytes": 1441,
+      "sha256": "b8aafcd838c769f9807e5c543a2ad8e37d7f32fd96231c544adb11d061ac9886"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_baseline/scan/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_baseline/scan/argv.json",
+      "bytes": 533,
+      "sha256": "e744ec4c4a741f8ae2dd5cc4c3056fb1ca6292a7b12e5db2f5a05f11f21f1f78"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_baseline/scan/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_baseline/scan/process.json",
+      "bytes": 770,
+      "sha256": "e1817edd1e7d197994eb8b0475d21999bb677dd00571df969b4ad2082977910e"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_baseline/scan/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_baseline/scan/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_baseline/settle/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_baseline/settle/argv.json",
+      "bytes": 1065,
+      "sha256": "88b2a77a26d6b5ddd878129f27472d922586fdeee98ed2ed094163d7f60d508d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_baseline/settle/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_baseline/settle/process.json",
+      "bytes": 1335,
+      "sha256": "ea4c1a0c14e9cda6889dc6159658f92d704798edb8c1233ab5edcc7c2138f26e"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_baseline/settle/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_baseline/settle/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_f2load/exact_cardinality.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_f2load/exact_cardinality.json",
+      "bytes": 1089,
+      "sha256": "05f465b872493fd2311fe6a6e0fa09997b863b2af907fb5395b832d5bb61c160"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_f2load/fidelity/fidelity.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_f2load/fidelity/fidelity.json",
+      "bytes": 1589,
+      "sha256": "f396dce1f609c1195345f689fe45e79199aa7c5c928e100428c95bed7365d406"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_f2load/load/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_f2load/load/argv.json",
+      "bytes": 1652,
+      "sha256": "44164fb56651c8da3cd6ea0755e81eecccb541aa33c1943785be01d73cd4edd0"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_f2load/load/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_f2load/load/process.json",
+      "bytes": 1942,
+      "sha256": "05af7cebfb07b74adbc1df6320419809a8ccca2ecc3000709fc3c041a45be8bb"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_f2load/load/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_f2load/load/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_f2load/options.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_f2load/options.json",
+      "bytes": 1509,
+      "sha256": "d46ffc422ff4b3dce0f667a802e3a739a060288e012eff750605bc7bc60dbd4f"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_f2load/result.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_f2load/result.json",
+      "bytes": 1627,
+      "sha256": "9a8e9f18eabb3c435d315f20a62218a82fd7c4fad6bcc16d89d038cd9034ddf6"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_f2load/scan/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_f2load/scan/argv.json",
+      "bytes": 529,
+      "sha256": "69b7dd501a72f66ae56d6d24dcf79623b14f156dd0ca69feb5b11448d2a3c774"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_f2load/scan/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_f2load/scan/process.json",
+      "bytes": 765,
+      "sha256": "349725c81141ccb4c5f6057c97a2b7f855dc11e281ac10da13e000a1d9a60990"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_f2load/scan/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_f2load/scan/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_f2load/settle/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_f2load/settle/argv.json",
+      "bytes": 1063,
+      "sha256": "8f589fff3c6b6c60079badb90777f937703469480e2529cd3f8c96a59c988bdc"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_f2load/settle/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_f2load/settle/process.json",
+      "bytes": 1333,
+      "sha256": "49b55794d266b73b36cb02e5d5647b780e1e9c470eda030d3824a6b55bf07732"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_uniform50_f2load/settle/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_uniform50_f2load/settle/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_baseline/exact_cardinality.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_baseline/exact_cardinality.json",
+      "bytes": 1087,
+      "sha256": "1f2f794eb59fbacd70370f551a858ee8cc0bf63561c41b5791465a22d5e379e4"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_baseline/load/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_baseline/load/argv.json",
+      "bytes": 1210,
+      "sha256": "5a2c3ee0f2abfefff690fa3f23c754be12bee2e71a0110ac3abd3f877a0c742e"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_baseline/load/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_baseline/load/process.json",
+      "bytes": 1483,
+      "sha256": "c73b469ac6d496cf0d4559b829545cf13cd7c73c39268c8722e7543e950392eb"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_baseline/load/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_baseline/load/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_baseline/options.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_baseline/options.json",
+      "bytes": 1074,
+      "sha256": "38cd6ad281f016dae6f8d20546372c3f5abfe8de66770144e0a617dd2cbb690f"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_baseline/result.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_baseline/result.json",
+      "bytes": 1445,
+      "sha256": "7a458f0f00dcd18307f8ad865a9ac4a194e49afc47509766837e46cc61359e37"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_baseline/scan/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_baseline/scan/argv.json",
+      "bytes": 534,
+      "sha256": "d5d58cf91800a6eb79df3017448725e29382d7d061d91a791a7f374b6be02521"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_baseline/scan/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_baseline/scan/process.json",
+      "bytes": 770,
+      "sha256": "006a88770eb096be82f08c0339902cccfc024e65faa91d581534b920ef81aa48"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_baseline/scan/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_baseline/scan/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_baseline/settle/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_baseline/settle/argv.json",
+      "bytes": 1065,
+      "sha256": "91b9732d2f7530a7dd5363f16ac98bd5f57411093f7d22fdb9d1515dec2a0c0b"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_baseline/settle/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_baseline/settle/process.json",
+      "bytes": 1335,
+      "sha256": "63646ad0c80d1046c87d9e9f2a5dd2e4ea13b59bf28113478473bcfe9a28f2e9"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_baseline/settle/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_baseline/settle/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_f2load/exact_cardinality.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_f2load/exact_cardinality.json",
+      "bytes": 1094,
+      "sha256": "3d1a5e78ca2456296d5ee393433c018b4ec467155cee03851428413b8c75be09"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_f2load/fidelity/fidelity.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_f2load/fidelity/fidelity.json",
+      "bytes": 1594,
+      "sha256": "c145348eb5e6319fbd5247911a65920012bea39f12de40f6dcc30e5b93d3d653"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_f2load/load/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_f2load/load/argv.json",
+      "bytes": 1652,
+      "sha256": "788ade55a2bcb388d00ee9781b2d28b2d04c4cc80d7d7ed226e25e7eb5a82845"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_f2load/load/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_f2load/load/process.json",
+      "bytes": 1943,
+      "sha256": "1e0131ad367f72cf12253838dbfba9a4a11858dcad73d97cb15a9ed22831e90a"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_f2load/load/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_f2load/load/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_f2load/options.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_f2load/options.json",
+      "bytes": 1509,
+      "sha256": "215d2e016850ea3d45a68c8c4b2e6e0dbbdec2eefecbd3b6f14609661789bbdb"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_f2load/result.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_f2load/result.json",
+      "bytes": 1634,
+      "sha256": "fa1936d47a6875f172db8c38629e28bb38fae7cf2c984030123de46dc4cab433"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_f2load/scan/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_f2load/scan/argv.json",
+      "bytes": 530,
+      "sha256": "27b78bd12aedc9f665fbd78786a5dd44f6f9764128700ad9aeebe86fed2641eb"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_f2load/scan/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_f2load/scan/process.json",
+      "bytes": 767,
+      "sha256": "8bd8687c63f19ad0c0d9cd471899f01ebdbc755eb3f447de1e36ead8fbfb44cd"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_f2load/scan/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_f2load/scan/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_f2load/settle/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_f2load/settle/argv.json",
+      "bytes": 1063,
+      "sha256": "58b881cb3deae8fda962bc727db69a380485811d1f9acf989e09f5f08d99f741"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_f2load/settle/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_f2load/settle/process.json",
+      "bytes": 1332,
+      "sha256": "f37feb1be08d28133a6515c7175dd1203d8dc41db92dfeba66e48b61e42ebc83"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_f2load/settle/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_unique100_f2load/settle/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_baseline/exact_cardinality.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_baseline/exact_cardinality.json",
+      "bytes": 1081,
+      "sha256": "4fd128ab9eb8b4d63b6a8b6e1e9185cbaa2028531b33c2bba651d3d9da339c63"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_baseline/load/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_baseline/load/argv.json",
+      "bytes": 1210,
+      "sha256": "6d41e9675ee24cd6d4bf952d16e094c24ae8b934c24d669b0ff79716239705ec"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_baseline/load/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_baseline/load/process.json",
+      "bytes": 1481,
+      "sha256": "af2b428e44cfb14fc74bfa70da32d46e47bf337dc2460fc63a73e9f3770901f0"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_baseline/load/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_baseline/load/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_baseline/options.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_baseline/options.json",
+      "bytes": 1074,
+      "sha256": "114114ded80191ac86bd37d3321f457a34967036e847cb2477296f872a7f6ce4"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_baseline/result.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_baseline/result.json",
+      "bytes": 1441,
+      "sha256": "7985efd226dcfe2b7f830c566d104fdbc0ef3ce39c0577bd5f2a5a38f5c9e292"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_baseline/scan/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_baseline/scan/argv.json",
+      "bytes": 533,
+      "sha256": "0be50bcd55b44b714481d98851096b34435b52296f9e55ae7d58ae19ccee084c"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_baseline/scan/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_baseline/scan/process.json",
+      "bytes": 769,
+      "sha256": "219c37c8c154dd52a0447ef858420cfaccb82ce795a4e94a3ee261fc141b1a79"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_baseline/scan/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_baseline/scan/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_baseline/settle/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_baseline/settle/argv.json",
+      "bytes": 1065,
+      "sha256": "167eef88bcee98c0b5ad8af832c86c9b93eaaec42d2f54baba2051ba047a4439"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_baseline/settle/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_baseline/settle/process.json",
+      "bytes": 1335,
+      "sha256": "7f5b26fe9832e6d4df656049d560429fcc99a2647ed3d29f4ec5964480dbb0fe"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_baseline/settle/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_baseline/settle/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_f2load/exact_cardinality.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_f2load/exact_cardinality.json",
+      "bytes": 1089,
+      "sha256": "179c3d19e050661806d0da0b8eb93be090582da5d9cfbf54f234ecd43059a96f"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_f2load/fidelity/fidelity.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_f2load/fidelity/fidelity.json",
+      "bytes": 1583,
+      "sha256": "263f34fc7da1df687d93b6fa28a9a4a8c128859a674421324fd98551f737bfb1"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_f2load/load/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_f2load/load/argv.json",
+      "bytes": 1652,
+      "sha256": "fb6a1bdcf87539d4b8b7b80266977c1f543b6324fa57ae4255b0c3a0bb98fb0e"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_f2load/load/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_f2load/load/process.json",
+      "bytes": 1941,
+      "sha256": "0979ac5d93c75949b0c187fb733546351cb7f61d62ef38538b9030838489209a"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_f2load/load/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_f2load/load/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_f2load/options.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_f2load/options.json",
+      "bytes": 1509,
+      "sha256": "32d7b8bca1253c5d606d410022ced6cc42b9c41b16693a585dff02f4de0975b8"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_f2load/result.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_f2load/result.json",
+      "bytes": 1627,
+      "sha256": "8746e467de9460ef8b6faaefcd2c21c9f462518c5f82c4bd093377a25868b7d0"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_f2load/scan/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_f2load/scan/argv.json",
+      "bytes": 529,
+      "sha256": "968844914b18d5ac6c3815a558da41cc1ed210d4dc421a1cd591f974780c59a3"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_f2load/scan/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_f2load/scan/process.json",
+      "bytes": 766,
+      "sha256": "c7ccdec8a2cfed857f741aee62740242530997c90ba01aa58f084db4a98e3e33"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_f2load/scan/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_f2load/scan/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_f2load/settle/argv.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_f2load/settle/argv.json",
+      "bytes": 1063,
+      "sha256": "271f58020fa061d278bf1d8a697d339584992e18bcbf85d5526d7e680ebeb985"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_f2load/settle/process.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_f2load/settle/process.json",
+      "bytes": 1333,
+      "sha256": "707e330ce006fa98158b6d46f2ca97acb7a45aa7b510a60b3ebab8c31f4840ba"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_zipf99_50_f2load/settle/runtime.json",
+      "saved_relative_path": "full/cases/s100gib_91B_zipf99_50_f2load/settle/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/results.json",
+      "saved_relative_path": "full/results.json",
+      "bytes": 19965,
+      "sha256": "5d57d56d007b64ea1d0f3475a02d95080ddaccb5d57d7479606882e66cb66270"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/run2_comparison/REPORT.md",
+      "saved_relative_path": "full/run2_comparison/REPORT.md",
+      "bytes": 3733,
+      "sha256": "3c0f3921e1bc70c770e45eb63e53c35cf5dccf012e299f53d4842c9127d331e0"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/run2_comparison/comparison.json",
+      "saved_relative_path": "full/run2_comparison/comparison.json",
+      "bytes": 11534,
+      "sha256": "ad5cfa2e2213a25319f5bba43970d5fbb49975281fa574e86ba13f4c6eba19c3"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/storage_probe.json",
+      "saved_relative_path": "full/storage_probe.json",
+      "bytes": 339,
+      "sha256": "b4bafdcad3984af62e112a70d80b57a0d4296e93962feac29ab096704af1ad14"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/summary.tsv",
+      "saved_relative_path": "full/summary.tsv",
+      "bytes": 4745,
+      "sha256": "f0347076f144779b48e38111e07150f864212f1df11ffd5ab5f69dea0a81e7d9"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/trace_manifest.json",
+      "saved_relative_path": "full/trace_manifest.json",
+      "bytes": 3982,
+      "sha256": "c33b712f6f558cc1334dbcdc301ca600e3de7af18b1f12f7aa06c93a7cff6404"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_uniform50/case.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_uniform50/case.json",
+      "bytes": 634,
+      "sha256": "d07b9ee875bee7a8292993560a2c06c085463779f8405223c93815201f1ee107"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_uniform50/generate/argv.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_uniform50/generate/argv.json",
+      "bytes": 428,
+      "sha256": "38520f1f15d3ed0df11b52dbcf9fa21ea04e9f8873adc8096472dd9435f4815b"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_uniform50/generate/process.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_uniform50/generate/process.json",
+      "bytes": 671,
+      "sha256": "f5ecb9105e9a2227e95ab8f2cf1c9971ddaf69abb9e07cea33bf91576e1a50f9"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_uniform50/generate/runtime.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_uniform50/generate/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_uniform50/verification.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_uniform50/verification.json",
+      "bytes": 329,
+      "sha256": "2c3fc3407864319cafba3ddb723d6fbfdb423c15798dcb40a639141bf5a3d8de"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_uniform50/verify/argv.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_uniform50/verify/argv.json",
+      "bytes": 406,
+      "sha256": "20bd2dc73f1a093a3bc2e37e01d48b607ad5089fdcfd35a2928623ca098cbd37"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_uniform50/verify/process.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_uniform50/verify/process.json",
+      "bytes": 626,
+      "sha256": "a639eba016e093f56effc6a6f95b419e6ed2f2ae89f8fe5f04c9e557c8561157"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_uniform50/verify/runtime.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_uniform50/verify/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_unique100/case.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_unique100/case.json",
+      "bytes": 633,
+      "sha256": "c6e8b285f3271218f9efa63ec159f70ff968e51ee0310edf6032e6dc3dec4780"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_unique100/generate/argv.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_unique100/generate/argv.json",
+      "bytes": 429,
+      "sha256": "638e1b4898855077ed983cb3d76c85098a363e8125030708d8d363f4b52ecb58"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_unique100/generate/process.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_unique100/generate/process.json",
+      "bytes": 672,
+      "sha256": "348cd6cba772f498d7dfc21cc49ee87670fb3206ef1e4fd39c10c34055df8a67"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_unique100/generate/runtime.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_unique100/generate/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_unique100/verification.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_unique100/verification.json",
+      "bytes": 331,
+      "sha256": "166f9471b25b92a542ca93817bafac11dc9ef63fcd398be0836538a07290c8c7"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_unique100/verify/argv.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_unique100/verify/argv.json",
+      "bytes": 406,
+      "sha256": "12f21c25765ce68297302b16512d9f34b4343e2e7cf651b963e1c57497808943"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_unique100/verify/process.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_unique100/verify/process.json",
+      "bytes": 627,
+      "sha256": "2b31f0f22c73e376092705ac30ee4de794235956d317a65f8474d50d62b1c027"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_unique100/verify/runtime.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_unique100/verify/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_zipf99_50/case.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_zipf99_50/case.json",
+      "bytes": 637,
+      "sha256": "c8853291a7b5f3f4dbf65b8dc6b468443ce2d49c582d2c6d71c0135b984ad079"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_zipf99_50/generate/argv.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_zipf99_50/generate/argv.json",
+      "bytes": 431,
+      "sha256": "aa9914a91f8bcb9df4edf2afc0d470ab577050eeb1359964a4ef97f305d8b05c"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_zipf99_50/generate/process.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_zipf99_50/generate/process.json",
+      "bytes": 673,
+      "sha256": "b894695a10719643ac25544d8f37aa9fb6bbfec190778a2a123d886420cf13f9"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_zipf99_50/generate/runtime.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_zipf99_50/generate/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_zipf99_50/verification.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_zipf99_50/verification.json",
+      "bytes": 329,
+      "sha256": "6de5139124b5885e0d5cb42d2072da86c1fe993fe8edf88460f95d11237af827"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_zipf99_50/verify/argv.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_zipf99_50/verify/argv.json",
+      "bytes": 406,
+      "sha256": "e5083a3fdfee07d93b46c5a11406aa207855066aa9de4c55e037e6e23b92469b"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_zipf99_50/verify/process.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_zipf99_50/verify/process.json",
+      "bytes": 627,
+      "sha256": "0f4a893f502f7e04ff2ceef5a59b9f33cf4d00a610667e369e0f5fe9a8ddc3e5"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_zipf99_50/verify/runtime.json",
+      "saved_relative_path": "full/traces/s100gib_1024B_zipf99_50/verify/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_uniform50/case.json",
+      "saved_relative_path": "full/traces/s100gib_91B_uniform50/case.json",
+      "bytes": 629,
+      "sha256": "c56ef56db3ccf52df3b847723854e0965b1f9090438df3a713ddfad464841230"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_uniform50/generate/argv.json",
+      "saved_relative_path": "full/traces/s100gib_91B_uniform50/generate/argv.json",
+      "bytes": 427,
+      "sha256": "a8b1456e78ade9992e28d8d9947aef54f8776a37457ddfb60631cd8ee937380e"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_uniform50/generate/process.json",
+      "saved_relative_path": "full/traces/s100gib_91B_uniform50/generate/process.json",
+      "bytes": 670,
+      "sha256": "bcf34f6e7c5d0c4ba10a194f75a7fda6d407c4350c4b93ed4b5d3cc33c126053"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_uniform50/generate/runtime.json",
+      "saved_relative_path": "full/traces/s100gib_91B_uniform50/generate/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_uniform50/verification.json",
+      "saved_relative_path": "full/traces/s100gib_91B_uniform50/verification.json",
+      "bytes": 331,
+      "sha256": "921ddef577d23c88756ac043ad945e4f5c73f39c1f5a07c1542b920e780f296d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_uniform50/verify/argv.json",
+      "saved_relative_path": "full/traces/s100gib_91B_uniform50/verify/argv.json",
+      "bytes": 402,
+      "sha256": "312a887d63eea722ad431e9f8c55a0241a71fd9b12e8d3bd49bc6dfd01401bdf"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_uniform50/verify/process.json",
+      "saved_relative_path": "full/traces/s100gib_91B_uniform50/verify/process.json",
+      "bytes": 622,
+      "sha256": "6228182412e37892802ebf6fb1335d04ac1cd5f72d433c2aefe1f939d28c3ab4"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_uniform50/verify/runtime.json",
+      "saved_relative_path": "full/traces/s100gib_91B_uniform50/verify/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_unique100/case.json",
+      "saved_relative_path": "full/traces/s100gib_91B_unique100/case.json",
+      "bytes": 628,
+      "sha256": "3375f5bf2c68aff6bba6b29dede5f391d671721c5a78fc7b025099a1292cb972"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_unique100/generate/argv.json",
+      "saved_relative_path": "full/traces/s100gib_91B_unique100/generate/argv.json",
+      "bytes": 428,
+      "sha256": "eaf19446ae721a2dfece711f01dae5cdf4016a78ec2f76af2381e2086583205c"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_unique100/generate/process.json",
+      "saved_relative_path": "full/traces/s100gib_91B_unique100/generate/process.json",
+      "bytes": 670,
+      "sha256": "61c87e0df0c1216abf792fe3e539cbe42117bf05cd1008859aa9ef88c5fee5c4"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_unique100/generate/runtime.json",
+      "saved_relative_path": "full/traces/s100gib_91B_unique100/generate/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_unique100/verification.json",
+      "saved_relative_path": "full/traces/s100gib_91B_unique100/verification.json",
+      "bytes": 333,
+      "sha256": "8acf650e268285acfb8efe942f4234b56546a145a0a1f0fda4d048af4455b19d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_unique100/verify/argv.json",
+      "saved_relative_path": "full/traces/s100gib_91B_unique100/verify/argv.json",
+      "bytes": 402,
+      "sha256": "62f278291d6dbc6f2994701337993784be35ac471a524464757cdd782a5d6eef"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_unique100/verify/process.json",
+      "saved_relative_path": "full/traces/s100gib_91B_unique100/verify/process.json",
+      "bytes": 623,
+      "sha256": "3c4f1e73ada82ce0a37c53721968c62ee902147be59c4fddf60113ae48e477b3"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_unique100/verify/runtime.json",
+      "saved_relative_path": "full/traces/s100gib_91B_unique100/verify/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_zipf99_50/case.json",
+      "saved_relative_path": "full/traces/s100gib_91B_zipf99_50/case.json",
+      "bytes": 632,
+      "sha256": "1946bbb2cb4737fda85df8bb29049f0f8e557682918ab16df502abaea8af19c3"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_zipf99_50/generate/argv.json",
+      "saved_relative_path": "full/traces/s100gib_91B_zipf99_50/generate/argv.json",
+      "bytes": 430,
+      "sha256": "a5f08ffe00d93b9601b6177c97f91b9cdb6c39d7b9240f78429bf0af92023f40"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_zipf99_50/generate/process.json",
+      "saved_relative_path": "full/traces/s100gib_91B_zipf99_50/generate/process.json",
+      "bytes": 672,
+      "sha256": "96e19c29ba67a971677e0f1108c2a1deaf4616522835095332b0bb79385554e1"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_zipf99_50/generate/runtime.json",
+      "saved_relative_path": "full/traces/s100gib_91B_zipf99_50/generate/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_zipf99_50/verification.json",
+      "saved_relative_path": "full/traces/s100gib_91B_zipf99_50/verification.json",
+      "bytes": 331,
+      "sha256": "829782fa5ca1308458ddd337d5505492253fc0c9de4c57f001e1ec8f190cf614"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_zipf99_50/verify/argv.json",
+      "saved_relative_path": "full/traces/s100gib_91B_zipf99_50/verify/argv.json",
+      "bytes": 402,
+      "sha256": "f6505a617a2cf96727a47ff3dbf46a14e04946e32c00741fb80f3522cd75c5b6"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_zipf99_50/verify/process.json",
+      "saved_relative_path": "full/traces/s100gib_91B_zipf99_50/verify/process.json",
+      "bytes": 622,
+      "sha256": "54039604a4c4df7b56519f72a67628eb410713c60b5e759646630841ba830e7a"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_zipf99_50/verify/runtime.json",
+      "saved_relative_path": "full/traces/s100gib_91B_zipf99_50/verify/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/generate_load_trace_fast.cc",
+      "saved_relative_path": "generate_load_trace_fast.cc",
+      "bytes": 12550,
+      "sha256": "5f152d461e1130da5022ae15177edfb28664aa2a90874851eb45c4232abbf3f5"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3_launch/compare_run2_run3.py",
+      "saved_relative_path": "launch/compare_run2_run3.py",
+      "bytes": 9254,
+      "sha256": "dc83ff382fce46f0c42cdde0002c18a1c59999144864c835b13b74dc61494c00"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3_launch/git_status.txt",
+      "saved_relative_path": "launch/git_status.txt",
+      "bytes": 400,
+      "sha256": "e0ad743c2e0580252eb6b733afb390d5c77a495027abe8d179504ad41906d37d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3_launch/launch_and_record.py",
+      "saved_relative_path": "launch/launch_and_record.py",
+      "bytes": 1336,
+      "sha256": "8abca9aa43662965cb4bad8c0c172bfea1bab18e6334ba91ff18b4cec1fe0d85"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3_launch/launcher_status.json",
+      "saved_relative_path": "launch/launcher_status.json",
+      "bytes": 420,
+      "sha256": "b08e203787c0997c543b0f39dfabdc38d4c0e2ee7e67c0132ab97f530b767b01"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3_launch/preflight.json",
+      "saved_relative_path": "launch/preflight.json",
+      "bytes": 1394,
+      "sha256": "c50ba7884d5c4976c03429f1ca8ced6f25c8acf11a13bb0e0cf4e376894813c5"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/launch_provenance.json",
+      "saved_relative_path": "launch_provenance.json",
+      "bytes": 1846,
+      "sha256": "4af02ceb15d8bda79b141dd79aca56bc02d466e0c73a18aaa9db382fc2b95343"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/manifest.json",
+      "saved_relative_path": "manifest.json",
+      "bytes": 5548,
+      "sha256": "b03474356d9d88afd6785b74719a3d70cd0dfa3544b6ca3d9ec428f8823a4ae6"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/COMPLETED",
+      "saved_relative_path": "pilot/COMPLETED",
+      "bytes": 33,
+      "sha256": "8ba00eaf6e846f9a412f0ee0420de4818c3b471d4f29a0db674ade3129aef331"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/REPORT.md",
+      "saved_relative_path": "pilot/REPORT.md",
+      "bytes": 1477,
+      "sha256": "f3bdf53515ea230ee7ec9698a75bd6b2f0876fdb7ef1117367c67132043b0bfb"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_uniform50_baseline/exact_cardinality.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_uniform50_baseline/exact_cardinality.json",
+      "bytes": 1020,
+      "sha256": "1bcc387b00f1db95f30a37e7175d302fb85274ddebb7e8caceb7914ec7b06f53"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_uniform50_baseline/options.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_uniform50_baseline/options.json",
+      "bytes": 1075,
+      "sha256": "0c44e767976413f0304c3a1925eb096be99f2d247c8943929a1d5e5336b8b247"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_uniform50_baseline/result.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_uniform50_baseline/result.json",
+      "bytes": 1384,
+      "sha256": "b9d6006986a0768b96da88c88db9cfbf9bfcfd90ff2a0dde2fc2951d98bdaa34"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_uniform50_f2load/exact_cardinality.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_uniform50_f2load/exact_cardinality.json",
+      "bytes": 1026,
+      "sha256": "853ff53ff9e898eccade90e946b60536b3f0bab8ca2af1d068d83256af50164f"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_uniform50_f2load/fidelity/fidelity.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_uniform50_f2load/fidelity/fidelity.json",
+      "bytes": 1206,
+      "sha256": "530af073a96896fa30b6e43a4588767ad3c00d601b24b57cca83dae63dc48744"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_uniform50_f2load/options.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_uniform50_f2load/options.json",
+      "bytes": 1511,
+      "sha256": "f43d790866b3a61ef74971b8b9bf0941bfce1c77dce671a7361e34aadead01d2"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_uniform50_f2load/result.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_uniform50_f2load/result.json",
+      "bytes": 1552,
+      "sha256": "be4928a1b87bf8a43a278ecb52d24d7d5cd74202a810594ac10fd8b67126ad81"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_unique100_baseline/exact_cardinality.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_unique100_baseline/exact_cardinality.json",
+      "bytes": 1017,
+      "sha256": "e691cb463bd7d597ca425edcd55a381ca0357cc074fdabd567163e97faea3eea"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_unique100_baseline/options.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_unique100_baseline/options.json",
+      "bytes": 1075,
+      "sha256": "9b2f910fd7e91178f6e74f26a84432f9dd9025e2989d23e095fbad9fc6bbbe60"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_unique100_baseline/result.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_unique100_baseline/result.json",
+      "bytes": 1379,
+      "sha256": "9d6fd9327cd86869ddbcffdb0ec2efb7bd5261b5f94ce1e9e37eac03be53613d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_unique100_f2load/exact_cardinality.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_unique100_f2load/exact_cardinality.json",
+      "bytes": 1019,
+      "sha256": "999b3fe39298c3054a7d51c6cd97799e3ef0db85a292a5eb65cec3281431398c"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_unique100_f2load/fidelity/fidelity.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_unique100_f2load/fidelity/fidelity.json",
+      "bytes": 1058,
+      "sha256": "53bbc17a6e11b19f257080ed1173ee6cb75ca74404600f34e1e4b0a60edff2c8"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_unique100_f2load/options.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_unique100_f2load/options.json",
+      "bytes": 1511,
+      "sha256": "7b59053bee18e20024b8a1c4729215614eab35c527f17cba99a70d42cf5aca18"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_unique100_f2load/result.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_unique100_f2load/result.json",
+      "bytes": 1551,
+      "sha256": "80d4eb6e9bc2fc95cc4d051d37a71da78dbd2b7d94a690f6d21ba8dea87467c4"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_zipf99_50_baseline/exact_cardinality.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_zipf99_50_baseline/exact_cardinality.json",
+      "bytes": 1020,
+      "sha256": "21dfdb1d9c62087845ff805aa18110e4fcd3950edb660a4747a04f1685266037"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_zipf99_50_baseline/options.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_zipf99_50_baseline/options.json",
+      "bytes": 1075,
+      "sha256": "e7920f09491d7b857759adea38324e4ba2ab3360cb754954571a724a7ab8c835"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_zipf99_50_baseline/result.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_zipf99_50_baseline/result.json",
+      "bytes": 1384,
+      "sha256": "1c8add33591a666405faf5bf82b8e3370e65fdd006c804ba69aa92d8963d800d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_zipf99_50_f2load/exact_cardinality.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_zipf99_50_f2load/exact_cardinality.json",
+      "bytes": 1024,
+      "sha256": "275b0bc496749bd565572cc9db7f399c4d8f976dbee7bbd508e75cb4430fa13f"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_zipf99_50_f2load/fidelity/fidelity.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_zipf99_50_f2load/fidelity/fidelity.json",
+      "bytes": 1200,
+      "sha256": "380d9a980f340765f23997ca718288fe291ad6d9891ccf2c33e65326ee55b589"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_zipf99_50_f2load/options.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_zipf99_50_f2load/options.json",
+      "bytes": 1511,
+      "sha256": "9696e919afc93ef3ef415f52f281653c176415fb6e6b65af847a682b9c1c9f87"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_1024B_zipf99_50_f2load/result.json",
+      "saved_relative_path": "pilot/cases/s1gib_1024B_zipf99_50_f2load/result.json",
+      "bytes": 1552,
+      "sha256": "2f9d51f39a00769f5a5cd760f551936f7febbc384b9ba3db441d51abd6da9926"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_uniform50_baseline/exact_cardinality.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_uniform50_baseline/exact_cardinality.json",
+      "bytes": 1026,
+      "sha256": "3e65879cd61ba9e7c38bd3e36b5fb7893e507dc3762f16ff443859a439ded794"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_uniform50_baseline/options.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_uniform50_baseline/options.json",
+      "bytes": 1070,
+      "sha256": "4691c10b1e1f1438665a06ec57fa7c11077bc3ab5aca7d93029eaa76a86c08e0"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_uniform50_baseline/result.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_uniform50_baseline/result.json",
+      "bytes": 1384,
+      "sha256": "6c0772ceaa4a8c9b1aceaf103eda683b566e5291c885a3700926a615e69ed6b2"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_uniform50_f2load/exact_cardinality.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_uniform50_f2load/exact_cardinality.json",
+      "bytes": 1027,
+      "sha256": "c9f865b058c3a734a51b18c5707dae780cfc5943d0d0f6e50159c57c8195bc75"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_uniform50_f2load/fidelity/fidelity.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_uniform50_f2load/fidelity/fidelity.json",
+      "bytes": 1216,
+      "sha256": "ed3e299d776c97edda0e468a5d973c5e46a32e6cb8c0ab989869f38a5eb25a3a"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_uniform50_f2load/options.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_uniform50_f2load/options.json",
+      "bytes": 1504,
+      "sha256": "8f1eced4eb1604b46f9c9d4b90a4f0b6d401b08c17a9128df0f1e5bb3179bbce"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_uniform50_f2load/result.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_uniform50_f2load/result.json",
+      "bytes": 1555,
+      "sha256": "7b3b3e1e817a2c2d076fa6cbd2800c557603ba059a0acf00fb11edcad2459b95"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_unique100_baseline/exact_cardinality.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_unique100_baseline/exact_cardinality.json",
+      "bytes": 1031,
+      "sha256": "69d79d36172eda5a5cac008838e663c4f78deb7e6fa2f96f69a85d02a38540a5"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_unique100_baseline/options.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_unique100_baseline/options.json",
+      "bytes": 1070,
+      "sha256": "479f7aea883bd42be6ae038a7c50152bc10281aab1e724a12d5a8750cce5625d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_unique100_baseline/result.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_unique100_baseline/result.json",
+      "bytes": 1388,
+      "sha256": "d50445be9ef0e84b60b7438bfbb83b89d8a3d3ff643e2e6e1c1b665961263800"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_unique100_f2load/exact_cardinality.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_unique100_f2load/exact_cardinality.json",
+      "bytes": 1024,
+      "sha256": "38cc462cff16785391a6a8fba864c2700d2243fa138478abf500547e6e6cf77e"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_unique100_f2load/fidelity/fidelity.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_unique100_f2load/fidelity/fidelity.json",
+      "bytes": 1223,
+      "sha256": "68488325a6576d50ea6c30f27218919f5789d6821e267cfd9c1471415ffec0fc"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_unique100_f2load/options.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_unique100_f2load/options.json",
+      "bytes": 1504,
+      "sha256": "a59b25b41e3553a94fc0e79177f7d79ef2872a0a2e3d4828fd0c0b0c40673c80"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_unique100_f2load/result.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_unique100_f2load/result.json",
+      "bytes": 1553,
+      "sha256": "f13e03a0f7f91c3fe16dfe5cc3091c1646d2f46cac5e84f4cb367945d1c303cd"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_zipf99_50_baseline/exact_cardinality.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_zipf99_50_baseline/exact_cardinality.json",
+      "bytes": 1025,
+      "sha256": "58e275404d201bad0b80dde99e89fa1b6c46d58d6fa3b7b883af145bf42bcd76"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_zipf99_50_baseline/options.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_zipf99_50_baseline/options.json",
+      "bytes": 1070,
+      "sha256": "980d453826f2cb3d91dd2a505002ea1bfc60bc90d1abe77312e5f22d7701603a"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_zipf99_50_baseline/result.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_zipf99_50_baseline/result.json",
+      "bytes": 1384,
+      "sha256": "0ecedd9be7c250c35d47bc1c771a9ad29e0822a3fe9ef2e036da0a84fe997890"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_zipf99_50_f2load/exact_cardinality.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_zipf99_50_f2load/exact_cardinality.json",
+      "bytes": 1029,
+      "sha256": "59e34acab103aa41f3074f790095b4d758c0691aef1be816025b2d5c37661568"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_zipf99_50_f2load/fidelity/fidelity.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_zipf99_50_f2load/fidelity/fidelity.json",
+      "bytes": 1215,
+      "sha256": "1ff84552cca7a1e945c9dd82b98800899b744a77cab1a2d1c23d137489fd380a"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_zipf99_50_f2load/options.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_zipf99_50_f2load/options.json",
+      "bytes": 1504,
+      "sha256": "748aad3040d4b4782dc516b7de101573a9cec19732c882463b3bd8fc227357b1"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/cases/s1gib_91B_zipf99_50_f2load/result.json",
+      "saved_relative_path": "pilot/cases/s1gib_91B_zipf99_50_f2load/result.json",
+      "bytes": 1556,
+      "sha256": "698ab7edc4ac3e3333f6826b0bf3dd7a9de99d8b62176ec15c0558beaeb87a6d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/results.json",
+      "saved_relative_path": "pilot/results.json",
+      "bytes": 19173,
+      "sha256": "e07a3a676a00f3093e3e9ce2862225662ef5ed1f87e71db19b5045ffa8535897"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/storage_probe.json",
+      "saved_relative_path": "pilot/storage_probe.json",
+      "bytes": 340,
+      "sha256": "9442c3e6d5e599d7b83f0e9e6ec3f097f86ea8f359972afe3444233f8bad60ff"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/summary.tsv",
+      "saved_relative_path": "pilot/summary.tsv",
+      "bytes": 4499,
+      "sha256": "a416f98a98684334f198eb90f37de421900a46855c698cefbd4323ffa21fb2dd"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/trace_manifest.json",
+      "saved_relative_path": "pilot/trace_manifest.json",
+      "bytes": 3910,
+      "sha256": "79555516a98c46fcbeffb0a9cf4388d307a83c4b3dc64c96f6b2b1a22a29e5e2"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_uniform50/case.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_uniform50/case.json",
+      "bytes": 622,
+      "sha256": "f573e12cc4c18154cef93bfa14aaa552c18e0daff99167ab7dade863f8d9094f"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_uniform50/generate/argv.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_uniform50/generate/argv.json",
+      "bytes": 421,
+      "sha256": "1e05b6ddeb91564e4ae01c4d8820265a8a6a91321a33323ce08576ef270ed161"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_uniform50/generate/process.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_uniform50/generate/process.json",
+      "bytes": 666,
+      "sha256": "ce31ee4667931fef5adc48cbebe3bf734b4627ef60bf0733bd5b51f62fdf603a"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_uniform50/generate/runtime.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_uniform50/generate/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_uniform50/verification.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_uniform50/verification.json",
+      "bytes": 316,
+      "sha256": "57bf7d34e6bb518d3c6c0370c9896e16b72a891a74da78d91c34b1e913688513"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_uniform50/verify/argv.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_uniform50/verify/argv.json",
+      "bytes": 404,
+      "sha256": "0177038009e73c0a250944e12ba27ffe0e88619ee32bd1eb681930a3b0e51b8f"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_uniform50/verify/process.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_uniform50/verify/process.json",
+      "bytes": 627,
+      "sha256": "26147662511153ac0312ff937ab11db0b7f96a8ab91975319ee120a91c6de0c6"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_uniform50/verify/runtime.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_uniform50/verify/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_unique100/case.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_unique100/case.json",
+      "bytes": 621,
+      "sha256": "473df191cfd67dee4d8a6058cbbb727d00ac69b7db1526ea6280c81875599ea9"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_unique100/generate/argv.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_unique100/generate/argv.json",
+      "bytes": 422,
+      "sha256": "de4214a10ca364e32799b1c42e02eb8971d51d9ab1106009e6371525547cbf3f"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_unique100/generate/process.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_unique100/generate/process.json",
+      "bytes": 666,
+      "sha256": "92114319b1399efb1f6001ebf852a27b7ddf3d4bcf69752a1dd64c8c29f0e176"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_unique100/generate/runtime.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_unique100/generate/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_unique100/verification.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_unique100/verification.json",
+      "bytes": 318,
+      "sha256": "0116ae924051c7e7ec98ef94bb48b50a7e86cd9d47c228ad42757b40a7b55a7d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_unique100/verify/argv.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_unique100/verify/argv.json",
+      "bytes": 404,
+      "sha256": "6d2f3545d7d3effe12a6a328067fca64cff98be50399ff233f7627ec595e5c69"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_unique100/verify/process.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_unique100/verify/process.json",
+      "bytes": 627,
+      "sha256": "2ebdbb452e28fefbb44b9152d438c4621c1b8e4fe4ac25a5766c44ad5ccc220f"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_unique100/verify/runtime.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_unique100/verify/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_zipf99_50/case.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_zipf99_50/case.json",
+      "bytes": 625,
+      "sha256": "3cfe15f79a8bb41c20d65bbe9ea3a750027a489fd549df2eeba450f9ddda367b"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_zipf99_50/generate/argv.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_zipf99_50/generate/argv.json",
+      "bytes": 424,
+      "sha256": "db6cd66ae1099ef26cac0bdde59c577b5aee44e9eeb0f0474c05d3ff355fafe4"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_zipf99_50/generate/process.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_zipf99_50/generate/process.json",
+      "bytes": 668,
+      "sha256": "3b9d8b082f4e75b0daf6da1f1188337153f07571b9526af04891d18f1e6c7e27"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_zipf99_50/generate/runtime.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_zipf99_50/generate/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_zipf99_50/verification.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_zipf99_50/verification.json",
+      "bytes": 316,
+      "sha256": "0a7475c163266ffb07ff020f03940cbe2f087a06015696d485eed19316f4d00d"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_zipf99_50/verify/argv.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_zipf99_50/verify/argv.json",
+      "bytes": 404,
+      "sha256": "ca95771c9517738f68790749ae42c9eabdd21050b8273ae14f8ff0055fcbd434"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_zipf99_50/verify/process.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_zipf99_50/verify/process.json",
+      "bytes": 627,
+      "sha256": "e58b9d6e8f638d51888eafe8b833fb0793bd73cb1c7b5ea2f5c8f16c9568f7b5"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_1024B_zipf99_50/verify/runtime.json",
+      "saved_relative_path": "pilot/traces/s1gib_1024B_zipf99_50/verify/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_uniform50/case.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_uniform50/case.json",
+      "bytes": 617,
+      "sha256": "629cc102d7d1130b002d159e46bc8c1b95de58de8507dadc46096640f21e656f"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_uniform50/generate/argv.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_uniform50/generate/argv.json",
+      "bytes": 420,
+      "sha256": "8ca7031dcb56ff91454f1526f45ad6d71c27204a01a2305e372a23b6d0d3ad50"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_uniform50/generate/process.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_uniform50/generate/process.json",
+      "bytes": 664,
+      "sha256": "adcdbf7bca34eb5c68f3047efd3a2048b2b716226780e74f7c60f353af05e213"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_uniform50/generate/runtime.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_uniform50/generate/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_uniform50/verification.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_uniform50/verification.json",
+      "bytes": 318,
+      "sha256": "63c42c6a9cd747c4e05392bea7dc403c4f10df2861851fddd20725958b12e773"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_uniform50/verify/argv.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_uniform50/verify/argv.json",
+      "bytes": 400,
+      "sha256": "6c9590caa01c5b638ef5a9f7371f0f5e7e58ba1e645ba0609f0078058a2cc429"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_uniform50/verify/process.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_uniform50/verify/process.json",
+      "bytes": 622,
+      "sha256": "a6c1afcddde74535228a9b8a77313962b1cb3b71641b9afd0bbaa2c265167008"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_uniform50/verify/runtime.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_uniform50/verify/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_unique100/case.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_unique100/case.json",
+      "bytes": 616,
+      "sha256": "296e87d859febb037dadd8d2d78cb608cc4f020a6d6daaaeb76c740e5b1d4017"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_unique100/generate/argv.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_unique100/generate/argv.json",
+      "bytes": 421,
+      "sha256": "ca68e020a6debb54f53a601f08ad932d47841c3273225fa4e162661dd1839740"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_unique100/generate/process.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_unique100/generate/process.json",
+      "bytes": 665,
+      "sha256": "52ffbd5e667c3f8a8023266cb39f63d0254a2bd87d7c106b04f5146346b54293"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_unique100/generate/runtime.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_unique100/generate/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_unique100/verification.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_unique100/verification.json",
+      "bytes": 320,
+      "sha256": "44de15b6623154e7ecf74e42847efd46478cfc1385b4ac2a920dff9ed07375d2"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_unique100/verify/argv.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_unique100/verify/argv.json",
+      "bytes": 400,
+      "sha256": "644c049e3b983f6c7a3f69a7489313414503066e25fb34e1c1f6e99e16ded05c"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_unique100/verify/process.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_unique100/verify/process.json",
+      "bytes": 621,
+      "sha256": "129d743bb5192c97ffb8a138fcc6f9daf8c1574c057a9ecc56e0261860d4ab05"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_unique100/verify/runtime.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_unique100/verify/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_zipf99_50/case.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_zipf99_50/case.json",
+      "bytes": 620,
+      "sha256": "cdc24a33f5175d1721d56403b649a9cd7808a1713bf6941405453bc91dcbc4c8"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_zipf99_50/generate/argv.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_zipf99_50/generate/argv.json",
+      "bytes": 423,
+      "sha256": "109e7bb86c81503521fda419bccf17291e6537d0ca27bb8b3bb6ede77827dec1"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_zipf99_50/generate/process.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_zipf99_50/generate/process.json",
+      "bytes": 666,
+      "sha256": "38b05f4ea5021da327dec2ecfe3fefd5023324af82a53060974e068223984bcd"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_zipf99_50/generate/runtime.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_zipf99_50/generate/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_zipf99_50/verification.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_zipf99_50/verification.json",
+      "bytes": 318,
+      "sha256": "2a8e186d45c019bb0d8b8a56d9d6b20c40bffcbe09de738f6f773d9f70bf5712"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_zipf99_50/verify/argv.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_zipf99_50/verify/argv.json",
+      "bytes": 400,
+      "sha256": "b9d3a343d82add369a6dbaec577b710859d330143e7d2392576f9b0a58a53793"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_zipf99_50/verify/process.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_zipf99_50/verify/process.json",
+      "bytes": 621,
+      "sha256": "9221782a480db9314f2d33a81b1f1486023cb5a40d5c3a4e231c45a6fd2f56a1"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_zipf99_50/verify/runtime.json",
+      "saved_relative_path": "pilot/traces/s1gib_91B_zipf99_50/verify/runtime.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/process_status.json",
+      "saved_relative_path": "process_status.json",
+      "bytes": 118029,
+      "sha256": "4e464cbdf0194c9ad03e29c8ba16719b5a04cd5ec27bcc8aa3c0eb4635848a33"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/run_fidelity_dataset_sweep.py",
+      "saved_relative_path": "run_fidelity_dataset_sweep.py",
+      "bytes": 27388,
+      "sha256": "804b52146c689fa624ed1dbaeac21dfefeb09a6b9514ea9d794309f3fe3fd1a0"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/runtime_all.json",
+      "saved_relative_path": "runtime_all.json",
+      "bytes": 628,
+      "sha256": "517a0d725d22bba8614a689b388ff8c47464d19b15f1196993ca9ff20be9ad61"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/seqfix_source_hashes.json",
+      "saved_relative_path": "seqfix_source_hashes.json",
+      "bytes": 434,
+      "sha256": "52b161a103df39319d5a19709b851efc0fa42c0df9df9a7ff76c7050ea4eabcd"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/seqfix_source_snapshot/db/db_impl/db_impl.h",
+      "saved_relative_path": "seqfix_source_snapshot/db/db_impl/db_impl.h",
+      "bytes": 154982,
+      "sha256": "fbd86dc6431c6033fb1288c1316451f7d69a0042c024673124ce0a2d73093df3"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/seqfix_source_snapshot/db/db_impl/db_impl_compaction_flush.cc",
+      "saved_relative_path": "seqfix_source_snapshot/db/db_impl/db_impl_compaction_flush.cc",
+      "bytes": 255133,
+      "sha256": "352fe64265aa26ab9fbaeabe82788d6b4c7103d6687388127179985d7467979b"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/seqfix_source_snapshot/tools/db_bench_tool.cc",
+      "saved_relative_path": "seqfix_source_snapshot/tools/db_bench_tool.cc",
+      "bytes": 452904,
+      "sha256": "9261451db12315888d33b5c15d947f7ee4c66ed03a04f0a718aa4aecb64f7801"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/status.json",
+      "saved_relative_path": "status.json",
+      "bytes": 96,
+      "sha256": "6438f7765c4ed41eb91d8a988529b6932f0c7ebf38da5af2a02882761ca67818"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/verify_load_trace.cc",
+      "saved_relative_path": "verify_load_trace.cc",
+      "bytes": 6279,
+      "sha256": "8de98e12b271cc672c2907b88c890414f88d071353a730bec321f30a4e6b5c53"
+    }
+  ],
+  "copy_count": 329,
+  "copied_bytes": 1885790,
+  "all_copies_byte_identical_sha256_verified": true,
+  "excluded": [
+    "Executable binaries",
+    "Database directories and SST files",
+    "VLOADTR1 trace payloads",
+    "Per-SST fidelity/files.tsv, including pilot files",
+    "Process stdout/stderr logs and controller/launcher logs",
+    "Raw event stream events.jsonl"
+  ],
+  "generated_bundle_files": [
+    "README.md",
+    "SOURCE_INVENTORY.json",
+    "SOURCE_HASH_VERIFICATION.json",
+    "CURATION_VALIDATION.json",
+    "sha256.json"
+  ],
+  "absolute_paths_preserved_in_copies": true
+}

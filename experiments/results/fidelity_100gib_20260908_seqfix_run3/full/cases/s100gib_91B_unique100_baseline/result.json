@@ -1,0 +1,62 @@
+{
+  "case_id": "s100gib_91B_unique100",
+  "db_dir": "/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3/full/db/s100gib_91B_unique100_baseline",
+  "delta": 0,
+  "estimated_pending_compaction_bytes": 0,
+  "exact_unique_keys": 1179936070,
+  "expected_unique_keys": 1179936070,
+  "fidelity_matches": true,
+  "input_operations": 1179936070,
+  "key_size": 48,
+  "levels": [
+    {
+      "level": 0,
+      "sst_bytes": 0,
+      "sst_count": 0,
+      "sst_entry_sum": 0
+    },
+    {
+      "level": 1,
+      "sst_bytes": 190404333,
+      "sst_count": 3,
+      "sst_entry_sum": 1942193
+    },
+    {
+      "level": 2,
+      "sst_bytes": 2611364726,
+      "sst_count": 48,
+      "sst_entry_sum": 26690987
+    },
+    {
+      "level": 3,
+      "sst_bytes": 26780084620,
+      "sst_count": 430,
+      "sst_entry_sum": 273987791
+    },
+    {
+      "level": 4,
+      "sst_bytes": 85742087223,
+      "sst_count": 1541,
+      "sst_entry_sum": 877315099
+    },
+    {
+      "level": 5,
+      "sst_bytes": 0,
+      "sst_count": 0,
+      "sst_entry_sum": 0
+    },
+    {
+      "level": 6,
+      "sst_bytes": 0,
+      "sst_count": 0,
+      "sst_entry_sum": 0
+    }
+  ],
+  "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/cases/s100gib_91B_unique100_baseline",
+  "relative_error": 0.0,
+  "size_gib": 100,
+  "sst_entry_sum": 1179936070,
+  "status": "validated",
+  "system": "baseline",
+  "value_size": 43
+}

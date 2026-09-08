@@ -1,0 +1,26 @@
+{
+  "effective_vcomp_environment": {
+    "VCOMP_BG_COMMIT_BATCH_MAX": "16",
+    "VCOMP_BG_COMMIT_DELAY_US": "100",
+    "VCOMP_KMV_ENABLED": "1"
+  },
+  "inherited_audited_vcomp_environment": {
+    "VCOMP_BG_COMMIT_BATCH_MAX": null,
+    "VCOMP_BG_COMMIT_DELAY_US": null,
+    "VCOMP_COV_PERFILE": null,
+    "VCOMP_KMV_ENABLED": null
+  },
+  "intentionally_unset": [
+    "VCOMP_COV_PERFILE"
+  ],
+  "removed_inherited_vcomp_names": [],
+  "rlimit_nofile_effective": {
+    "hard": 1048576,
+    "soft": 1048576
+  },
+  "rlimit_nofile_inherited": {
+    "hard": 1048576,
+    "soft": 1048576
+  },
+  "rlimit_nofile_required_minimum": 65536
+}

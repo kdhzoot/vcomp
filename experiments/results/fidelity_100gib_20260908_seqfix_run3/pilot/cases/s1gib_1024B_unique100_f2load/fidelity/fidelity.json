@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "phase": "after_version_edit",
+  "counts_are_distinct_live_keys": false,
+  "workers_done": true,
+  "input_operations": 1048576,
+  "flush_local_unique_entries": 1048576,
+  "trace_declared_unique_count": 1048576,
+  "registry_descriptor_files": 16,
+  "version_files": 16,
+  "stage1_live_descriptor_files": 16,
+  "stage1_registry_descriptor_entries": 1048576,
+  "stage1_live_descriptor_entries": 1048576,
+  "registry_only_files": 0,
+  "version_only_files": 0,
+  "version_only_file_numbers": [],
+  "registry_level_mismatches": 0,
+  "snapshot_complete": true,
+  "stage2_sst_keys_written": 1048563,
+  "stage2_live_sst_keys_written": 1048563,
+  "dropped_live_entries": 13,
+  "stage2_skipped_files": 0,
+  "stage2_failed_files": 0,
+  "stage2_put_failed_files": 0,
+  "materialization_ok": true,
+  "version_edit_applied": true,
+  "manifest_snapshot_ok": true,
+  "by_level": [
+    {"level": 2, "live_descriptor_files": 16, "planned_entries": 1048576, "keys_written": 1048563, "dropped_entries": 13, "skipped_files": 0, "failed_files": 0}
+  ]
+}

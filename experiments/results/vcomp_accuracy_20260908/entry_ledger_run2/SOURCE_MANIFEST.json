@@ -1,0 +1,20 @@
+[
+  {
+    "source": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/entry_ledger_run2/entry_ledger.json",
+    "destination": "entry_ledger.json",
+    "bytes": 1472939,
+    "sha256": "9a180f47c7f8ae26f5aab11e5e21c04a82d66139ec93acd6113656a424dcc654"
+  },
+  {
+    "source": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/entry_ledger_run2/summary.tsv",
+    "destination": "summary.tsv",
+    "bytes": 548,
+    "sha256": "5fe0e190e7dff7b9a1860bbbe6cd9e1c223f7ea7d1698bcf5ed20ce167e7708a"
+  },
+  {
+    "source": "/home/smrc/virtual_compaction/vcomp/experiments/analysis/summarize_virtual_entry_ledger.py",
+    "destination": "summarize_virtual_entry_ledger.py",
+    "bytes": 6614,
+    "sha256": "4213fc4bc8a448c47e6bdd9ffe3ba8dba3219daf1de23ecfe9ad0b06750c4270"
+  }
+]

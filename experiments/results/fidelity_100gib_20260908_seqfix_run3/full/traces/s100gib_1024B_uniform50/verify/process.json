@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/bin/verify_load_trace",
+    "--trace",
+    "/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_uniform50.vload",
+    "--output",
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_uniform50/verification.json"
+  ],
+  "elapsed_sec": 2.531820058822632,
+  "exit_code": 0,
+  "finished": "2026-09-08T04:57:47.301293+00:00",
+  "pid": 1665932,
+  "started": "2026-09-08T04:57:44.772706+00:00",
+  "state": "finished"
+}

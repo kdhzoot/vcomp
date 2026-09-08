@@ -1,0 +1,15 @@
+{
+  "case_id": "s1gib_91B_unique100",
+  "distribution": "unique100",
+  "key_domain": 11799360,
+  "key_size": 48,
+  "num_records": 11799360,
+  "size_gib": 1,
+  "trace_path": "/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_unique100.vload",
+  "trace_sha256": "e4ed7ea6e5579478fe79785bddb946ce33ea6490fca568db596ff244e8f6fe44",
+  "trace_verification": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/pilot/traces/s1gib_91B_unique100/verification.json",
+  "unique_count": 11799360,
+  "unique_ratio": 1,
+  "value_size": 43,
+  "zipf_alpha": 0
+}

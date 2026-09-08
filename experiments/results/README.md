@@ -5,6 +5,21 @@ evidence, so a fresh clone can inspect results without the original DBs or
 `experiments/artifacts/`. The full collection and its Git policy are described
 in [the experiment guide](../README.md).
 
+## Fidelity qualification, 2026-09-08
+
+- [Corrected 100 GiB rerun](fidelity_100gib_20260908_seqfix_run3/README.md):
+  six configurations × baseline/F2Load, with the sequence correction. All
+  baseline distinct counts match; corrected F2Load iterators pass strict
+  ordering while substantial cardinality errors remain.
+- [Virtual-compaction accuracy probes](vcomp_accuracy_20260908/README.md):
+  exact-key single-stage and repeated merge/split controls, an isolated N−1
+  prototype, and both 100 GiB runs' descriptor entry ledgers.
+- [Diagnosis and next experiments](../docs/VIRTUAL_COMPACTION_ACCURACY.md)
+  separates measured failures from proposed representation changes.
+
+These are fidelity experiments. Concurrent load times are operational records,
+not updated performance claims for the Chapter 2/3 comparison below.
+
 ## Current Chapter 2/3 comparison
 
 Use [paper_ch23_common_260907_f2_completion1/RESULTS.md](paper_ch23_common_260907_f2_completion1/RESULTS.md)

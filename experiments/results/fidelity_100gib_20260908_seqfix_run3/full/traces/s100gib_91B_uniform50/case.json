@@ -1,0 +1,15 @@
+{
+  "case_id": "s100gib_91B_uniform50",
+  "distribution": "uniform50",
+  "key_domain": 1179936070,
+  "key_size": 48,
+  "num_records": 1179936070,
+  "size_gib": 100,
+  "trace_path": "/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_uniform50.vload",
+  "trace_sha256": "4439dde9c60aa2160f0f8e8d026c1df11aec5b443af19913c5b50cece7ce92b9",
+  "trace_verification": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_91B_uniform50/verification.json",
+  "unique_count": 589968035,
+  "unique_ratio": 0.5,
+  "value_size": 43,
+  "zipf_alpha": 0
+}

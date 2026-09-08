@@ -21,6 +21,15 @@ directory convention and setup on another server, see
 
 ## Current State
 
+Fidelity qualification, 2026-09-08: this working tree includes an experimental
+discrete-CDF correction for merge, split, and materialization. Its six 100 GiB
+F2Load cases preserve descriptor counts through SST writing and pass strict
+iterator checks. Global distinct-key fidelity remains inaccurate, and small
+ECDF controls expose distribution regressions. This is a count-consistency
+candidate, not a completed fidelity correction. See the
+[same-input accuracy experiment review](experiments/docs/REAL_INPUT_COMPACTION_ACCURACY.md) and
+[preceding diagnosis](experiments/docs/VIRTUAL_COMPACTION_ACCURACY.md).
+
 As of 2026-07-29, this branch is focused on the synthetic metadata-only
 `fillvirtual` loader. Twitter/trace KV work is parked; the paper path is the
 synthetic loader plus final materialization.
@@ -147,7 +156,8 @@ column-family `max_compaction_bytes` as `target_bytes`.
 
 3. **Materialize remaining virtual files**
    - After BG compaction drain, each remaining VirtualSST is converted to real
-     keys by PLR inverse walking.
+     keys by the discrete-CDF cursor (or legacy PLR inverse walking when the
+     discrete path is disabled).
    - Workers write real SST files with direct I/O.
    - One final VersionEdit deletes virtual files and adds the materialized real
      SSTs.
@@ -226,6 +236,11 @@ while seg_start < N:
 
 ### PLR inverse
 
+For a model with a discrete certificate, `Predict(key)` delegates to integer
+`CountLessThan(key)` and `Inverse(position)` delegates to rank selection.
+Split and materialization call the integer API directly. The continuous
+formula below applies to a model without a certificate.
+
 Given a rank, recover the estimated key:
 
 $$
@@ -250,7 +265,51 @@ uint64_t Inverse(double position) {
 
 ---
 
-## N-Way PLR Merge
+## Discrete CDF and KMV merge candidate
+
+The working-tree default is `VCOMP_KMV_ENABLED=1` and
+`VCOMP_DISCRETE_CDF_ENABLED=1`. Set the latter to `0` to run the legacy KMV
+model path in the same build. Disabling KMV retains the older continuous
+merge path. Record both environment values when comparing experiments.
+
+`DiscreteCDF` represents half-open integer intervals with exact cumulative
+mass `F(b) = count(keys < b)`. Local mass cannot exceed integer-key capacity.
+For an interval of span C with m entries, zero-based rank t selects
+`lo + ceil((t+1)*C/m) - 1`. Wide arithmetic handles the endpoint above
+`UINT64_MAX`. Split slices rank intervals while retaining the original
+rounding phase, so child counts and generated sets partition the parent.
+
+`BuildDiscreteMergeModel` retains input extrema and sampled key IDs as
+mandatory witnesses. It uses range-KMV estimates as local allocation weights,
+projects the global KMV target into feasible capacity/witness bounds, and
+reconciles integer masses by capped weighted allocation. Sample witnesses
+are preserved without retaining or enumerating all original keys. Initially
+fitted flush descriptors are certified through the same builder.
+
+The model's exact reconstructed count and the sketch's estimated original
+count are distinct. Output range buckets store both values; a reconstructed
+count is not reused as an upper bound on original-key cardinality. Legacy
+PLR segments remain as compatibility metadata, while the attached certificate
+controls rank, split boundaries, and key generation.
+
+The streaming cursor performs division at cell boundaries and advances
+within each cell with integer quotient/remainder arithmetic. Materialization
+requires exactly the descriptor's count and fails before final registration
+on cursor, count, or encoded-order errors. Compaction validates output count,
+capacity, and sibling ranges before applying input deletions.
+
+These are local invariants. They do not guarantee original key membership,
+accurate incomplete-sketch estimates, preservation of the initial PLR error
+bound, or global uniqueness across separately generated files. In particular,
+the candidate's allocation weights can distort ECDF shape; the linked
+experiment record reports that failure alongside count-conservation results.
+`discrete_cell_payload_bytes` counts 64 bytes per logical CDF cell, not RSS,
+allocator overhead, sketch memory, or peak live memory.
+
+## Legacy continuous N-Way PLR Merge
+
+The following continuous merge and density-dedup explanation describes the
+non-KMV path. It is not the default discrete/KMV algorithm above.
 
 ### Mathematical foundation
 
@@ -373,10 +432,12 @@ the BG dispatch logic.
 
 ### SplitIntoSSTs — output sizing for virtual compaction
 
-After a merged PLR model is computed, it is split into output virtual
+After a merged model is computed, it is split into output virtual
 SSTs. The split logic mirrors RocksDB's
 `CompactionOutputs::ShouldStopBefore` so that the resulting tree shape
-matches a real compaction:
+matches a real compaction. With a discrete certificate, cuts are exact rank
+positions, child bounds use `Select`, and child models use phase-preserving
+`Slice`; the size and grandparent policy below remains in use:
 
 ```
 Inputs:
@@ -470,7 +531,9 @@ while next_size_cut < total_entries OR gp_idx < len(gp_positions):
 
 ### Materialization
 
-Converting a VirtualSST back to actual keys uses sequential PLR inverse
+The default discrete path streams strictly increasing keys from its
+certificate and requires the planned count to be written exactly. For models
+without a certificate, converting a VirtualSST back to keys uses PLR inverse
 walking (segments scanned in order, O(N) total instead of O(N log S)
 per-key search):
 
@@ -494,10 +557,22 @@ for i = 1..len(keys)-1:
 # If +1 accumulation pushed past key_max, cap and dedup from the tail.
 ```
 
-Each VirtualSST is materialized independently — no cross-file merge is
-needed because BG compaction has already ensured L1+ files have
-non-overlapping key ranges. Materialization and SST writing are fused
-into a single parallel step using direct I/O.
+Each VirtualSST is materialized independently. Non-overlap is a within-level
+property of L1+; different levels can still generate the same user key.
+Materialization and SST writing are fused into a single parallel step using
+direct I/O. Neither path guarantees global distinct cardinality. The discrete
+path enforces per-file count/capacity; the legacy inverse path can lose entries
+when a descriptor's planned count does not fit its generated key range.
+
+Final registration uses `InstallVirtualCompactionMaterialization()` to assign
+distinct positive file-global sequences through MANIFEST metadata. Higher
+levels in lookup order (smaller level numbers) receive higher sequences; L0
+files follow epoch/file precedence. The helper updates exact InternalKey
+bounds, commits the edit, publishes the sequence counters, and installs the
+new SuperVersion while writes are serialized. Clean RocksDB readers apply the
+external-SST global sequence override without an SST rewrite. This fixes
+duplicate iterator output while retaining the independently generated keys
+and chosen levels; it does not correct cardinality or key-distribution errors.
 
 ---
 
@@ -619,14 +694,14 @@ compaction — an infinite spin that hangs `WaitForCompact`.
 | `options/db_options.{h,cc}` | `ImmutableDBOptions` mapping |
 | `db/db_impl/db_impl.h` | `VirtualSSTRegistry`, pending L0 window state, refill/configuration APIs, virtual compaction commit queue |
 | `db/db_impl/db_impl.cc` | Initialize registry when `use_virtual_compaction` is enabled |
-| `db/db_impl/db_impl_compaction_flush.cc` | Real/virtual dispatch guard, `RegisterVirtualL0File()`, `RefillVirtualL0Window()`, `RunVirtualCompaction()`, commit batching, deferred obsolete cleanup |
+| `db/db_impl/db_impl_compaction_flush.cc` | Real/virtual dispatch guard, `RegisterVirtualL0File()`, `RefillVirtualL0Window()`, `RunVirtualCompaction()`, commit batching, deferred obsolete cleanup, sequence-safe `InstallVirtualCompactionMaterialization()` |
 | `db/db_impl/db_impl_files.cc` | Skip disk deletion for virtual files |
 | `db/version_set.cc` | Skip `LoadTableHandlers` / `VerifyFileMetadata` for virtual files; use per-level score inputs to avoid rescanning unchanged Version append paths |
 | `db/compaction/compaction_picker*.cc` | Use registered L0 files directly; no virtual eligibility filtering |
 | `db/virtual_compaction/virtual_sst.{h,cc}` | `SplitIntoSSTs` (dynamic threshold + GP), `MaterializeKeys`, `VirtualCompact` |
 | `db/virtual_compaction/virtual_sst_registry.h` | Thread-safe `file_number → VirtualSST` registry |
 | `db/virtual_compaction/plr_model.{h,cc}` | `GreedyPLRFit`, `NWayMergePLR` with optional dedup |
-| `tools/db_bench_tool.cc` | `fillvirtual` benchmark with pending-window L0 registration, Phase 2 workers using direct I/O, `coverage` benchmark for per-level file-coverage probes; Phase 2b uses `kMaxSequenceNumber` for output `smallest` InternalKey to match `RegisterVirtualL0File`'s convention |
+| `tools/db_bench_tool.cc` | `fillvirtual` benchmark with pending-window L0 registration, Phase 2 workers using direct I/O, `coverage` benchmark for per-level file-coverage probes; Phase 2b supplies exact sequence-zero bounds to the materialization installer, which assigns effective file-global sequences |
 
 ### Key optimizations in FillVirtual
 

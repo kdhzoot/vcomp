@@ -1,0 +1,1 @@
+{"status":"ok","trace":"/work/vcomp/exp/fidelity_100gib_20260908_seqfix_run3/full/traces/s100gib_1024B_unique100.vload","records":104857600,"key_domain":104857600,"key_size":24,"value_size":1000,"header_unique_keys":104857600,"exact_unique_keys":104857600,"unique_count_matches":true,"byte_size":838860888,"bitset_bytes":13107200}

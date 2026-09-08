@@ -14,6 +14,9 @@ namespace ROCKSDB_NAMESPACE {
 // ── PLRModel ────────────────────────────────────────────────────────────────
 
 double PLRModel::Predict(uint64_t key) const {
+  if (discrete_model_) {
+    return static_cast<double>(discrete_model_->CountLessThan(key));
+  }
   if (segments_.empty()) return 0.0;
 
   auto eval = [](const PLRSegment& seg, uint64_t k) {
@@ -47,6 +50,14 @@ double PLRModel::Predict(uint64_t key) const {
 }
 
 uint64_t PLRModel::Inverse(double position) const {
+  if (discrete_model_ && !discrete_model_->Empty()) {
+    if (!(position > 0.0)) return discrete_model_->Select(0);
+    const uint64_t last = discrete_model_->Count() - 1;
+    if (static_cast<long double>(position) >= static_cast<long double>(last)) {
+      return discrete_model_->Select(last);
+    }
+    return discrete_model_->Select(static_cast<uint64_t>(position));
+  }
   if (segments_.empty()) return 0;
 
   // For each segment, compute position range [pos_start, pos_end].

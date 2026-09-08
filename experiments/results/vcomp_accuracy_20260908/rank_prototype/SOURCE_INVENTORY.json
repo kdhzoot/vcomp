@@ -1,0 +1,190 @@
+{
+  "preserved_at_utc": "2026-09-08T05:19:56.789510+00:00",
+  "source_directory": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype",
+  "destination_directory": "/home/smrc/virtual_compaction/vcomp/experiments/results/vcomp_accuracy_20260908/rank_prototype",
+  "scope": "Read-only preservation of completed rank prototype evidence; no workload/build/production change/commit",
+  "source_manifest_verified": true,
+  "source_sha256_note": "source_sha256.json is the unchanged original artifact manifest, including excluded binary/build-log fingerprints; sha256.json covers only preserved package files.",
+  "commands_note": "commands.json preserves original absolute argv and paths without rewriting them.",
+  "files": [
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/DESIGN.md",
+      "bytes": 13870,
+      "sha256": "e13d47264d8a73306064ee54847c3820d2e6957c5cb06c0918f75f138eef102d",
+      "preserved": true,
+      "saved_relative_path": "DESIGN.md"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/REPORT.md",
+      "bytes": 5152,
+      "sha256": "70b3df8618578e20359b033759ef11126b736c8e5d468c69c602d8cf1a537ef9",
+      "preserved": true,
+      "saved_relative_path": "REPORT.md"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/candidate.build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "preserved": false,
+      "saved_relative_path": null,
+      "exclusion_reason": "build log"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/candidate.diff",
+      "bytes": 1268,
+      "sha256": "9a3344f552d7526e55099bc7886eaf17bf088499086c537714f11b20a6fe897f",
+      "preserved": true,
+      "saved_relative_path": "candidate.diff"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/candidate.files.tsv",
+      "bytes": 52711,
+      "sha256": "94aae3be4a31100e72a97eb58433a52db7ff4b0ab221ca268204778c34fc8f78",
+      "preserved": true,
+      "saved_relative_path": "candidate.files.tsv"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/candidate.run.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "preserved": true,
+      "saved_relative_path": "candidate.run.log"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/candidate.tsv",
+      "bytes": 8600,
+      "sha256": "ea0f55b3442c53f4dfc81d1c57e125cf0248a593fca29a865d5aa52317ac3ae1",
+      "preserved": true,
+      "saved_relative_path": "candidate.tsv"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/candidate_probe",
+      "bytes": 99240,
+      "sha256": "66bd23c4ad5bb6f439bc487b27b8d3df8c42b2eddda8cd53c50619e46672191a",
+      "preserved": false,
+      "saved_relative_path": null,
+      "exclusion_reason": "isolated probe binary"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/candidate_virtual_sst.cc",
+      "bytes": 32278,
+      "sha256": "654c0ff15bcd9488c607a3abf25ebb4f68b6a1c8824b129400222eb9752e040b",
+      "preserved": true,
+      "saved_relative_path": "candidate_virtual_sst.cc"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/commands.json",
+      "bytes": 3253,
+      "sha256": "3d5045f3d6cabf2dddcdf31ff46efd0ef046b13265bdf7f87ea78f00ebcaaa50",
+      "preserved": true,
+      "saved_relative_path": "commands.json"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/compiler_version.txt",
+      "bytes": 247,
+      "sha256": "239691510ff2e93d5ac44c81c65feb82e75db554b7734be4b6f1ed872e000532",
+      "preserved": true,
+      "saved_relative_path": "compiler_version.txt"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/make_config.mk.snapshot",
+      "bytes": 1639,
+      "sha256": "557f9fed97cd7cfe25da539c70f30608ba6557cbd2033f6c8844ea1cd7baa817",
+      "preserved": true,
+      "saved_relative_path": "make_config.mk.snapshot"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/original.build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "preserved": false,
+      "saved_relative_path": null,
+      "exclusion_reason": "build log"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/original.files.tsv",
+      "bytes": 52667,
+      "sha256": "0e1b7e1dbd21666626f13c5c85880d7f43d649d53c12f02cb55a95b417c31a8b",
+      "preserved": true,
+      "saved_relative_path": "original.files.tsv"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/original.run.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "preserved": true,
+      "saved_relative_path": "original.run.log"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/original.tsv",
+      "bytes": 8630,
+      "sha256": "23e0c131a58fe976e529c021010567912497c838468d2a503b021a434e71d394",
+      "preserved": true,
+      "saved_relative_path": "original.tsv"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/original_plr_model.cc",
+      "bytes": 12204,
+      "sha256": "94c8e06fa1934c897f2f127872ec4b34ea001606f7a3a32e313e300663ea708c",
+      "preserved": true,
+      "saved_relative_path": "original_plr_model.cc"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/original_plr_model.h",
+      "bytes": 3005,
+      "sha256": "b36f2863f22796fd2a5e32508e5670dd9af5899f565593cd850d2d5f3fe8084f",
+      "preserved": true,
+      "saved_relative_path": "original_plr_model.h"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/original_probe",
+      "bytes": 99240,
+      "sha256": "e925f1a966676d0ac1b9936a683b91e569d3e5f9d9998478836319af5cf5e066",
+      "preserved": false,
+      "saved_relative_path": null,
+      "exclusion_reason": "isolated probe binary"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/original_virtual_sst.cc",
+      "bytes": 32255,
+      "sha256": "b0ff3ab10ff487e6c0a3c509cc2a5f3bd4e2e02fb942e6fc305156cbb9a59027",
+      "preserved": true,
+      "saved_relative_path": "original_virtual_sst.cc"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/original_virtual_sst.h",
+      "bytes": 4804,
+      "sha256": "aabf5c1b868f3a8373f7dec65d9a69607dd6cba7f9f7b12fb393205d1356dcc1",
+      "preserved": true,
+      "saved_relative_path": "original_virtual_sst.h"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/probe.cc",
+      "bytes": 6112,
+      "sha256": "c7543db3dae96ce8737baa3009e4929df66ef9fd7a76b2f78fb9c410e9cc620f",
+      "preserved": true,
+      "saved_relative_path": "probe.cc"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/run.py",
+      "bytes": 4662,
+      "sha256": "3bf0aa78a9f798c14ff7acebbc81931df31d95cbe752d175a8eac33b61e0baf1",
+      "preserved": true,
+      "saved_relative_path": "run.py"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/sha256.json",
+      "bytes": 2164,
+      "sha256": "70080d8eaac4044fb4ba4982ed7c6e0a919444a5c1b7912cf59de13b49487ebe",
+      "preserved": true,
+      "saved_relative_path": "source_sha256.json"
+    },
+    {
+      "source_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/vcomp_accuracy_20260908/rank_prototype/summary.json",
+      "bytes": 5861,
+      "sha256": "2203730220ee28e3177c2fc6969716d30747cdabe5579eed81f8fe4fd035acbb",
+      "preserved": true,
+      "saved_relative_path": "summary.json"
+    }
+  ]
+}

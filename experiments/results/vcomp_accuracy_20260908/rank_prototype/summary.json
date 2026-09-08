@@ -1,0 +1,145 @@
+{
+  "scope": "Isolated actual functions, not DB workloads or production change",
+  "candidate": "N-1 global rank span and singleton intercept zero; descriptor count unchanged",
+  "complete_sketch_budget": 4096,
+  "range_buckets": 8,
+  "datasets": "dense 1/3/5 + singleton fallback + 10 random + 10 gapped",
+  "random_seed_base": 2026090800,
+  "plr_errors": [
+    0,
+    8
+  ],
+  "target_entries": [
+    2,
+    7,
+    16
+  ],
+  "caveat": "Uses actual MaterializeKeys helper, not DB SST-writing streaming loop",
+  "variants": {
+    "original": {
+      "all": {
+        "cases": 144,
+        "cardinality_loss_cases": 67,
+        "sum_entry_mismatch_cases": 0,
+        "total_cardinality_loss": 131,
+        "capacity_bad_files_cases": 29,
+        "capacity_bad_files_sum": 45,
+        "sibling_overlap_pairs_cases": 41,
+        "sibling_overlap_pairs_sum": 67,
+        "range_count_bad_files_cases": 119,
+        "range_count_bad_files_sum": 856,
+        "bucket_overlap_pairs_cases": 29,
+        "bucket_overlap_pairs_sum": 46,
+        "local_duplicate_keys_cases": 44,
+        "local_duplicate_keys_sum": 64,
+        "truth_outside_output_ranges_cases": 96,
+        "truth_outside_output_ranges_sum": 588
+      },
+      "dense": {
+        "cases": 18,
+        "cardinality_loss_cases": 4,
+        "sum_entry_mismatch_cases": 0,
+        "total_cardinality_loss": 4,
+        "capacity_bad_files_cases": 2,
+        "capacity_bad_files_sum": 2,
+        "sibling_overlap_pairs_cases": 2,
+        "sibling_overlap_pairs_sum": 2,
+        "range_count_bad_files_cases": 4,
+        "range_count_bad_files_sum": 4,
+        "bucket_overlap_pairs_cases": 2,
+        "bucket_overlap_pairs_sum": 2,
+        "local_duplicate_keys_cases": 2,
+        "local_duplicate_keys_sum": 2,
+        "truth_outside_output_ranges_cases": 0,
+        "truth_outside_output_ranges_sum": 0
+      },
+      "random_gapped": {
+        "cases": 120,
+        "cardinality_loss_cases": 63,
+        "sum_entry_mismatch_cases": 0,
+        "total_cardinality_loss": 127,
+        "capacity_bad_files_cases": 27,
+        "capacity_bad_files_sum": 43,
+        "sibling_overlap_pairs_cases": 39,
+        "sibling_overlap_pairs_sum": 65,
+        "range_count_bad_files_cases": 113,
+        "range_count_bad_files_sum": 850,
+        "bucket_overlap_pairs_cases": 27,
+        "bucket_overlap_pairs_sum": 44,
+        "local_duplicate_keys_cases": 42,
+        "local_duplicate_keys_sum": 62,
+        "truth_outside_output_ranges_cases": 94,
+        "truth_outside_output_ranges_sum": 586
+      }
+    },
+    "candidate": {
+      "all": {
+        "cases": 144,
+        "cardinality_loss_cases": 95,
+        "sum_entry_mismatch_cases": 0,
+        "total_cardinality_loss": 167,
+        "capacity_bad_files_cases": 39,
+        "capacity_bad_files_sum": 52,
+        "sibling_overlap_pairs_cases": 40,
+        "sibling_overlap_pairs_sum": 72,
+        "range_count_bad_files_cases": 114,
+        "range_count_bad_files_sum": 800,
+        "bucket_overlap_pairs_cases": 39,
+        "bucket_overlap_pairs_sum": 53,
+        "local_duplicate_keys_cases": 75,
+        "local_duplicate_keys_sum": 95,
+        "truth_outside_output_ranges_cases": 93,
+        "truth_outside_output_ranges_sum": 549
+      },
+      "dense": {
+        "cases": 18,
+        "cardinality_loss_cases": 0,
+        "sum_entry_mismatch_cases": 0,
+        "total_cardinality_loss": 0,
+        "capacity_bad_files_cases": 0,
+        "capacity_bad_files_sum": 0,
+        "sibling_overlap_pairs_cases": 0,
+        "sibling_overlap_pairs_sum": 0,
+        "range_count_bad_files_cases": 0,
+        "range_count_bad_files_sum": 0,
+        "bucket_overlap_pairs_cases": 0,
+        "bucket_overlap_pairs_sum": 0,
+        "local_duplicate_keys_cases": 0,
+        "local_duplicate_keys_sum": 0,
+        "truth_outside_output_ranges_cases": 0,
+        "truth_outside_output_ranges_sum": 0
+      },
+      "random_gapped": {
+        "cases": 120,
+        "cardinality_loss_cases": 95,
+        "sum_entry_mismatch_cases": 0,
+        "total_cardinality_loss": 167,
+        "capacity_bad_files_cases": 39,
+        "capacity_bad_files_sum": 52,
+        "sibling_overlap_pairs_cases": 40,
+        "sibling_overlap_pairs_sum": 72,
+        "range_count_bad_files_cases": 114,
+        "range_count_bad_files_sum": 800,
+        "bucket_overlap_pairs_cases": 39,
+        "bucket_overlap_pairs_sum": 53,
+        "local_duplicate_keys_cases": 75,
+        "local_duplicate_keys_sum": 95,
+        "truth_outside_output_ranges_cases": 93,
+        "truth_outside_output_ranges_sum": 549
+      }
+    }
+  },
+  "production_sources_unchanged": true,
+  "source_hashes_before": {
+    "/home/smrc/virtual_compaction/vcomp/db/virtual_compaction/virtual_sst.cc": "b0ff3ab10ff487e6c0a3c509cc2a5f3bd4e2e02fb942e6fc305156cbb9a59027",
+    "/home/smrc/virtual_compaction/vcomp/db/virtual_compaction/virtual_sst.h": "aabf5c1b868f3a8373f7dec65d9a69607dd6cba7f9f7b12fb393205d1356dcc1",
+    "/home/smrc/virtual_compaction/vcomp/db/virtual_compaction/plr_model.cc": "94c8e06fa1934c897f2f127872ec4b34ea001606f7a3a32e313e300663ea708c",
+    "/home/smrc/virtual_compaction/vcomp/db/virtual_compaction/plr_model.h": "b36f2863f22796fd2a5e32508e5670dd9af5899f565593cd850d2d5f3fe8084f"
+  },
+  "source_hashes_after": {
+    "/home/smrc/virtual_compaction/vcomp/db/virtual_compaction/virtual_sst.cc": "b0ff3ab10ff487e6c0a3c509cc2a5f3bd4e2e02fb942e6fc305156cbb9a59027",
+    "/home/smrc/virtual_compaction/vcomp/db/virtual_compaction/virtual_sst.h": "aabf5c1b868f3a8373f7dec65d9a69607dd6cba7f9f7b12fb393205d1356dcc1",
+    "/home/smrc/virtual_compaction/vcomp/db/virtual_compaction/plr_model.cc": "94c8e06fa1934c897f2f127872ec4b34ea001606f7a3a32e313e300663ea708c",
+    "/home/smrc/virtual_compaction/vcomp/db/virtual_compaction/plr_model.h": "b36f2863f22796fd2a5e32508e5670dd9af5899f565593cd850d2d5f3fe8084f"
+  }
+}

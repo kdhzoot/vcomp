@@ -26,7 +26,13 @@ discrete-CDF correction for merge, split, and materialization. Its six 100 GiB
 F2Load cases preserve descriptor counts through SST writing and pass strict
 iterator checks. Global distinct-key fidelity remains inaccurate, and small
 ECDF controls expose distribution regressions. This is a count-consistency
-candidate, not a completed fidelity correction. See the
+candidate, not a completed fidelity correction. The working tree also adds
+`--vcomp_global_unique_keys`, an opt-in Phase 2 mode for 100%-unique inputs
+that materializes a globally distinct key set. Its 100 GiB run
+(`fidelity_100gib_20260908_unique_run5`) cuts the unique100 distinct-key error
+from −19.2% to −3.6%/−3.8% with zero repeated keys, and its remaining loss is
+60x above the proven lower bound for the same descriptors, so the shallow-first
+allocation order is not optimal. See the
 [same-input accuracy experiment review](experiments/docs/REAL_INPUT_COMPACTION_ACCURACY.md) and
 [preceding diagnosis](experiments/docs/VIRTUAL_COMPACTION_ACCURACY.md).
 
@@ -158,7 +164,9 @@ column-family `max_compaction_bytes` as `target_bytes`.
    - After BG compaction drain, each remaining VirtualSST is converted to real
      keys by the discrete-CDF cursor (or legacy PLR inverse walking when the
      discrete path is disabled).
-   - Workers write real SST files with direct I/O.
+   - Workers write real SST files with direct I/O. With
+     `--vcomp_global_unique_keys` they run one level group at a time so that
+     each file can exclude the key ids the levels above it already generated.
    - One final VersionEdit deletes virtual files and adds the materialized real
      SSTs.
 
@@ -573,6 +581,113 @@ new SuperVersion while writes are serialized. Clean RocksDB readers apply the
 external-SST global sequence override without an SST rewrite. This fixes
 duplicate iterator output while retaining the independently generated keys
 and chosen levels; it does not correct cardinality or key-distribution errors.
+
+### Global-unique materialization (`--vcomp_global_unique_keys`)
+
+Every VirtualSST generates keys from its own model, so two files can produce
+the same key id even when the input held it once. For a 100%-unique input that
+is always an error, and it is the dominant measured term of the unique100
+deficit: repeated synthetic keys in the final SSTs, 16.4% of the 19.4% total
+in the run2 decomposition. KMV sketches do not prevent it, because they
+describe cardinality, not which key ids another file will emit.
+
+This opt-in mode makes Phase 2 produce a globally distinct key set:
+
+- The flag asserts a property of the input, so it is checked rather than
+  trusted: `fillvirtual` fails unless the load trace header declares
+  `unique_count == num_records`. The synthetic generator draws keys with
+  replacement and is refused outright.
+- One reservation bit per key id in the trace key domain records every key a
+  file generated. The 100 GiB/91 B domain needs 141 MiB. The budget is
+  `--vcomp_global_unique_keys_max_mb` (default 1024), and the bitmap is
+  allocated and checked before Phase 1 so an oversized domain cannot fail
+  after hours of loading.
+- Phase 2 materializes one level group at a time, shallowest first, with a
+  barrier between groups; `--vcomp_global_unique_keys_deep_first` reverses the
+  order. Each file excludes the key ids the levels before it already took.
+  Only overlapping ranges can collide, so one bit test replaces intersecting
+  the overlapping files' generated key sets.
+- Same-level non-L0 materialize ranges are disjoint, so a level group stays
+  fully parallel and its outcome does not depend on worker interleaving. L0
+  files do overlap each other, so an L0 group runs single-threaded in a fixed
+  order.
+- Each file reserves one free key per planned entry: output `i` may not exceed
+  the `(free - target + i)`-th free key of its range, which always leaves
+  `target - i` free keys below the range top. The count therefore survives the
+  exclusion whenever the range still holds enough free keys. Both cursors move
+  forward only, so a file costs one pass over its range plus one bitmap probe
+  per entry.
+- Entries that no free key can carry are reported per file as
+  `unique_shortfall` with `stop_reason=unique_capacity_exhausted`, and the run
+  continues. `unique_reserved_keys == stage2_put_successes`
+  (`unique_globally_distinct` in `fidelity.json`) is the in-run oracle: taken
+  bits are distinct by construction, so equality proves that no key id was
+  written twice.
+
+#### 100 GiB measurement
+
+`fidelity_100gib_20260908_unique_run5`, the same twelve-load concurrent
+matrix as run3/run4, with the mode enabled on the two 100%-unique datasets
+only. All six baselines matched their exact input cardinality. `U` is the
+clean-RocksDB read-only exact distinct count after settling.
+
+| unique100 case | run4 `U` error, mode off | run5 `U` error, mode on | repeated physical entries |
+|---|---:|---:|---:|
+| 1024 B KV | −19.163% | **−3.592%** | 0 |
+| 91 B KV | −19.282% | **−3.769%** | 0 |
+
+| Term | 1024 B | 91 B |
+|---|---:|---:|
+| `N − D`, KMV dedup estimate | 2,343,645 (2.235%) | 29,089,180 (2.465%) |
+| `D − M`, exclusion shortfall | 1,422,981 (1.357%) | 15,386,782 (1.304%) |
+| `M − U`, repeated synthetic keys | 0 | 0 |
+
+`unique_reserved_keys == stage2_put_successes` in both cases, and
+`sst_entry_sum` equals the distinct count, so no key id is written twice
+anywhere in the tree. The four non-unique F2 cases ran with the mode off and
+stayed within 0.4 pp of run4, which is the campaign's run-to-run variability;
+the 15.5 pp unique100 change is far outside it. Phase 2a cost 4.583 s → 5.515 s
+(1024 B) and 18.992 s → 18.366 s (91 B) against a 9-66 s total, so the extra
+work is not a bottleneck. Twelve loads run concurrently, so all times are
+operational only.
+
+**The shortfall is not forced by the descriptors.** For an interval `[a,b]`,
+every file whose whole range lies inside it must draw from `b - a + 1` key
+ids, so the largest excess of contained planned entries over that width is a
+lower bound on the shortfall of any assignment order. The measured shortfall
+is about 60x that bound: 1,422,981 against 32,471 (1024 B) and 15,386,782
+against 231,883 (91 B). All of it lands in L4, and the level densities say
+why: planned entries over summed range width are 0.009/0.033/0.278/0.700 for
+L1/L2/L3/L4. Shallowest-first lets the three sparse levels scatter 30% of the
+entries across the whole domain before the dense level places its 70%, so L4
+runs out of free keys locally. Deep-first ordering
+(`--vcomp_global_unique_keys_deep_first`) serves the dense level first and
+leaves the sparse, wide-ranged files to fill the gaps; it has not yet been run
+at 100 GiB.
+
+#### 1 GiB development measurement
+
+Buffers reduced to 16 MiB so the tree reaches L3. Evidence:
+`experiments/artifacts/unique_keys_dev_20260908/`.
+
+| Setting | D | M | U | U error | repeated physical entries | Phase 2a |
+|---|---:|---:|---:|---:|---:|---:|
+| off | 11,693,484 | 11,693,484 | 11,190,758 | −5.158% | 502,726 | 0.131 s |
+| on, shallow first | 11,693,484 | 11,609,767 | 11,609,767 | −1.607% | 0 | 0.234 s |
+| on, deep first | 11,693,484 | 11,612,726 | 11,612,726 | −1.582% | 0 | 0.234 s |
+
+Here the level densities are inverted (L1 0.227, L2 0.909, L3 0.989: the deep
+levels are already saturated), the interval bound is 80,755, and deep-first
+reaches 80,758 - three keys off optimal. Ordering therefore looks irrelevant
+at this scale and decisive at 100 GiB; the small case does not predict it.
+The sweep's own 1 GiB pilot is weaker still: with 64 MiB buffers it produces
+no cross-file collisions at all, and run5's pilot reproduced run4's numbers
+exactly for every case, which does check that the mode's Phase 2 restructure
+leaves the flag-off path unchanged.
+
+`experiments/scripts/trace/run_fidelity_dataset_sweep.py --global-unique-keys`
+enables the mode for the sweep's 100%-unique datasets only, and records the
+effective flags in each case's `options.json`.
 
 ---
 

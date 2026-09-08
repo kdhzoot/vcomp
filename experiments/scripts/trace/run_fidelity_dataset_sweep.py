@@ -340,6 +340,12 @@ class Campaign:
             if system == 'f2load':
                 options.update(F2_OPTIONS, benchmarks='fillvirtual,flush,compact0,waitforcompaction,stats,levelstats',
                                vcomp_fidelity_report_dir=str(log / 'fidelity'))
+                # Global-unique materialization asserts a property of the input,
+                # so it is only requested for datasets whose trace is entirely
+                # distinct. Every case records what it actually ran.
+                if self.args.global_unique_keys and case['unique_count'] == case['num_records']:
+                    options.update(vcomp_global_unique_keys=True,
+                                   vcomp_global_unique_keys_deep_first=self.args.global_unique_keys_deep_first)
             save(log / 'options.json', options)
             barrier.wait(timeout=60)
             self.event('LOAD_STARTED', label)
@@ -442,9 +448,15 @@ def main():
     parser.add_argument('--artifact-root', help='Ignored raw output directory under experiments/artifacts')
     parser.add_argument('--phase', choices=['pilot', 'full', 'all'], default='all')
     parser.add_argument('--size-gib', type=int, default=100)
+    parser.add_argument('--global-unique-keys', action='store_true',
+                        help='Materialize a globally distinct key set for the 100%%-unique datasets')
+    parser.add_argument('--global-unique-keys-deep-first', action='store_true',
+                        help='With --global-unique-keys, materialize the deepest level first')
     args = parser.parse_args()
     require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', args.run_id), 'invalid run ID')
     require(args.size_gib > 0, 'size must be a positive integer GiB')
+    require(args.global_unique_keys or not args.global_unique_keys_deep_first,
+            '--global-unique-keys-deep-first requires --global-unique-keys')
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
     campaign = Campaign(args)
     def interrupted(signum, frame):

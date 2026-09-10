@@ -26,10 +26,11 @@ SYSTEMS = (
     "fillseq_ow",
     "f2load",
 )
+ALL_SYSTEMS = SYSTEMS
 SYSTEM_LABELS = {
     "baseline": "Baseline",
     "flush_only": "Flush-only",
-    "last_comp": "Last-comp",
+    "last_comp": "One-shot",
     "fillseq": "Fillseq",
     "fillseq_ow": "Fillseq+OW",
     "f2load": "F2Load",
@@ -67,7 +68,7 @@ LOADING_LABELS = {
     "adoc": "ADOC",
     "blobdb": "BlobDB",
     "flush_only": "Flush-only",
-    "last_comp": "Last-comp",
+    "last_comp": "One-shot",
     "fillseq": "Fillseq",
     "fillseq_ow": "Fillseq+OW",
     "f2load": "F2Load",
@@ -150,6 +151,7 @@ def load_loading(path: Path) -> dict[str, float]:
         if int(row["repetitions"]) != 1:
             raise ValueError(f"unexpected repetitions for {method}")
         values[method] = float(row["loading_min"])
+    values = {k: v for k, v in values.items() if k in LOADING_ORDER}
     missing = set(LOADING_ORDER) - set(values)
     if missing:
         raise ValueError(f"missing loading methods: {sorted(missing)}")
@@ -158,6 +160,10 @@ def load_loading(path: Path) -> dict[str, float]:
 
 def load_reads(path: Path) -> dict[tuple[str, str], dict[str, str]]:
     rows = read_tsv(path)
+    unknown = sorted({row["system"] for row in rows} - set(ALL_SYSTEMS))
+    if unknown:
+        raise ValueError(f"unknown read systems: {unknown}")
+    rows = [row for row in rows if row["system"] in SYSTEMS]
     values = {(row["config_id"], row["system"]): row for row in rows}
     if len(values) != len(rows):
         raise ValueError("duplicate read cells")

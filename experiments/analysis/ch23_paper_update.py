@@ -18,6 +18,13 @@ def preserve_replace(text, prefix, replacement):
 
 
 def update_paper(paper, loads, reads, manifest, loading_rows, exclude_f2load=False, macros_only=False):
+    # The generated-macro layer (tex/ch23_measurements.tex) was retired: the
+    # Chapter 2/3 numbers are written directly in the section sources and are
+    # maintained by hand. Emitting macros here, or rewriting the prose to
+    # reference them, would fight those edits, so this is a no-op. Figure
+    # regeneration still happens in the caller via figure2() and
+    # plot_paper_figure4_uniform_read_cache.py.
+    return
     b=loads['baseline_1kb']; n=loads['baseline_91b']; f=loads['flush_only_1kb']
     nf=loads['flush_only_91b']; last=loads['last_comp_1kb']; seq=loads['fillseq_1kb']
     ow=loads['fillseq_ow_1kb']; f2=None if exclude_f2load else loads['f2load_1kb']
@@ -78,9 +85,6 @@ def update_paper(paper, loads, reads, manifest, loading_rows, exclude_f2load=Fal
         num(tag+'FlushSlowdown',q(config,'baseline')/q(config,'flush_only'),1)
     num('LastReadMinRatio',min(ratio(c) for c in ('A_cache_zero','B_cache_5pct','C_pinned_zero','D_pinned_5pct')),2)
     num('LastReadMaxRatio',max(ratio(c) for c in ('A_cache_zero','B_cache_5pct','C_pinned_zero','D_pinned_5pct')),2)
-    macro_path=paper/'tex'/'ch23_measurements.tex'
-    macro_path.write_text('% Generated from '+manifest['run_id']+'; do not edit numbers independently.\n'+
-        '\n'.join(r'\newcommand{\%s}{%s}'%(k,v) for k,v in sorted(macros.items()))+'\n')
     if macros_only:
         return
     bgpath=paper/'tex'/'02_Background.tex'; text=bgpath.read_text()
@@ -235,9 +239,4 @@ def update_paper(paper, loads, reads, manifest, loading_rows, exclude_f2load=Fal
             rendered=preserve_replace(rendered,'그러나 Compaction은 CPU의 merge sorting과',
                r'Compaction은 CPU의 merge sorting과 disk I/O를 함께 요구한다. Foreground write와 background job은 자원을 공유하고, compaction이 누적되면 write stall이 발생할 수 있다. 공통 1,000~GiB, 1~KB baseline에서 flush와 compaction의 전체 SST write volume은 logical input의 \ChBaselineWaf{}배였다. 별도 historical scaling 계열의 SST WAF는 500~GiB에서 12.4, 8,000~GiB에서 20.8이었다(Figure~\ref{fig:bg-loading-scale}). 이 수치는 SST WAF이며 device-level write amplification과 구분한다.')
         path.write_text(rendered)
-    # Macros are also used before Chapter 2 (abstract/introduction).
-    bgpath.write_text(bgpath.read_text().replace(r'\input{tex/ch23_measurements.tex}'+'\n','',1))
-    main=paper/'main.tex'; mt=main.read_text()
-    if r'\input{tex/ch23_measurements.tex}' not in mt:
-        mt=mt.replace(r'\begin{document}',r'\input{tex/ch23_measurements.tex}'+'\n'+r'\begin{document}',1)
-    main.write_text(mt)
+

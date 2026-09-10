@@ -1,0 +1,28 @@
+{
+  "binary": "/home/smrc/virtual_compaction/rocksdb-f455-release/db_bench",
+  "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+  "command": [
+    "/home/smrc/virtual_compaction/vcomp/experiments/scripts/load/run_baseline_coverage_repeats.py",
+    "--run-id",
+    "baseline_coverage_260908_repeat1"
+  ],
+  "commit": "f455ab7bd6a8c67f00d48075bb310f131d9fae5f",
+  "coverage_binary": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/paper_alternatives_ycsb_cached0_260908_no_flush_run2/bin/db_bench",
+  "coverage_binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+  "full_dataset_gib": 1000,
+  "full_repetitions": 2,
+  "pilot_dataset_gib": 1,
+  "preserve_completed_dbs": true,
+  "question": "same-input baseline final-layout variability",
+  "run_id": "baseline_coverage_260908_repeat1",
+  "seed": 12345678,
+  "source_hashes": {
+    "ch23_common.py": "46c4918cac2dfb49fa712d69991cfa847fde7586f0d99d4cba10c51dc60ba118",
+    "common.sh": "3120838e2a4a3db7a7727fd8929ca2d725ab5e9d2cb24b7ef27f347e8b7c7497",
+    "compare_ycsb_l1_coverage.py": "5b5115daf14b8fe16af6af479b67d429522f8426ed424aa25b09af7d7d804d5f",
+    "parse_coverage.py": "b139af7fa549fab535032a98291208d778c9bef39887bbb385f2e1370dee5dd0",
+    "run_baseline_coverage_repeats.py": "cacb9c8aeafc264220622cdb68ef1ddd8001cb876d68790c5473c9db5b2e0700",
+    "run_paper_ch23_common.py": "cb9d33ba040e80bce13ef65cf5893f3aef03ca5a561a515f35afee28eb5f7239"
+  },
+  "started_utc": "2026-09-08T09:45:52Z"
+}

@@ -1,0 +1,686 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 8daf0fc59c..1daba5ffe1 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -718,6 +718,7 @@ set(SOURCES
+         db/virtual_compaction/discrete_cdf.cc
+         db/virtual_compaction/discrete_merge.cc
+         db/virtual_compaction/virtual_sst.cc
++        db/virtual_compaction/sst_size_calibration.cc
+         db/compaction/sst_partitioner.cc
+         db/compaction/subcompaction_state.cc
+         db/convenience.cc
+diff --git a/README.md b/README.md
+index ed75cc0b13..6eb7495d41 100644
+--- a/README.md
++++ b/README.md
+@@ -65,6 +65,14 @@ for O(N) batch radix sort.
+ 
+ Current implementation:
+ 
++- `fillvirtual` defaults to `--vcomp_sst_size_model=calibrated`. Bounded
++  in-memory SST probes with the materialization options fit physical bytes
++  (including table overhead/compression) for virtual registration and splitting.
++  Logical KV bytes still determine input batch capacity. Use `logical` to
++  reproduce the old size estimate, not the old binary/merge implementation.
++  The model is approximate; per-level predicted/actual byte diagnostics and
++  final compaction draining remain required. See
++  [SST size model and validation](experiments/docs/SST_SIZE_MODEL.md).
+ - Phase 1 queues generated L0 VSSTs in an in-memory pending window.
+ - `RefillVirtualL0Window()` registers only a bounded visible L0 window through
+   batched VersionEdits. The refill condition is:
+diff --git a/db/db_impl/db_impl_compaction_flush.cc b/db/db_impl/db_impl_compaction_flush.cc
+index 0efaf4a217..e6acd8045c 100644
+--- a/db/db_impl/db_impl_compaction_flush.cc
++++ b/db/db_impl/db_impl_compaction_flush.cc
+@@ -5979,7 +5979,8 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
+   std::vector<VirtualSST> output_vssts = SplitIntoSSTs(
+       merged, total_entries, target_sst_size, avg_entry_size, global_min,
+       global_max, output_level, gp_boundaries,
+-      use_kmv ? &input_vsst_ptrs : nullptr);
++      use_kmv ? &input_vsst_ptrs : nullptr, /*kmv_samples=*/0,
++      &virtual_sst_registry_->GetSSTSizeModel());
+   if (merged.DiscreteModel() != nullptr) {
+     unsigned __int128 output_count = 0;
+     bool valid = !output_vssts.empty();
+diff --git a/db/virtual_compaction/virtual_sst.cc b/db/virtual_compaction/virtual_sst.cc
+index d87365bf17..23b10fc03b 100644
+--- a/db/virtual_compaction/virtual_sst.cc
++++ b/db/virtual_compaction/virtual_sst.cc
+@@ -63,12 +63,6 @@ uint64_t MaxHash() {
+   return std::numeric_limits<uint64_t>::max();
+ }
+ 
+-long double ThetaFraction(uint64_t theta_hash) {
+-  const long double domain =
+-      static_cast<long double>(std::numeric_limits<uint64_t>::max()) + 1.0L;
+-  return (static_cast<long double>(theta_hash) + 1.0L) / domain;
+-}
+-
+ KMVSketch BuildKMVSketchFromSortedKeyRange(
+     std::vector<uint64_t>::const_iterator begin,
+     std::vector<uint64_t>::const_iterator end,
+@@ -247,25 +241,34 @@ uint64_t EstimateKMVUnionEntries(const std::vector<const VirtualSST*>& inputs,
+       }
+     }
+   }
++  // Estimate the dedup ratio from the sample, not the absolute cardinality.
++  // Both counts are drawn under the same theta, so theta cancels:
++  //   sampled_unique / sampled_entries -> unique_entries / naive_entries.
++  // Rescaling a sample count by 1/theta instead would carry the sampling
++  // error of an absolute estimate (about 1/sqrt(k)) into every merge, and
++  // clamping that estimate to naive_entries from above but not from below
++  // turned the error into a systematic undercount. The ratio form has neither
++  // problem: it is at most one by construction, so no clamping is needed, and
++  // its variance vanishes as the true ratio approaches one. Disjoint inputs
++  // therefore return naive_entries exactly, with no sampling noise at all.
++  const uint64_t sampled_entries = merged_samples.size();
+   SortUniqueByKey(&merged_samples);
++  const uint64_t sampled_unique = merged_samples.size();
+ 
++  if (sampled_entries == 0) return naive_entries;
++  if (sampled_unique >= sampled_entries) return naive_entries;
+   if (complete) {
+-    return std::min<uint64_t>(naive_entries, merged_samples.size());
+-  }
+-  if (merged_samples.empty()) {
+-    return naive_entries;
++    // Every key was sampled, so the ratio is the exact dedup ratio.
++    return std::max<uint64_t>(1, static_cast<uint64_t>(std::llround(
++        static_cast<long double>(naive_entries) *
++        static_cast<long double>(sampled_unique) /
++        static_cast<long double>(sampled_entries))));
+   }
+-
+-  const long double theta = ThetaFraction(theta_hash);
+-  if (theta <= 0.0L) return naive_entries;
+-
+   const long double estimate =
+-      static_cast<long double>(merged_samples.size()) / theta;
+-  if (estimate >= static_cast<long double>(naive_entries)) {
+-    return naive_entries;
+-  }
+-  return std::max<uint64_t>(
+-      1, static_cast<uint64_t>(std::ceil(estimate)));
++      static_cast<long double>(naive_entries) *
++      static_cast<long double>(sampled_unique) /
++      static_cast<long double>(sampled_entries);
++  return std::max<uint64_t>(1, static_cast<uint64_t>(std::ceil(estimate)));
+ }
+ 
+ uint64_t EstimateKMVUnionEntriesForRange(
+@@ -342,21 +345,23 @@ uint64_t EstimateKMVUnionEntriesForRange(
+       }
+     }
+   }
++  // Same change as EstimateKMVUnionEntries: the samples answer "what fraction
++  // of these entries are duplicates", and the proportional density term
++  // answers "how many entries fall in this range". Multiplying the two keeps
++  // theta out of the result.
++  const uint64_t sampled_entries = merged_samples.size();
+   SortUniqueByKey(&merged_samples);
++  const uint64_t sampled_unique = merged_samples.size();
+ 
+-  if (complete) {
+-    return std::min<uint64_t>(input_entries_cap, merged_samples.size());
+-  }
+-  if (merged_samples.empty()) {
+-    return std::min<uint64_t>(
+-        input_entries_cap,
+-        static_cast<uint64_t>(std::ceil(density_estimate)));
++  const long double in_range = std::min<long double>(
++      density_estimate, static_cast<long double>(input_entries_cap));
++  if (sampled_entries == 0 || sampled_unique >= sampled_entries) {
++    return std::min<uint64_t>(input_entries_cap,
++                              static_cast<uint64_t>(std::ceil(in_range)));
+   }
+-
+-  const long double theta = ThetaFraction(theta_hash);
+-  if (theta <= 0.0L) return 0;
+-  const long double estimate =
+-      static_cast<long double>(merged_samples.size()) / theta;
++  const long double estimate = in_range *
++                               static_cast<long double>(sampled_unique) /
++                               static_cast<long double>(sampled_entries);
+   return std::min<uint64_t>(
+       input_entries_cap,
+       std::max<uint64_t>(1, static_cast<uint64_t>(std::ceil(estimate))));
+@@ -687,11 +692,19 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
+                                       int target_level,
+                                       const std::vector<uint64_t>& grandparent_boundaries,
+                                       const std::vector<const VirtualSST*>* kmv_inputs,
+-                                      size_t kmv_samples) {
++                                      size_t kmv_samples,
++                                      const SSTSizeModel* size_model) {
+   std::vector<VirtualSST> result;
+ 
+   if (total_entries == 0 || plr.Empty()) return result;
+   if (avg_entry_size == 0) return result;
++  // Legacy/offline callers retain logical-byte behavior. The runtime registry
++  // supplies the physical model consistently for both sizes and split limits.
++  const SSTSizeModel logical_model = size_model == nullptr
++                                        ? SSTSizeModel::Logical(avg_entry_size)
++                                        : SSTSizeModel();
++  const SSTSizeModel& bytes = size_model == nullptr ? logical_model : *size_model;
++  if (!bytes.Valid()) return result;
+   const DiscreteCDF* discrete = plr.DiscreteModel();
+   if (discrete != nullptr && discrete->Count() != total_entries) return result;
+ 
+@@ -711,7 +724,7 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
+                                       : discrete->Select(total_entries - 1);
+     vsst.num_entries = total_entries;
+     vsst.level = 0;
+-    vsst.size_bytes = VirtualSST::EstimateSize(total_entries, avg_entry_size);
++    vsst.size_bytes = bytes.Estimate(total_entries);
+     if (kmv_inputs != nullptr) {
+       vsst.kmv_sketch = MergeKMVSketchesForRange(*kmv_inputs, vsst.key_min,
+                                                  vsst.key_max, kmv_samples);
+@@ -734,7 +747,7 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
+       ? (target_sst_size > UINT64_MAX / 2 ? UINT64_MAX : 2 * target_sst_size)
+       : target_sst_size;
+ 
+-  uint64_t keys_per_sst = max_sst_size / avg_entry_size;
++  uint64_t keys_per_sst = bytes.MaxEntries(max_sst_size);
+   if (keys_per_sst == 0) keys_per_sst = 1;
+ 
+   // Build split positions.
+@@ -796,8 +809,7 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
+       } else if (next_gp < total_entries) {
+         // GP boundary: count it, then evaluate dynamic threshold in BYTES.
+         switched++;
+-        unsigned __int128 cur_bytes =
+-            static_cast<unsigned __int128>(next_gp - last_split) * avg_entry_size;
++        uint64_t cur_bytes = bytes.Estimate(next_gp - last_split);
+         uint64_t pct = 50 + std::min<uint64_t>(switched * 5, 40);
+         unsigned __int128 threshold_bytes =
+             (static_cast<unsigned __int128>(target_sst_size) * pct) / 100;
+@@ -867,7 +879,7 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
+     vsst.key_max = key_end;
+     vsst.num_entries = n_entries;
+     vsst.level = target_level;
+-    vsst.size_bytes = VirtualSST::EstimateSize(n_entries, avg_entry_size);
++    vsst.size_bytes = bytes.Estimate(n_entries);
+     if (kmv_inputs != nullptr) {
+       vsst.kmv_sketch = MergeKMVSketchesForRange(*kmv_inputs, key_start,
+                                                  key_end, kmv_samples);
+@@ -952,7 +964,8 @@ std::vector<VirtualSST> VirtualCompact(
+     const std::vector<const VirtualSST*>& inputs,
+     uint64_t target_sst_size,
+     uint64_t avg_entry_size,
+-    int output_level) {
++    int output_level,
++    const SSTSizeModel* size_model) {
+   if (inputs.empty()) return {};
+ 
+   // Gather info for N-way merge.
+@@ -1000,7 +1013,8 @@ std::vector<VirtualSST> VirtualCompact(
+   return SplitIntoSSTs(merged, total_entries, target_sst_size, avg_entry_size,
+                        global_min, global_max, output_level,
+                        /*grandparent_boundaries=*/{},
+-                       VirtualSSTKMVEnabled() ? &input_ptrs : nullptr);
++                       VirtualSSTKMVEnabled() ? &input_ptrs : nullptr,
++                       /*kmv_samples=*/0, size_model);
+ }
+ 
+ }  // namespace ROCKSDB_NAMESPACE
+diff --git a/db/virtual_compaction/virtual_sst.h b/db/virtual_compaction/virtual_sst.h
+index 0f90afb1ea..2d5e843a34 100644
+--- a/db/virtual_compaction/virtual_sst.h
++++ b/db/virtual_compaction/virtual_sst.h
+@@ -9,6 +9,7 @@
+ #include <vector>
+ 
+ #include "db/virtual_compaction/plr_model.h"
++#include "db/virtual_compaction/sst_size_model.h"
+ 
+ namespace ROCKSDB_NAMESPACE {
+ 
+@@ -122,7 +123,8 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
+                                       int target_level,
+                                       const std::vector<uint64_t>& grandparent_boundaries = {},
+                                       const std::vector<const VirtualSST*>* kmv_inputs = nullptr,
+-                                      size_t kmv_samples = 0);
++                                      size_t kmv_samples = 0,
++                                      const SSTSizeModel* size_model = nullptr);
+ 
+ // Materialize keys from a VirtualSST using PLR Inverse.
+ // Returns sorted keys reconstructed from the model.
+@@ -133,6 +135,7 @@ std::vector<VirtualSST> VirtualCompact(
+     const std::vector<const VirtualSST*>& inputs,
+     uint64_t target_sst_size,
+     uint64_t avg_entry_size,
+-    int output_level);
++    int output_level,
++    const SSTSizeModel* size_model = nullptr);
+ 
+ }  // namespace ROCKSDB_NAMESPACE
+diff --git a/db/virtual_compaction/virtual_sst_registry.h b/db/virtual_compaction/virtual_sst_registry.h
+index ad78d11657..5e25632e60 100644
+--- a/db/virtual_compaction/virtual_sst_registry.h
++++ b/db/virtual_compaction/virtual_sst_registry.h
+@@ -30,9 +30,17 @@ class VirtualSSTRegistry {
+   void SetKeySize(uint32_t ks) { key_size_ = ks; }
+   uint32_t GetKeySize() const { return key_size_; }
+ 
+-  void SetAvgEntrySize(uint64_t s) { avg_entry_size_ = s; }
++  // Logical KV bytes determine input batching, independently of SST encoding.
++  void SetAvgEntrySize(uint64_t s) {
++    avg_entry_size_ = s;
++    size_model_ = SSTSizeModel::Logical(s);
++  }
+   uint64_t GetAvgEntrySize() const { return avg_entry_size_; }
+ 
++  // Configure once, before registering any files/background compactions.
++  void SetSSTSizeModel(const SSTSizeModel& model) { size_model_ = model; }
++  const SSTSizeModel& GetSSTSizeModel() const { return size_model_; }
++
+   void SetTargetSSTSize(uint64_t s) { target_sst_size_ = s; }
+   uint64_t GetTargetSSTSize() const { return target_sst_size_; }
+ 
+@@ -120,6 +128,7 @@ class VirtualSSTRegistry {
+   std::unordered_set<uint64_t> retired_;
+   uint32_t key_size_ = 16;
+   uint64_t avg_entry_size_ = 1048;
++  SSTSizeModel size_model_ = SSTSizeModel::Logical(1048);
+   uint64_t target_sst_size_ = 64ULL * 1024 * 1024;
+ };
+ 
+diff --git a/db/virtual_compaction/virtual_sst_test.cc b/db/virtual_compaction/virtual_sst_test.cc
+index 8fd8febe33..eee660a32a 100644
+--- a/db/virtual_compaction/virtual_sst_test.cc
++++ b/db/virtual_compaction/virtual_sst_test.cc
+@@ -80,6 +80,51 @@ TEST(VirtualSSTTest, KMVRuntimeSwitch) {
+   }
+ }
+ 
++TEST(VirtualSSTTest, PhysicalSizeModelControlsSplitAndRegistration) {
++  auto input = MakeVirtualSST(KeyRange(0, 100));
++  ASSERT_OK(CertifyVirtualSST(&input));
++  SSTSizeModel physical;
++  ASSERT_TRUE(physical.AddCalibration(10, 1100, 20, 2100));
++  const auto output = SplitIntoSSTs(input.plr_model, 100, 1000, 50, 0, 99, 1,
++                                  {}, nullptr, 0, &physical);
++  ASSERT_EQ(output.size(), 12U);  // Nine entries per full file, not twenty.
++  uint64_t count = 0;
++  for (const auto& file : output) {
++    count += file.num_entries;
++    ASSERT_EQ(file.size_bytes, physical.Estimate(file.num_entries));
++    ASSERT_LE(file.size_bytes, 1000U);
++    ASSERT_EQ(MaterializeKeys(file).size(), file.num_entries);
++  }
++  ASSERT_EQ(count, 100U);
++
++  const auto l0 = SplitIntoSSTs(input.plr_model, 100, 1000, 50, 0, 99, 0,
++                              {}, nullptr, 0, &physical);
++  ASSERT_EQ(l0.size(), 1U);
++  ASSERT_EQ(l0[0].size_bytes, 10100U);
++
++  VirtualSSTRegistry registry;
++  registry.SetAvgEntrySize(50);
++  registry.SetSSTSizeModel(physical);
++  ASSERT_EQ(registry.GetAvgEntrySize(), 50U);  // Logical input batching unchanged.
++  ASSERT_EQ(registry.GetSSTSizeModel().Estimate(10), 1100U);
++}
++
++TEST(VirtualSSTTest, PhysicalBytesDriveGrandparentThreshold) {
++  auto input = MakeVirtualSST(KeyRange(0, 100));
++  ASSERT_OK(CertifyVirtualSST(&input));
++  SSTSizeModel physical;
++  ASSERT_TRUE(physical.AddCalibration(10, 1100, 20, 2100));
++  const auto output = SplitIntoSSTs(input.plr_model, 100, 1000, 50, 0, 99, 1,
++                                  {5}, nullptr, 0, &physical);
++  ASSERT_FALSE(output.empty());
++  // 100 + 5*100 = 600 bytes crosses the first GP threshold (550 bytes).
++  ASSERT_EQ(output.front().num_entries, 5U);
++  ASSERT_EQ(output.front().size_bytes, 600U);
++  const auto legacy = SplitIntoSSTs(input.plr_model, 100, 1000, 50, 0, 99, 1,
++                                  {5});
++  ASSERT_EQ(legacy.front().num_entries, 40U);  // 250 logical bytes did not cross.
++}
++
+ TEST(VirtualSSTTest, CompleteKMVSketchDeduplicatesExactUnion) {
+   auto left = MakeVirtualSST(KeyRange(0, 32));
+   auto right = MakeVirtualSST(KeyRange(16, 48));
+diff --git a/experiments/analysis/ch23_f2_paper_update.py b/experiments/analysis/ch23_f2_paper_update.py
+index d273f63997..162af26dcb 100644
+--- a/experiments/analysis/ch23_f2_paper_update.py
++++ b/experiments/analysis/ch23_f2_paper_update.py
+@@ -35,6 +35,10 @@ def caption(text, label, replacement):
+ 
+ 
+ def update_f2_paper(paper,loads,reads,manifest,loading_rows):
++    # See update_paper(): the generated-macro layer is retired and the
++    # Chapter 2/3 numbers are hand-maintained, so this no longer edits the
++    # paper. Figures are still regenerated by the caller.
++    return
+     update_paper(paper,loads,reads,manifest,loading_rows,macros_only=True)
+     b,f2=loads['baseline_1kb'],loads['f2load_1kb']
+     extras={
+diff --git a/experiments/analysis/ch23_paper_update.py b/experiments/analysis/ch23_paper_update.py
+index b20459f942..c85c3e94dc 100644
+--- a/experiments/analysis/ch23_paper_update.py
++++ b/experiments/analysis/ch23_paper_update.py
+@@ -18,6 +18,13 @@ def preserve_replace(text, prefix, replacement):
+ 
+ 
+ def update_paper(paper, loads, reads, manifest, loading_rows, exclude_f2load=False, macros_only=False):
++    # The generated-macro layer (tex/ch23_measurements.tex) was retired: the
++    # Chapter 2/3 numbers are written directly in the section sources and are
++    # maintained by hand. Emitting macros here, or rewriting the prose to
++    # reference them, would fight those edits, so this is a no-op. Figure
++    # regeneration still happens in the caller via figure2() and
++    # plot_paper_figure4_uniform_read_cache.py.
++    return
+     b=loads['baseline_1kb']; n=loads['baseline_91b']; f=loads['flush_only_1kb']
+     nf=loads['flush_only_91b']; last=loads['last_comp_1kb']; seq=loads['fillseq_1kb']
+     ow=loads['fillseq_ow_1kb']; f2=None if exclude_f2load else loads['f2load_1kb']
+@@ -78,9 +85,6 @@ def update_paper(paper, loads, reads, manifest, loading_rows, exclude_f2load=Fal
+         num(tag+'FlushSlowdown',q(config,'baseline')/q(config,'flush_only'),1)
+     num('LastReadMinRatio',min(ratio(c) for c in ('A_cache_zero','B_cache_5pct','C_pinned_zero','D_pinned_5pct')),2)
+     num('LastReadMaxRatio',max(ratio(c) for c in ('A_cache_zero','B_cache_5pct','C_pinned_zero','D_pinned_5pct')),2)
+-    macro_path=paper/'tex'/'ch23_measurements.tex'
+-    macro_path.write_text('% Generated from '+manifest['run_id']+'; do not edit numbers independently.\n'+
+-        '\n'.join(r'\newcommand{\%s}{%s}'%(k,v) for k,v in sorted(macros.items()))+'\n')
+     if macros_only:
+         return
+     bgpath=paper/'tex'/'02_Background.tex'; text=bgpath.read_text()
+@@ -235,9 +239,4 @@ def update_paper(paper, loads, reads, manifest, loading_rows, exclude_f2load=Fal
+             rendered=preserve_replace(rendered,'그러나 Compaction은 CPU의 merge sorting과',
+                r'Compaction은 CPU의 merge sorting과 disk I/O를 함께 요구한다. Foreground write와 background job은 자원을 공유하고, compaction이 누적되면 write stall이 발생할 수 있다. 공통 1,000~GiB, 1~KB baseline에서 flush와 compaction의 전체 SST write volume은 logical input의 \ChBaselineWaf{}배였다. 별도 historical scaling 계열의 SST WAF는 500~GiB에서 12.4, 8,000~GiB에서 20.8이었다(Figure~\ref{fig:bg-loading-scale}). 이 수치는 SST WAF이며 device-level write amplification과 구분한다.')
+         path.write_text(rendered)
+-    # Macros are also used before Chapter 2 (abstract/introduction).
+-    bgpath.write_text(bgpath.read_text().replace(r'\input{tex/ch23_measurements.tex}'+'\n','',1))
+-    main=paper/'main.tex'; mt=main.read_text()
+-    if r'\input{tex/ch23_measurements.tex}' not in mt:
+-        mt=mt.replace(r'\begin{document}',r'\input{tex/ch23_measurements.tex}'+'\n'+r'\begin{document}',1)
+-    main.write_text(mt)
++
+diff --git a/experiments/analysis/plot_paper_figure4_uniform_read_cache.py b/experiments/analysis/plot_paper_figure4_uniform_read_cache.py
+index cf356ac424..116d966480 100644
+--- a/experiments/analysis/plot_paper_figure4_uniform_read_cache.py
++++ b/experiments/analysis/plot_paper_figure4_uniform_read_cache.py
+@@ -26,10 +26,11 @@ SYSTEMS = (
+     "fillseq_ow",
+     "f2load",
+ )
++ALL_SYSTEMS = SYSTEMS
+ SYSTEM_LABELS = {
+     "baseline": "Baseline",
+     "flush_only": "Flush-only",
+-    "last_comp": "Last-comp",
++    "last_comp": "One-shot",
+     "fillseq": "Fillseq",
+     "fillseq_ow": "Fillseq+OW",
+     "f2load": "F2Load",
+@@ -67,7 +68,7 @@ LOADING_LABELS = {
+     "adoc": "ADOC",
+     "blobdb": "BlobDB",
+     "flush_only": "Flush-only",
+-    "last_comp": "Last-comp",
++    "last_comp": "One-shot",
+     "fillseq": "Fillseq",
+     "fillseq_ow": "Fillseq+OW",
+     "f2load": "F2Load",
+@@ -150,6 +151,7 @@ def load_loading(path: Path) -> dict[str, float]:
+         if int(row["repetitions"]) != 1:
+             raise ValueError(f"unexpected repetitions for {method}")
+         values[method] = float(row["loading_min"])
++    values = {k: v for k, v in values.items() if k in LOADING_ORDER}
+     missing = set(LOADING_ORDER) - set(values)
+     if missing:
+         raise ValueError(f"missing loading methods: {sorted(missing)}")
+@@ -158,6 +160,10 @@ def load_loading(path: Path) -> dict[str, float]:
+ 
+ def load_reads(path: Path) -> dict[tuple[str, str], dict[str, str]]:
+     rows = read_tsv(path)
++    unknown = sorted({row["system"] for row in rows} - set(ALL_SYSTEMS))
++    if unknown:
++        raise ValueError(f"unknown read systems: {unknown}")
++    rows = [row for row in rows if row["system"] in SYSTEMS]
+     values = {(row["config_id"], row["system"]): row for row in rows}
+     if len(values) != len(rows):
+         raise ValueError("duplicate read cells")
+diff --git a/experiments/results/README.md b/experiments/results/README.md
+index 20ba03075b..13ab9eb95b 100644
+--- a/experiments/results/README.md
++++ b/experiments/results/README.md
+@@ -7,6 +7,9 @@ in [the experiment guide](../README.md).
+ 
+ ## Fidelity qualification, 2026-09-08
+ 
++- [Physical SST-size model](sst_size_model_260908_smoke1/README.md): four serial
++  1 GiB logical/calibrated controls plus arithmetic, builder and split tests.
++  Qualifies size estimation only; 1TB residual-compaction behavior is untested.
+ - [Corrected 100 GiB rerun](fidelity_100gib_20260908_seqfix_run3/README.md):
+   six configurations × baseline/F2Load, with the sequence correction. All
+   baseline distinct counts match; corrected F2Load iterators pass strict
+diff --git a/src.mk b/src.mk
+index 049ba35a63..c8d517b052 100644
+--- a/src.mk
++++ b/src.mk
+@@ -48,6 +48,7 @@ LIB_SOURCES =                                                   \
+   db/virtual_compaction/discrete_cdf.cc                         \
+   db/virtual_compaction/discrete_merge.cc                       \
+   db/virtual_compaction/virtual_sst.cc                          \
++  db/virtual_compaction/sst_size_calibration.cc                 \
+   db/compaction/sst_partitioner.cc                              \
+   db/compaction/subcompaction_state.cc                          \
+   db/convenience.cc                                             \
+diff --git a/tools/db_bench_tool.cc b/tools/db_bench_tool.cc
+index 9109132b2d..836cdde340 100644
+--- a/tools/db_bench_tool.cc
++++ b/tools/db_bench_tool.cc
+@@ -99,6 +99,7 @@
+ #include "util/xxhash.h"
+ 
+ #include "db/virtual_compaction/plr_model.h"
++#include "db/virtual_compaction/sst_size_calibration.h"
+ #include "db/virtual_compaction/virtual_sst.h"
+ #include "rocksdb/sst_file_reader.h"
+ #include "rocksdb/sst_file_writer.h"
+@@ -918,6 +919,11 @@ DEFINE_string(vcomp_fidelity_report_dir, "",
+               "If not empty, write fillvirtual descriptor/materialization "
+               "cardinality diagnostics (fidelity.json and files.tsv) here.");
+ 
++DEFINE_string(vcomp_sst_size_model, "calibrated",
++              "fillvirtual SST bytes: calibrated uses completed in-memory SST "
++              "probes with the materialization options; logical reproduces "
++              "the old entries*(key+value) estimate. Input batching is unchanged.");
++
+ DEFINE_bool(vcomp_global_unique_keys, false,
+             "fillvirtual only: assert that every input key is distinct and "
+             "materialize a globally distinct key set. Phase 2 then writes "
+@@ -5471,10 +5477,36 @@ class Benchmark {
+ 
+   void WriteRandom(ThreadState* thread) { DoWrite(thread, RANDOM); }
+ 
++  Options VirtualMaterializationOptions() const {
++    Options opts = open_options_;
++    if (FLAGS_compression_type_e != kNoCompression) {
++      opts.compression = FLAGS_compression_type_e;
++    }
++    // Share this normalization between calibration and the actual SST writer.
++    const auto* table = opts.table_factory
++                            ? opts.table_factory->GetOptions<BlockBasedTableOptions>()
++                            : nullptr;
++    if (table && table->enable_index_compression != FLAGS_enable_index_compression) {
++      BlockBasedTableOptions adjusted = *table;
++      adjusted.enable_index_compression = FLAGS_enable_index_compression;
++      opts.table_factory.reset(NewBlockBasedTableFactory(adjusted));
++    }
++    return opts;
++  }
++
+   // FillVirtual: generate random keys, flush as virtual L0 SSTs (PLR models),
+   // let RocksDB's background threads handle compaction (via PLR merge),
+   // then materialize to real SST files.
+   void FillVirtual(ThreadState* thread) {
++    // Registry configuration/calibration is published once by one coordinator.
++    // Use phase1_shards/materialize_workers for parallelism within this load.
++    if (FLAGS_threads != 1) {
++      fprintf(stderr, "fillvirtual requires --threads=1; use "
++                      "--vcomp_phase1_shards and --vcomp_materialize_workers "
++                      "for parallel loading\n");
++      db_bench_exit(1);
++      return;
++    }
+     auto* db_impl = static_cast<DBImpl*>(db_.db);
+     auto* versions = db_impl->GetVersionSet();
+     auto* registry = db_impl->GetVirtualSSTRegistry();
+@@ -5486,7 +5518,8 @@ class Benchmark {
+       return;
+     }
+ 
+-    // Configure registry parameters.
++    // Logical KV bytes still determine input batch capacity. Encoded SST bytes
++    // are calibrated separately before any virtual file is registered.
+     uint64_t avg_entry_size =
+         static_cast<uint64_t>(key_size_) + static_cast<uint64_t>(value_size);
+     uint64_t target_sst_size = FLAGS_target_file_size_base > 0
+@@ -5670,6 +5703,58 @@ class Benchmark {
+               unique_reservation->key_domain(),
+               unique_reservation->bytes() >> 20);
+     }
++    // Calibration is mandatory loading work, included in Phase 1 and Total.
++    auto phase1_start = FLAGS_env->NowMicros();
++    const Options materialization_options = VirtualMaterializationOptions();
++    if (FLAGS_vcomp_sst_size_model == "calibrated") {
++      const uint64_t calibration_start = FLAGS_env->NowMicros();
++      SSTSizeModel calibrated;
++      std::vector<SSTSizeCalibrationSample> samples;
++      Status calibration = CalibrateSSTSizeModel(
++          materialization_options, avg_entry_size, key_domain_for_keys,
++          target_sst_size,
++          [&](SstFileWriter* writer, uint64_t entries, uint64_t stride) {
++            // Independent generators preserve the load's key and value RNGs.
++            RandomGenerator values;
++            std::string key_buffer(key_size_, '0');
++            Slice key(key_buffer);
++            for (uint64_t i = 0; i < entries; ++i) {
++              GenerateKeyFromInt(i * stride, key_domain_for_keys, &key);
++              Status s = writer->Put(key, values.Generate());
++              if (!s.ok()) return s;
++            }
++            return Status::OK();
++          }, &calibrated, &samples);
++      if (!calibration.ok()) {
++        fprintf(stderr, "SST size calibration failed: %s\n",
++                calibration.ToString().c_str());
++        if (load_trace_fp != nullptr) fclose(load_trace_fp);
++        db_bench_exit(1);
++        return;
++      }
++      registry->SetSSTSizeModel(calibrated);
++      for (const auto& sample : samples) {
++        fprintf(stderr,
++                "  SST size calibration: entries=%" PRIu64 " stride=%" PRIu64
++                " actual_bytes=%" PRIu64 " estimated_bytes=%" PRIu64 "\n",
++                sample.entries, sample.stride, sample.file_bytes,
++                calibrated.Estimate(sample.entries));
++      }
++      fprintf(stderr, "SST size calibration: %.6f sec (memory-only)\n",
++              (FLAGS_env->NowMicros() - calibration_start) / 1e6);
++    } else if (FLAGS_vcomp_sst_size_model != "logical") {
++      fprintf(stderr, "Invalid --vcomp_sst_size_model: %s\n",
++              FLAGS_vcomp_sst_size_model.c_str());
++      if (load_trace_fp != nullptr) fclose(load_trace_fp);
++      db_bench_exit(1);
++      return;
++    }
++    const SSTSizeModel& sst_size_model = registry->GetSSTSizeModel();
++    fprintf(stderr,
++            "SST size model: %s logical_entry_bytes=%" PRIu64
++            " target_bytes=%" PRIu64 " entries_at_target=%" PRIu64 "\n",
++            FLAGS_vcomp_sst_size_model.c_str(), avg_entry_size, target_sst_size,
++            sst_size_model.MaxEntries(target_sst_size));
+     const uint64_t memtable_capacity =
+         static_cast<uint64_t>(FLAGS_memtable_flush_size) * 1024 * 1024 /
+         avg_entry_size;
+@@ -5915,7 +6000,6 @@ class Benchmark {
+             use_load_trace && FLAGS_vcomp_phase1_shards > 1
+                 ? " (trace replay uses serial path)"
+                 : "");
+-    auto phase1_start = FLAGS_env->NowMicros();
+ 
+     uint64_t sort_us = 0, flush_us = 0, plr_fit_us = 0;
+     uint64_t keygen_measured_us = 0;
+@@ -6173,8 +6257,7 @@ class Benchmark {
+           vsst.key_max = keys.back();
+           vsst.num_entries = keys.size();
+           vsst.level = 0;
+-          vsst.size_bytes =
+-              VirtualSST::EstimateSize(keys.size(), avg_entry_size);
++          vsst.size_bytes = sst_size_model.Estimate(keys.size());
+ 
+           Status cdf_status = CertifyVirtualSST(&vsst);
+           if (!cdf_status.ok()) {
+@@ -6289,8 +6372,7 @@ class Benchmark {
+       vsst.key_max = memtable_buf.back();
+       vsst.num_entries = memtable_buf.size();
+       vsst.level = 0;
+-      vsst.size_bytes =
+-          VirtualSST::EstimateSize(memtable_buf.size(), avg_entry_size);
++      vsst.size_bytes = sst_size_model.Estimate(memtable_buf.size());
+ 
+       Status cdf_status = CertifyVirtualSST(&vsst);
+       if (!cdf_status.ok()) {
+@@ -7144,26 +7226,7 @@ class Benchmark {
+             std::string sst_path = TableFileName(
+                 cfd->ioptions().cf_paths, res.file_number, 0u);
+ 
+-            Options sst_opts = open_options_;
+-            if (FLAGS_compression_type_e != kNoCompression) {
+-              sst_opts.compression = FLAGS_compression_type_e;
+-            }
+-            // Force the materialized SST's index-block compression to match the
+-            // configured flag (= baseline's setting). Without this the SST
+-            // format can silently diverge from a normal RocksDB load.
+-            {
+-              auto* bbto_ptr =
+-                  sst_opts.table_factory
+-                      ? sst_opts.table_factory
+-                            ->GetOptions<BlockBasedTableOptions>()
+-                      : nullptr;
+-              if (bbto_ptr && bbto_ptr->enable_index_compression !=
+-                                  FLAGS_enable_index_compression) {
+-                BlockBasedTableOptions bbto = *bbto_ptr;
+-                bbto.enable_index_compression = FLAGS_enable_index_compression;
+-                sst_opts.table_factory.reset(NewBlockBasedTableFactory(bbto));
+-              }
+-            }
++            Options sst_opts = materialization_options;
+             EnvOptions env_opts;
+             if (FLAGS_use_direct_io_for_flush_and_compaction) {
+               env_opts.use_direct_writes = true;
+@@ -7397,6 +7460,31 @@ class Benchmark {
+         }
+       }
+       write_fidelity_report("after_materialization", true, materialize_ok);
++      // Keep descriptor/count errors separate from the physical-byte estimate.
++      // In particular global-unique mode can legitimately emit fewer entries.
++      struct LevelSizeAudit {
++        uint64_t descriptor_bytes = 0;
++        uint64_t predicted_written_bytes = 0;
++        uint64_t actual_bytes = 0;
++      };
++      std::map<int, LevelSizeAudit> size_audit;
++      for (size_t i = 0; i < tasks.size(); ++i) {
++        auto& audit = size_audit[tasks[i].level];
++        audit.descriptor_bytes += tasks[i].vsst->size_bytes;
++        audit.predicted_written_bytes += sst_size_model.Estimate(results[i].keys_written);
++        audit.actual_bytes += results[i].file_size;
++      }
++      for (const auto& item : size_audit) {
++        const auto& audit = item.second;
++        fprintf(stderr,
++                "  SST size audit: level=%d descriptor_bytes=%" PRIu64
++                " predicted_written_bytes=%" PRIu64 " actual_bytes=%" PRIu64
++                " actual_over_predicted_pct=%.6f\n",
++                item.first, audit.descriptor_bytes, audit.predicted_written_bytes,
++                audit.actual_bytes, audit.predicted_written_bytes == 0 ? 0.0 :
++                100.0 * (static_cast<double>(audit.actual_bytes) /
++                         audit.predicted_written_bytes - 1.0));
++      }
+       if (!materialize_ok) {
+         fprintf(stderr, "Error: materialization failed; VersionEdit skipped\n");
+         {

@@ -1,0 +1,297 @@
+[
+  {
+    "coverage": {
+      "binary": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/paper_alternatives_ycsb_cached0_260908_no_flush_run2/bin/db_bench",
+      "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+      "definition": "inclusive L1 range union / full integer query domain",
+      "diagnostic_only": true,
+      "domain_keys": 1048576,
+      "l1_covered_integer_keys": 226743,
+      "l1_global_coverage_pct": 21.623897552490234,
+      "l1_ranges": [
+        {
+          "gap": 0,
+          "idx": 0,
+          "key_hi": 924515,
+          "key_lo": 821833,
+          "width": 102682
+        },
+        {
+          "gap": 0,
+          "idx": 1,
+          "key_hi": 1027162,
+          "key_lo": 924516,
+          "width": 102646
+        },
+        {
+          "gap": 0,
+          "idx": 2,
+          "key_hi": 1048575,
+          "key_lo": 1027163,
+          "width": 21412
+        }
+      ],
+      "legacy_definition": "union span / level-local min-to-max span",
+      "levels": [
+        {
+          "cov_pct": 100.0,
+          "files": 3,
+          "files_span": 226740,
+          "key_max": 1048575,
+          "key_min": 821833,
+          "level": 1,
+          "size_mb": 142.3,
+          "union_span": 226740
+        },
+        {
+          "cov_pct": 100.0,
+          "files": 8,
+          "files_span": 821820,
+          "key_max": 821831,
+          "key_min": 0,
+          "level": 2,
+          "size_mb": 515.1,
+          "union_span": 821820
+        }
+      ],
+      "source_unchanged": true
+    },
+    "loading": {
+      "benchmark": {
+        "avg_latency_us": 1.072,
+        "measured_seconds": 1.124,
+        "operations": 1048576,
+        "throughput_ops_sec": 932521.0
+      },
+      "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+      "case_id": "baseline_1kb",
+      "compaction_sst_write_bytes": 1654386688,
+      "dataset_gib": 1,
+      "db_dir": "/work/vcomp/exp/baseline_coverage_260908_night_n03/pilot/qualification/baseline_1kb",
+      "elapsed_sec": 11.33399248123169,
+      "final_sst_bytes": 689393206,
+      "final_sst_count": 11,
+      "flush_sst_write_bytes": 1058515495,
+      "key_bytes": 24,
+      "levels": {
+        "0": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "1": {
+          "files": 3,
+          "size_mib": 142
+        },
+        "2": {
+          "files": 8,
+          "size_mib": 515
+        },
+        "3": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "4": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "5": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "6": {
+          "files": 0,
+          "size_mib": 0
+        }
+      },
+      "loading_min": 0.18889987468719482,
+      "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_night_n03/pilot/qualification/baseline_1kb",
+      "logical_input_bytes": 1073741824,
+      "num_keys": 1048576,
+      "peak_rss_kb": 310256,
+      "phases": [
+        {
+          "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+          "elapsed_sec": 11.33399248123169,
+          "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_night_n03/pilot/qualification/baseline_1kb/phase1",
+          "peak_rss_kb": 310256
+        }
+      ],
+      "repetitions": 1,
+      "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_night_n03/pilot/qualification/baseline_1kb/db_identity.json",
+      "status": "validated",
+      "system": "baseline",
+      "total_sst_write_bytes": 2712902183,
+      "validation": "1000_of_1000_found_after_readonly_reopen",
+      "value_bytes": 1000,
+      "waf": 2.526587045751512
+    },
+    "name": "qualification",
+    "phase": "pilot"
+  },
+  {
+    "coverage": {
+      "binary": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/paper_alternatives_ycsb_cached0_260908_no_flush_run2/bin/db_bench",
+      "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+      "definition": "inclusive L1 range union / full integer query domain",
+      "diagnostic_only": true,
+      "domain_keys": 1048576000,
+      "l1_covered_integer_keys": 136242664,
+      "l1_global_coverage_pct": 12.993112945556641,
+      "l1_ranges": [
+        {
+          "gap": 0,
+          "idx": 0,
+          "key_hi": 67039257,
+          "key_lo": 39755737,
+          "width": 27283520
+        },
+        {
+          "gap": 409386345,
+          "idx": 1,
+          "key_hi": 521899415,
+          "key_lo": 476425603,
+          "width": 45473812
+        },
+        {
+          "gap": 152023418,
+          "idx": 2,
+          "key_hi": 707590623,
+          "key_lo": 673922834,
+          "width": 33667789
+        },
+        {
+          "gap": 175073866,
+          "idx": 3,
+          "key_hi": 912482029,
+          "key_lo": 882664490,
+          "width": 29817539
+        }
+      ],
+      "legacy_definition": "union span / level-local min-to-max span",
+      "levels": [
+        {
+          "cov_pct": 15.61,
+          "files": 4,
+          "files_span": 136242660,
+          "key_max": 912482029,
+          "key_min": 39755737,
+          "level": 1,
+          "size_mb": 214.9,
+          "union_span": 136242660
+        },
+        {
+          "cov_pct": 75.54,
+          "files": 45,
+          "files_span": 787505387,
+          "key_max": 1042541930,
+          "key_min": 546,
+          "level": 2,
+          "size_mb": 2530.9,
+          "union_span": 787505387
+        },
+        {
+          "cov_pct": 87.75,
+          "files": 449,
+          "files_span": 914560261,
+          "key_max": 1048575795,
+          "key_min": 6332330,
+          "level": 3,
+          "size_mb": 25572.6,
+          "union_span": 914560261
+        },
+        {
+          "cov_pct": 96.54,
+          "files": 4122,
+          "files_span": 1012245071,
+          "key_max": 1048575999,
+          "key_min": 4,
+          "level": 4,
+          "size_mb": 255923.9,
+          "union_span": 1012245071
+        },
+        {
+          "cov_pct": 99.97,
+          "files": 8929,
+          "files_span": 1048224320,
+          "key_max": 1048575997,
+          "key_min": 1,
+          "level": 5,
+          "size_mb": 501308.5,
+          "union_span": 1048224320
+        }
+      ],
+      "source_unchanged": true
+    },
+    "loading": {
+      "benchmark": {
+        "avg_latency_us": 3.382,
+        "measured_seconds": 3546.176,
+        "operations": 1048576000,
+        "throughput_ops_sec": 295691.0
+      },
+      "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+      "case_id": "baseline_1kb",
+      "compaction_sst_write_bytes": 12561314598912,
+      "dataset_gib": 1000,
+      "db_dir": "/work/vcomp/exp/baseline_coverage_260908_night_n03/full/repeat_01/baseline_1kb",
+      "elapsed_sec": 3563.3968000411987,
+      "final_sst_bytes": 823709822862,
+      "final_sst_count": 13549,
+      "flush_sst_write_bytes": 1091460743174,
+      "key_bytes": 24,
+      "levels": {
+        "0": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "1": {
+          "files": 4,
+          "size_mib": 215
+        },
+        "2": {
+          "files": 45,
+          "size_mib": 2531
+        },
+        "3": {
+          "files": 449,
+          "size_mib": 25573
+        },
+        "4": {
+          "files": 4122,
+          "size_mib": 255924
+        },
+        "5": {
+          "files": 8929,
+          "size_mib": 501309
+        },
+        "6": {
+          "files": 0,
+          "size_mib": 0
+        }
+      },
+      "loading_min": 59.389946667353314,
+      "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_night_n03/full/repeat_01/baseline_1kb",
+      "logical_input_bytes": 1073741824000,
+      "num_keys": 1048576000,
+      "peak_rss_kb": 6232396,
+      "phases": [
+        {
+          "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+          "elapsed_sec": 3563.3968000411987,
+          "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_night_n03/full/repeat_01/baseline_1kb/phase1",
+          "peak_rss_kb": 6232396
+        }
+      ],
+      "repetitions": 1,
+      "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_night_n03/full/repeat_01/baseline_1kb/db_identity.json",
+      "status": "validated",
+      "system": "baseline",
+      "total_sst_write_bytes": 13652775342086,
+      "validation": "10000_of_10000_found_after_readonly_reopen",
+      "value_bytes": 1000,
+      "waf": 12.715137882238254
+    },
+    "name": "repeat_01",
+    "phase": "full"
+  }
+]

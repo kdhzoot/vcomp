@@ -1,0 +1,14 @@
+{
+  "current": {
+    "phase": "full",
+    "system": "last_comp",
+    "workload": "workloada"
+  },
+  "error": "another storage benchmark is active",
+  "finished_full": 2,
+  "kind": "FAILED",
+  "pid": 373213,
+  "total_full": 36,
+  "utc": "2026-09-08T04:26:13Z",
+  "valid_full": 1
+}

@@ -1,0 +1,698 @@
+{
+  "analysis_source": {
+    "path": "experiments/analysis/analyze_baseline_repeat_ycsb_c.py",
+    "sha256": "d95c868d354e9339dc98bc8d26ac67735064037c9eccadc7e0a56dc53e5815b2"
+  },
+  "completion_evidence": {
+    "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/baseline_repeat_ycsb_c_260908_run1/COMPLETED.json",
+    "sha256": "33e8aed579a2ea02c1980da812e5ad59d576356fe197804be94166dc85d970ea"
+  },
+  "definitions": {
+    "coverage": "inclusive L1 range union / full integer key domain",
+    "histogram_scope": "May include DB-open/background activity; not pure data-block I/O.",
+    "l1_reads": "Final cumulative SST file-reader histogram count, not level hits.",
+    "weighted_latency": "File-reader average times count/Get; not wall-clock attribution."
+  },
+  "limitations": [
+    "One five-minute read per newly loaded DB; old references are historical.",
+    "Identical seed and duration can consume different RNG-prefix lengths.",
+    "Coverage does not by itself explain differences in per-read latency.",
+    "Per-level file-read totals need not equal the global SST-read histogram."
+  ],
+  "rows": [
+    {
+      "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "coverage_evidence": {
+        "diagnostic_identity": {
+          "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/coverage_dumps/ycsb_l1_coverage_260908/baseline.source_identity.json",
+          "sha256": "0f61065bcbd9610db0a80a2823bdfe31688f029c0057dc949dc78431fbac70db"
+        },
+        "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/coverage_dumps/ycsb_l1_coverage_260908/coverage.tsv",
+        "reference_identity": {
+          "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/paper_alternatives_ycsb_cached0_260908_no_flush_run2/full/workloadc/baseline/source_identity.json",
+          "sha256": "0f61065bcbd9610db0a80a2823bdfe31688f029c0057dc949dc78431fbac70db"
+        },
+        "sha256": "e9a0e98cfef208cd86b895efcddf2b5e295fc0ce8023c7e0c3fbd53eba746bdb",
+        "source_record": {
+          "cov_pct": "88.79",
+          "domain_coverage_pct": "88.78387784957886",
+          "domain_keys": "1048576000",
+          "exact_inclusive_L1": "True",
+          "files": "4",
+          "files_span": "930966431",
+          "key_max": "1048571195",
+          "key_min": "13015",
+          "level": "1",
+          "size_mb": "241.1",
+          "system": "baseline",
+          "union_span": "930966431"
+        }
+      },
+      "data_cache_misses_per_get": 0.641264240360951,
+      "file_reads_by_level": {
+        "1": {
+          "average_us": 1066.783,
+          "count": 7870485,
+          "count_per_get": 0.9200151635340152,
+          "stddev_us": 1220.71,
+          "weighted_latency_us_per_get": 981.4565362003073
+        },
+        "2": {
+          "average_us": 127.3324,
+          "count": 4948734,
+          "count_per_get": 0.5784790035552245,
+          "stddev_us": 34.1,
+          "weighted_latency_us_per_get": 73.65911987229528
+        },
+        "3": {
+          "average_us": 152.8965,
+          "count": 8103650,
+          "count_per_get": 0.9472708327342498,
+          "stddev_us": 208.66,
+          "weighted_latency_us_per_get": 144.83439487715222
+        },
+        "4": {
+          "average_us": 145.3035,
+          "count": 12462824,
+          "count_per_get": 1.4568336081519309,
+          "stddev_us": 153.46,
+          "weighted_latency_us_per_get": 211.6830221821041
+        },
+        "5": {
+          "average_us": 145.8803,
+          "count": 11903536,
+          "count_per_get": 1.3914560055286347,
+          "stddev_us": 110.57,
+          "weighted_latency_us_per_get": 202.9860195233189
+        }
+      },
+      "filter_cache_misses_per_get": 4.017529709281434,
+      "final_levels": {
+        "0": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "1": {
+          "files": 4,
+          "size_mib": 241
+        },
+        "2": {
+          "files": 43,
+          "size_mib": 2542
+        },
+        "3": {
+          "files": 444,
+          "size_mib": 25563
+        },
+        "4": {
+          "files": 4132,
+          "size_mib": 255980
+        },
+        "5": {
+          "files": 8838,
+          "size_mib": 501506
+        },
+        "6": {
+          "files": 0,
+          "size_mib": 0
+        }
+      },
+      "flush_write_bytes": 0,
+      "get_found_fraction": 0.6028777750424502,
+      "gets": 8554734,
+      "historical_reference": true,
+      "index_cache_misses_per_get": 0.6380702193662596,
+      "l1_domain_coverage_pct": 88.78387784957886,
+      "l1_file_read_average_us": 1066.783,
+      "l1_file_reads": 7870485,
+      "l1_file_reads_per_get": 0.9200151635340152,
+      "l1_weighted_latency_us_per_get": 981.4565362003073,
+      "label": "original_baseline",
+      "measured_seconds": 300.019,
+      "operation_mean_us": 1683.3684,
+      "operation_p99_us": 4388.16,
+      "run_id": "paper_alternatives_ycsb_cached0_260908_no_flush_run2",
+      "source_db_dir": "/work/vcomp/exp/paper_ch23_common_260905_approved_run3/full/baseline_1kb",
+      "source_evidence": {
+        "log": {
+          "path": "/home/smrc/virtual_compaction/vcomp/experiments/results/baseline_repeat_ycsb_c_260908_run1/provenance/reference_ycsb_c/baseline/bench.log",
+          "sha256": "e6631e3b8b737fe2c7cb99da82980c376d8628602bf1bcded4a4d01e85c3caf0"
+        },
+        "metrics": {
+          "path": "/home/smrc/virtual_compaction/vcomp/experiments/results/baseline_repeat_ycsb_c_260908_run1/provenance/reference_ycsb_c/baseline/validated.json",
+          "sha256": "68332a707dfdf785b13725276e76591fd62587c1701b55360052473522e21a1a"
+        }
+      },
+      "stall_micros": 0,
+      "system": "baseline",
+      "throughput_ops_sec": 28513.0,
+      "throughput_relative_to_original_baseline": 1.0
+    },
+    {
+      "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "coverage_evidence": {
+        "coverage": {
+          "binary": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/paper_alternatives_ycsb_cached0_260908_no_flush_run2/bin/db_bench",
+          "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+          "definition": "inclusive L1 range union / full integer query domain",
+          "diagnostic_only": true,
+          "domain_keys": 1048576000,
+          "l1_covered_integer_keys": 268964904,
+          "l1_global_coverage_pct": 25.650492095947264,
+          "l1_ranges": [
+            {
+              "gap": 0,
+              "idx": 0,
+              "key_hi": 90590289,
+              "key_lo": 546,
+              "width": 90589743
+            },
+            {
+              "gap": 557842723,
+              "idx": 1,
+              "key_hi": 737325745,
+              "key_lo": 648433013,
+              "width": 88892732
+            },
+            {
+              "gap": 4858,
+              "idx": 2,
+              "key_hi": 803568179,
+              "key_lo": 737330604,
+              "width": 66237575
+            },
+            {
+              "gap": 221759946,
+              "idx": 3,
+              "key_hi": 1048572976,
+              "key_lo": 1025328126,
+              "width": 23244850
+            }
+          ],
+          "legacy_definition": "union span / level-local min-to-max span",
+          "levels": [
+            {
+              "cov_pct": 25.65,
+              "files": 4,
+              "files_span": 268964900,
+              "key_max": 1048572976,
+              "key_min": 546,
+              "level": 1,
+              "size_mb": 208.3,
+              "union_span": 268964900
+            },
+            {
+              "cov_pct": 85.71,
+              "files": 46,
+              "files_span": 898752661,
+              "key_max": 1048575795,
+              "key_min": 94,
+              "level": 2,
+              "size_mb": 2518.0,
+              "union_span": 898752661
+            },
+            {
+              "cov_pct": 85.56,
+              "files": 442,
+              "files_span": 897200197,
+              "key_max": 1048575857,
+              "key_min": 94,
+              "level": 3,
+              "size_mb": 25589.8,
+              "union_span": 897200197
+            },
+            {
+              "cov_pct": 96.76,
+              "files": 4104,
+              "files_span": 1014570537,
+              "key_max": 1048575988,
+              "key_min": 4,
+              "level": 4,
+              "size_mb": 255976.1,
+              "union_span": 1014570537
+            },
+            {
+              "cov_pct": 99.97,
+              "files": 8901,
+              "files_span": 1048251410,
+              "key_max": 1048575999,
+              "key_min": 1,
+              "level": 5,
+              "size_mb": 501490.1,
+              "union_span": 1048251410
+            }
+          ],
+          "source_unchanged": true
+        },
+        "path": "/home/smrc/virtual_compaction/vcomp/experiments/results/baseline_repeat_ycsb_c_260908_run1/provenance/source_load_results.json",
+        "sha256": "6d2c7a05cd2cf2fa5bcab0a2cc30169abc0c613d2d04a5c0c7cf3842dd448266",
+        "source_record": "repeat_01"
+      },
+      "data_cache_misses_per_get": 0.6324101627883769,
+      "file_reads_by_level": {
+        "1": {
+          "average_us": 206.4531,
+          "count": 5000242,
+          "count_per_get": 0.2778358611839191,
+          "stddev_us": 124.04,
+          "weighted_latency_us_per_get": 57.360074832589774
+        },
+        "2": {
+          "average_us": 140.9858,
+          "count": 15791191,
+          "count_per_get": 0.8774293625398036,
+          "stddev_us": 47.97,
+          "weighted_latency_us_per_get": 123.70508062116426
+        },
+        "3": {
+          "average_us": 143.3245,
+          "count": 16427087,
+          "count_per_get": 0.912762594968036,
+          "stddev_us": 38.13,
+          "weighted_latency_us_per_get": 130.8212425424963
+        },
+        "4": {
+          "average_us": 148.1332,
+          "count": 25604212,
+          "count_per_get": 1.4226848002467951,
+          "stddev_us": 48.43,
+          "weighted_latency_us_per_get": 210.74685205191852
+        },
+        "5": {
+          "average_us": 145.6307,
+          "count": 25120607,
+          "count_per_get": 1.3958135384862946,
+          "stddev_us": 50.17,
+          "weighted_latency_us_per_get": 203.27330267923602
+        }
+      },
+      "filter_cache_misses_per_get": 3.639899032666804,
+      "final_levels": {
+        "0": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "1": {
+          "files": 4,
+          "size_mib": 208
+        },
+        "2": {
+          "files": 46,
+          "size_mib": 2518
+        },
+        "3": {
+          "files": 442,
+          "size_mib": 25590
+        },
+        "4": {
+          "files": 4104,
+          "size_mib": 255976
+        },
+        "5": {
+          "files": 8901,
+          "size_mib": 501490
+        },
+        "6": {
+          "files": 0,
+          "size_mib": 0
+        }
+      },
+      "flush_write_bytes": 0,
+      "get_found_fraction": 0.6029365384705143,
+      "gets": 17997108,
+      "historical_reference": false,
+      "index_cache_misses_per_get": 0.6258923378133865,
+      "l1_domain_coverage_pct": 25.650492095947264,
+      "l1_file_read_average_us": 206.4531,
+      "l1_file_reads": 5000242,
+      "l1_file_reads_per_get": 0.2778358611839191,
+      "l1_weighted_latency_us_per_get": 57.360074832589774,
+      "label": "baseline_repeat_01",
+      "measured_seconds": 300.023,
+      "operation_mean_us": 800.1672,
+      "operation_p99_us": 1622.37,
+      "run_id": "baseline_repeat_ycsb_c_260908_run1",
+      "source_db_dir": "/work/vcomp/exp/baseline_coverage_260908_repeat1/full/repeat_01/baseline_1kb",
+      "source_evidence": {
+        "log": {
+          "path": "/home/smrc/virtual_compaction/vcomp/experiments/results/baseline_repeat_ycsb_c_260908_run1/evidence/full/workloadc/baseline_repeat_01/bench.log",
+          "sha256": "e7a75ec515be5986e30adcf7567f904ebcea0e89ac886883e8f4484ed025032b"
+        },
+        "metrics": {
+          "path": "/home/smrc/virtual_compaction/vcomp/experiments/results/baseline_repeat_ycsb_c_260908_run1/results.json",
+          "sha256": "39756f72e3dfffcba86444aae6264b3a4a657e37237d11ee158181aa6dc339ef"
+        }
+      },
+      "stall_micros": 0,
+      "system": "baseline_repeat_01",
+      "throughput_ops_sec": 59985.0,
+      "throughput_relative_to_original_baseline": 2.103777224423947
+    },
+    {
+      "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "coverage_evidence": {
+        "coverage": {
+          "binary": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/paper_alternatives_ycsb_cached0_260908_no_flush_run2/bin/db_bench",
+          "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+          "definition": "inclusive L1 range union / full integer query domain",
+          "diagnostic_only": true,
+          "domain_keys": 1048576000,
+          "l1_covered_integer_keys": 268996271,
+          "l1_global_coverage_pct": 25.65348348617554,
+          "l1_ranges": [
+            {
+              "gap": 0,
+              "idx": 0,
+              "key_hi": 364239101,
+              "key_lo": 301384849,
+              "width": 62854252
+            },
+            {
+              "gap": 113985092,
+              "idx": 1,
+              "key_hi": 518598489,
+              "key_lo": 478224194,
+              "width": 40374295
+            },
+            {
+              "gap": 1409,
+              "idx": 2,
+              "key_hi": 599197534,
+              "key_lo": 518599899,
+              "width": 80597635
+            },
+            {
+              "gap": 2150,
+              "idx": 3,
+              "key_hi": 651661261,
+              "key_lo": 599199685,
+              "width": 52461576
+            },
+            {
+              "gap": 364203206,
+              "idx": 4,
+              "key_hi": 1048572976,
+              "key_lo": 1015864468,
+              "width": 32708508
+            }
+          ],
+          "legacy_definition": "union span / level-local min-to-max span",
+          "levels": [
+            {
+              "cov_pct": 36.0,
+              "files": 5,
+              "files_span": 268996266,
+              "key_max": 1048572976,
+              "key_min": 301384849,
+              "level": 1,
+              "size_mb": 241.7,
+              "union_span": 268996266
+            },
+            {
+              "cov_pct": 84.26,
+              "files": 46,
+              "files_span": 883523456,
+              "key_max": 1048575795,
+              "key_min": 546,
+              "level": 2,
+              "size_mb": 2542.5,
+              "union_span": 883523456
+            },
+            {
+              "cov_pct": 87.76,
+              "files": 448,
+              "files_span": 920281602,
+              "key_max": 1048575857,
+              "key_min": 94,
+              "level": 3,
+              "size_mb": 25598.8,
+              "union_span": 920281602
+            },
+            {
+              "cov_pct": 96.52,
+              "files": 4163,
+              "files_span": 1012132599,
+              "key_max": 1048575999,
+              "key_min": 4,
+              "level": 4,
+              "size_mb": 255892.0,
+              "union_span": 1012132599
+            },
+            {
+              "cov_pct": 99.98,
+              "files": 8860,
+              "files_span": 1048362129,
+              "key_max": 1048575997,
+              "key_min": 1,
+              "level": 5,
+              "size_mb": 501569.7,
+              "union_span": 1048362129
+            }
+          ],
+          "source_unchanged": true
+        },
+        "path": "/home/smrc/virtual_compaction/vcomp/experiments/results/baseline_repeat_ycsb_c_260908_run1/provenance/source_load_results.json",
+        "sha256": "6d2c7a05cd2cf2fa5bcab0a2cc30169abc0c613d2d04a5c0c7cf3842dd448266",
+        "source_record": "repeat_02"
+      },
+      "data_cache_misses_per_get": 0.6288706375159012,
+      "file_reads_by_level": {
+        "1": {
+          "average_us": 113.5967,
+          "count": 5091341,
+          "count_per_get": 0.23426340550534125,
+          "stddev_us": 37.98,
+          "weighted_latency_us_per_get": 26.6115497961686
+        },
+        "2": {
+          "average_us": 112.584,
+          "count": 18955053,
+          "count_per_get": 0.872162219602701,
+          "stddev_us": 32.86,
+          "weighted_latency_us_per_get": 98.19151133175049
+        },
+        "3": {
+          "average_us": 104.5112,
+          "count": 20611855,
+          "count_per_get": 0.9483951960951537,
+          "stddev_us": 23.38,
+          "weighted_latency_us_per_get": 99.11792001813983
+        },
+        "4": {
+          "average_us": 110.5485,
+          "count": 30722612,
+          "count_per_get": 1.4136125851989216,
+          "stddev_us": 34.65,
+          "weighted_latency_us_per_get": 156.272750874863
+        },
+        "5": {
+          "average_us": 137.8612,
+          "count": 31220192,
+          "count_per_get": 1.4365072970855048,
+          "stddev_us": 49.81,
+          "weighted_latency_us_per_get": 198.0386197849642
+        }
+      },
+      "filter_cache_misses_per_get": 3.6665002714945283,
+      "final_levels": {
+        "0": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "1": {
+          "files": 5,
+          "size_mib": 242
+        },
+        "2": {
+          "files": 46,
+          "size_mib": 2542
+        },
+        "3": {
+          "files": 448,
+          "size_mib": 25599
+        },
+        "4": {
+          "files": 4163,
+          "size_mib": 255892
+        },
+        "5": {
+          "files": 8860,
+          "size_mib": 501570
+        },
+        "6": {
+          "files": 0,
+          "size_mib": 0
+        }
+      },
+      "flush_write_bytes": 0,
+      "get_found_fraction": 0.6030035885314416,
+      "gets": 21733403,
+      "historical_reference": false,
+      "index_cache_misses_per_get": 0.6232765296810628,
+      "l1_domain_coverage_pct": 25.65348348617554,
+      "l1_file_read_average_us": 113.5967,
+      "l1_file_reads": 5091341,
+      "l1_file_reads_per_get": 0.23426340550534125,
+      "l1_weighted_latency_us_per_get": 26.6115497961686,
+      "label": "baseline_repeat_02",
+      "measured_seconds": 300.019,
+      "operation_mean_us": 662.6055,
+      "operation_p99_us": 1271.25,
+      "run_id": "baseline_repeat_ycsb_c_260908_run1",
+      "source_db_dir": "/work/vcomp/exp/baseline_coverage_260908_repeat1/full/repeat_02/baseline_1kb",
+      "source_evidence": {
+        "log": {
+          "path": "/home/smrc/virtual_compaction/vcomp/experiments/results/baseline_repeat_ycsb_c_260908_run1/evidence/full/workloadc/baseline_repeat_02/bench.log",
+          "sha256": "8473c313e0ca8766f756b2a00f7d843a73e4fd45d8ab34b9e52f6d46225a230d"
+        },
+        "metrics": {
+          "path": "/home/smrc/virtual_compaction/vcomp/experiments/results/baseline_repeat_ycsb_c_260908_run1/results.json",
+          "sha256": "39756f72e3dfffcba86444aae6264b3a4a657e37237d11ee158181aa6dc339ef"
+        }
+      },
+      "stall_micros": 0,
+      "system": "baseline_repeat_02",
+      "throughput_ops_sec": 72440.0,
+      "throughput_relative_to_original_baseline": 2.5405955178339705
+    },
+    {
+      "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "coverage_evidence": {
+        "diagnostic_identity": {
+          "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/coverage_dumps/ycsb_l1_coverage_260908/f2load.source_identity.json",
+          "sha256": "e58f90b3cf37488f48e61ffe6808cb78ad39deea65431f8525ff7513fb93d689"
+        },
+        "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/coverage_dumps/ycsb_l1_coverage_260908/coverage.tsv",
+        "reference_identity": {
+          "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/paper_alternatives_ycsb_cached0_260908_no_flush_run2/full/workloadc/f2load/source_identity.json",
+          "sha256": "e58f90b3cf37488f48e61ffe6808cb78ad39deea65431f8525ff7513fb93d689"
+        },
+        "sha256": "e9a0e98cfef208cd86b895efcddf2b5e295fc0ce8023c7e0c3fbd53eba746bdb",
+        "source_record": {
+          "cov_pct": "69.98",
+          "domain_coverage_pct": "24.924220657348634",
+          "domain_keys": "1048576000",
+          "exact_inclusive_L1": "True",
+          "files": "3",
+          "files_span": "261349393",
+          "key_max": "824852841",
+          "key_min": "451408242",
+          "level": "1",
+          "size_mb": "252.4",
+          "system": "f2load",
+          "union_span": "261349393"
+        }
+      },
+      "data_cache_misses_per_get": 0.6691988498882098,
+      "file_reads_by_level": {
+        "1": {
+          "average_us": 129.5651,
+          "count": 5562775,
+          "count_per_get": 0.2384218943842151,
+          "stddev_us": 46.31,
+          "weighted_latency_us_per_get": 30.891156588080268
+        },
+        "2": {
+          "average_us": 106.3792,
+          "count": 17404948,
+          "count_per_get": 0.7459803198617158,
+          "stddev_us": 26.89,
+          "weighted_latency_us_per_get": 79.35678964263343
+        },
+        "3": {
+          "average_us": 106.4125,
+          "count": 21728911,
+          "count_per_get": 0.9313064295295082,
+          "stddev_us": 24.02,
+          "weighted_latency_us_per_get": 99.10264543230878
+        },
+        "4": {
+          "average_us": 113.761,
+          "count": 33789452,
+          "count_per_get": 1.4482241607910629,
+          "stddev_us": 37.35,
+          "weighted_latency_us_per_get": 164.7514287557521
+        },
+        "5": {
+          "average_us": 112.2305,
+          "count": 31068490,
+          "count_per_get": 1.3316030652789377,
+          "stddev_us": 35.58,
+          "weighted_latency_us_per_get": 149.44647781778784
+        }
+      },
+      "filter_cache_misses_per_get": 3.380261228901777,
+      "final_levels": {
+        "0": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "1": {
+          "files": 3,
+          "size_mib": 252
+        },
+        "2": {
+          "files": 46,
+          "size_mib": 2532
+        },
+        "3": {
+          "files": 424,
+          "size_mib": 25553
+        },
+        "4": {
+          "files": 4064,
+          "size_mib": 255980
+        },
+        "5": {
+          "files": 8375,
+          "size_mib": 498014
+        },
+        "6": {
+          "files": 0,
+          "size_mib": 0
+        }
+      },
+      "flush_write_bytes": 0,
+      "get_found_fraction": 0.6284987192287557,
+      "gets": 23331645,
+      "historical_reference": true,
+      "index_cache_misses_per_get": 0.6539492607572248,
+      "l1_domain_coverage_pct": 24.924220657348634,
+      "l1_file_read_average_us": 129.5651,
+      "l1_file_reads": 5562775,
+      "l1_file_reads_per_get": 0.2384218943842151,
+      "l1_weighted_latency_us_per_get": 30.891156588080268,
+      "label": "historical_f2load",
+      "measured_seconds": 300.021,
+      "operation_mean_us": 617.2202,
+      "operation_p99_us": 1248.19,
+      "run_id": "paper_alternatives_ycsb_cached0_260908_no_flush_run2",
+      "source_db_dir": "/work/vcomp/exp/paper_ch23_common_260907_f2_completion1/full/f2load_1kb",
+      "source_evidence": {
+        "log": {
+          "path": "/home/smrc/virtual_compaction/vcomp/experiments/results/baseline_repeat_ycsb_c_260908_run1/provenance/reference_ycsb_c/f2load/bench.log",
+          "sha256": "389077654201573f9b6db6775e476e3dd8454119d2bc4dacaaaaa6640aa3eb75"
+        },
+        "metrics": {
+          "path": "/home/smrc/virtual_compaction/vcomp/experiments/results/baseline_repeat_ycsb_c_260908_run1/provenance/reference_ycsb_c/f2load/validated.json",
+          "sha256": "0a905ca743a552fc193098ae8ecdb750a9109e38e42090a16b436bdf92627c04"
+        }
+      },
+      "stall_micros": 0,
+      "system": "f2load",
+      "throughput_ops_sec": 77766.0,
+      "throughput_relative_to_original_baseline": 2.727387507452741
+    }
+  ],
+  "run_id": "baseline_repeat_ycsb_c_260908_run1",
+  "schema_version": 1,
+  "warnings": []
+}

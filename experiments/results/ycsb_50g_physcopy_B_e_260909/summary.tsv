@@ -1,0 +1,7 @@
+phase	system	workload	status	duration_sec	threads	measured_seconds	process_elapsed_sec	operations	throughput_ops_sec	avg_latency_us	successful_gets	engine_keys_read	engine_keys_written	peak_rss_kb	log_dir
+pilot	baseline	workloadc	ok	3	48	3.024	4.42989706993103	3168880	1047738.0	45.599	1910010	3168880	0	10842000	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_50g_physcopy_B_e_260909/pilot/workloadc/baseline
+pilot	f2load	workloadc	ok	3	48	3.036	4.228508472442627	3361454	1107321.0	43.018	2248281	3361454	0	11146528	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_50g_physcopy_B_e_260909/pilot/workloadc/f2load
+pilot	baseline	workloada	ok	5	48	5.02	6.583632469177246	5202559	1036430.0	46.238	2097324	2600663	2601896	11416804	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_50g_physcopy_B_e_260909/pilot/workloada/baseline
+pilot	baseline	workloade	ok	5	48	5.027	7.083560943603516	364950	72591.0	659.355	0	0	18343	25389776	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_50g_physcopy_B_e_260909/pilot/workloade/baseline
+full	f2load	workloade	ok	300	48	300.02	304.4097316265106	31534594	105108.0	456.659	0	0	1578439	53370208	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_50g_physcopy_B_e_260909/full/workloade/f2load
+full	baseline	workloade	ok	300	48	300.027	304.70100235939026	27329935	91091.0	526.915	0	0	1368173	53365668	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_50g_physcopy_B_e_260909/full/workloade/baseline

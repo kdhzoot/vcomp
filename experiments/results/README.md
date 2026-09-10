@@ -5,6 +5,34 @@ evidence, so a fresh clone can inspect results without the original DBs or
 `experiments/artifacts/`. The full collection and its Git policy are described
 in [the experiment guide](../README.md).
 
+## Fidelity, repeatability and placement controls, 2026-09-09
+
+- [F2Load fidelity campaign](../docs/F2LOAD_FIDELITY_260909.md) is the record
+  for this group.
+- [fidelity_100gib_260909_ratio_run2](fidelity_100gib_260909_ratio_run2/README.md):
+  the 100 GiB sweep with the dedup-ratio estimate; unique100 within -1.0%.
+- [f2load_1tb_260909_ratio_bundle](f2load_1tb_260909_ratio_bundle/): the 1 TB
+  reload with that binary and its load record.
+- [ycsb_50g_f2load_baseline_260909](ycsb_50g_f2load_baseline_260909/) and
+  [ycsb_50g_f2ratio_260909](ycsb_50g_f2ratio_260909/): A-F at 50 GiB cache,
+  baseline and F2Load interleaved, before and after the estimator change.
+  Figure: [f2load_fidelity_260909.png](f2load_fidelity_260909.png).
+- [ycsb_50g_physcopy_A_e_260909](ycsb_50g_physcopy_A_e_260909/) and
+  [ycsb_50g_physcopy_B_e_260909](ycsb_50g_physcopy_B_e_260909/): workload E on
+  byte-copied DBs against the originals; source bundles in
+  `physcopy_260909_bundle_A/` and `physcopy_260909_bundle_B/`.
+- Baseline repeats: [PAPER_BASELINE_COVERAGE_REPEATS.md](../docs/PAPER_BASELINE_COVERAGE_REPEATS.md)
+  for the loads, `baseline_repeat_ycsb_all_260908_night_n01..n04/` for A-F on
+  each, `baseline_repeat_ycsb_all_260909_n01_all/`, `_n02_a/`, `_n03_a/`,
+  `_n04_af/` for the 58%-fill re-measurements. Figures:
+  [ycsb_across_loads_260909.png](ycsb_across_loads_260909.png),
+  [baseline_repeat_variance_260909.png](baseline_repeat_variance_260909.png),
+  `ycsb_timeseries_*.png`.
+- [baseline_repeat_ycsb_c_260908_run1](baseline_repeat_ycsb_c_260908_run1/):
+  [BASELINE_REPEAT_YCSB_C.md](../docs/BASELINE_REPEAT_YCSB_C.md).
+- [paper_alternatives_ycsb_cached0_260908_no_flush_run2](paper_alternatives_ycsb_cached0_260908_no_flush_run2/):
+  [PAPER_ALTERNATIVES_YCSB_CACHED0.md](../docs/PAPER_ALTERNATIVES_YCSB_CACHED0.md).
+
 ## Fidelity qualification, 2026-09-08
 
 - [Physical SST-size model](sst_size_model_260908_smoke1/README.md): four serial

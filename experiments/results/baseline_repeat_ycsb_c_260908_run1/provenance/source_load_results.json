@@ -1,0 +1,470 @@
+[
+  {
+    "coverage": {
+      "binary": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/paper_alternatives_ycsb_cached0_260908_no_flush_run2/bin/db_bench",
+      "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+      "definition": "inclusive L1 range union / full integer query domain",
+      "diagnostic_only": true,
+      "domain_keys": 1048576,
+      "l1_covered_integer_keys": 226743,
+      "l1_global_coverage_pct": 21.623897552490234,
+      "l1_ranges": [
+        {
+          "gap": 0,
+          "idx": 0,
+          "key_hi": 924515,
+          "key_lo": 821833,
+          "width": 102682
+        },
+        {
+          "gap": 0,
+          "idx": 1,
+          "key_hi": 1027162,
+          "key_lo": 924516,
+          "width": 102646
+        },
+        {
+          "gap": 0,
+          "idx": 2,
+          "key_hi": 1048575,
+          "key_lo": 1027163,
+          "width": 21412
+        }
+      ],
+      "legacy_definition": "union span / level-local min-to-max span",
+      "levels": [
+        {
+          "cov_pct": 100.0,
+          "files": 3,
+          "files_span": 226740,
+          "key_max": 1048575,
+          "key_min": 821833,
+          "level": 1,
+          "size_mb": 142.3,
+          "union_span": 226740
+        },
+        {
+          "cov_pct": 100.0,
+          "files": 8,
+          "files_span": 821820,
+          "key_max": 821831,
+          "key_min": 0,
+          "level": 2,
+          "size_mb": 515.1,
+          "union_span": 821820
+        }
+      ],
+      "source_unchanged": true
+    },
+    "loading": {
+      "benchmark": {
+        "avg_latency_us": 1.024,
+        "measured_seconds": 1.074,
+        "operations": 1048576,
+        "throughput_ops_sec": 976131.0
+      },
+      "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+      "case_id": "baseline_1kb",
+      "compaction_sst_write_bytes": 1654386688,
+      "dataset_gib": 1,
+      "db_dir": "/work/vcomp/exp/baseline_coverage_260908_repeat1/pilot/qualification/baseline_1kb",
+      "elapsed_sec": 11.234649181365967,
+      "final_sst_bytes": 689393206,
+      "final_sst_count": 11,
+      "flush_sst_write_bytes": 1058515495,
+      "key_bytes": 24,
+      "levels": {
+        "0": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "1": {
+          "files": 3,
+          "size_mib": 142
+        },
+        "2": {
+          "files": 8,
+          "size_mib": 515
+        },
+        "3": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "4": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "5": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "6": {
+          "files": 0,
+          "size_mib": 0
+        }
+      },
+      "loading_min": 0.18724415302276612,
+      "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_repeat1/pilot/qualification/baseline_1kb",
+      "logical_input_bytes": 1073741824,
+      "num_keys": 1048576,
+      "peak_rss_kb": 274776,
+      "phases": [
+        {
+          "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+          "elapsed_sec": 11.234649181365967,
+          "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_repeat1/pilot/qualification/baseline_1kb/phase1",
+          "peak_rss_kb": 274776
+        }
+      ],
+      "repetitions": 1,
+      "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_repeat1/pilot/qualification/baseline_1kb/db_identity.json",
+      "status": "validated",
+      "system": "baseline",
+      "total_sst_write_bytes": 2712902183,
+      "validation": "1000_of_1000_found_after_readonly_reopen",
+      "value_bytes": 1000,
+      "waf": 2.526587045751512
+    },
+    "name": "qualification",
+    "phase": "pilot"
+  },
+  {
+    "coverage": {
+      "binary": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/paper_alternatives_ycsb_cached0_260908_no_flush_run2/bin/db_bench",
+      "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+      "definition": "inclusive L1 range union / full integer query domain",
+      "diagnostic_only": true,
+      "domain_keys": 1048576000,
+      "l1_covered_integer_keys": 268964904,
+      "l1_global_coverage_pct": 25.650492095947264,
+      "l1_ranges": [
+        {
+          "gap": 0,
+          "idx": 0,
+          "key_hi": 90590289,
+          "key_lo": 546,
+          "width": 90589743
+        },
+        {
+          "gap": 557842723,
+          "idx": 1,
+          "key_hi": 737325745,
+          "key_lo": 648433013,
+          "width": 88892732
+        },
+        {
+          "gap": 4858,
+          "idx": 2,
+          "key_hi": 803568179,
+          "key_lo": 737330604,
+          "width": 66237575
+        },
+        {
+          "gap": 221759946,
+          "idx": 3,
+          "key_hi": 1048572976,
+          "key_lo": 1025328126,
+          "width": 23244850
+        }
+      ],
+      "legacy_definition": "union span / level-local min-to-max span",
+      "levels": [
+        {
+          "cov_pct": 25.65,
+          "files": 4,
+          "files_span": 268964900,
+          "key_max": 1048572976,
+          "key_min": 546,
+          "level": 1,
+          "size_mb": 208.3,
+          "union_span": 268964900
+        },
+        {
+          "cov_pct": 85.71,
+          "files": 46,
+          "files_span": 898752661,
+          "key_max": 1048575795,
+          "key_min": 94,
+          "level": 2,
+          "size_mb": 2518.0,
+          "union_span": 898752661
+        },
+        {
+          "cov_pct": 85.56,
+          "files": 442,
+          "files_span": 897200197,
+          "key_max": 1048575857,
+          "key_min": 94,
+          "level": 3,
+          "size_mb": 25589.8,
+          "union_span": 897200197
+        },
+        {
+          "cov_pct": 96.76,
+          "files": 4104,
+          "files_span": 1014570537,
+          "key_max": 1048575988,
+          "key_min": 4,
+          "level": 4,
+          "size_mb": 255976.1,
+          "union_span": 1014570537
+        },
+        {
+          "cov_pct": 99.97,
+          "files": 8901,
+          "files_span": 1048251410,
+          "key_max": 1048575999,
+          "key_min": 1,
+          "level": 5,
+          "size_mb": 501490.1,
+          "union_span": 1048251410
+        }
+      ],
+      "source_unchanged": true
+    },
+    "loading": {
+      "benchmark": {
+        "avg_latency_us": 3.309,
+        "measured_seconds": 3469.487,
+        "operations": 1048576000,
+        "throughput_ops_sec": 302227.0
+      },
+      "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+      "case_id": "baseline_1kb",
+      "compaction_sst_write_bytes": 12529594671104,
+      "dataset_gib": 1000,
+      "db_dir": "/work/vcomp/exp/baseline_coverage_260908_repeat1/full/repeat_01/baseline_1kb",
+      "elapsed_sec": 3495.7059745788574,
+      "final_sst_bytes": 823952554783,
+      "final_sst_count": 13497,
+      "flush_sst_write_bytes": 1091460325611,
+      "key_bytes": 24,
+      "levels": {
+        "0": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "1": {
+          "files": 4,
+          "size_mib": 208
+        },
+        "2": {
+          "files": 46,
+          "size_mib": 2518
+        },
+        "3": {
+          "files": 442,
+          "size_mib": 25590
+        },
+        "4": {
+          "files": 4104,
+          "size_mib": 255976
+        },
+        "5": {
+          "files": 8901,
+          "size_mib": 501490
+        },
+        "6": {
+          "files": 0,
+          "size_mib": 0
+        }
+      },
+      "loading_min": 58.261766242980954,
+      "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_repeat1/full/repeat_01/baseline_1kb",
+      "logical_input_bytes": 1073741824000,
+      "num_keys": 1048576000,
+      "peak_rss_kb": 6221612,
+      "phases": [
+        {
+          "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+          "elapsed_sec": 3495.7059745788574,
+          "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_repeat1/full/repeat_01/baseline_1kb/phase1",
+          "peak_rss_kb": 6221612
+        }
+      ],
+      "repetitions": 1,
+      "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_repeat1/full/repeat_01/baseline_1kb/db_identity.json",
+      "status": "validated",
+      "system": "baseline",
+      "total_sst_write_bytes": 13621054996715,
+      "validation": "10000_of_10000_found_after_readonly_reopen",
+      "value_bytes": 1000,
+      "waf": 12.685596008519642
+    },
+    "name": "repeat_01",
+    "phase": "full"
+  },
+  {
+    "coverage": {
+      "binary": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/paper_alternatives_ycsb_cached0_260908_no_flush_run2/bin/db_bench",
+      "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+      "definition": "inclusive L1 range union / full integer query domain",
+      "diagnostic_only": true,
+      "domain_keys": 1048576000,
+      "l1_covered_integer_keys": 268996271,
+      "l1_global_coverage_pct": 25.65348348617554,
+      "l1_ranges": [
+        {
+          "gap": 0,
+          "idx": 0,
+          "key_hi": 364239101,
+          "key_lo": 301384849,
+          "width": 62854252
+        },
+        {
+          "gap": 113985092,
+          "idx": 1,
+          "key_hi": 518598489,
+          "key_lo": 478224194,
+          "width": 40374295
+        },
+        {
+          "gap": 1409,
+          "idx": 2,
+          "key_hi": 599197534,
+          "key_lo": 518599899,
+          "width": 80597635
+        },
+        {
+          "gap": 2150,
+          "idx": 3,
+          "key_hi": 651661261,
+          "key_lo": 599199685,
+          "width": 52461576
+        },
+        {
+          "gap": 364203206,
+          "idx": 4,
+          "key_hi": 1048572976,
+          "key_lo": 1015864468,
+          "width": 32708508
+        }
+      ],
+      "legacy_definition": "union span / level-local min-to-max span",
+      "levels": [
+        {
+          "cov_pct": 36.0,
+          "files": 5,
+          "files_span": 268996266,
+          "key_max": 1048572976,
+          "key_min": 301384849,
+          "level": 1,
+          "size_mb": 241.7,
+          "union_span": 268996266
+        },
+        {
+          "cov_pct": 84.26,
+          "files": 46,
+          "files_span": 883523456,
+          "key_max": 1048575795,
+          "key_min": 546,
+          "level": 2,
+          "size_mb": 2542.5,
+          "union_span": 883523456
+        },
+        {
+          "cov_pct": 87.76,
+          "files": 448,
+          "files_span": 920281602,
+          "key_max": 1048575857,
+          "key_min": 94,
+          "level": 3,
+          "size_mb": 25598.8,
+          "union_span": 920281602
+        },
+        {
+          "cov_pct": 96.52,
+          "files": 4163,
+          "files_span": 1012132599,
+          "key_max": 1048575999,
+          "key_min": 4,
+          "level": 4,
+          "size_mb": 255892.0,
+          "union_span": 1012132599
+        },
+        {
+          "cov_pct": 99.98,
+          "files": 8860,
+          "files_span": 1048362129,
+          "key_max": 1048575997,
+          "key_min": 1,
+          "level": 5,
+          "size_mb": 501569.7,
+          "union_span": 1048362129
+        }
+      ],
+      "source_unchanged": true
+    },
+    "loading": {
+      "benchmark": {
+        "avg_latency_us": 3.346,
+        "measured_seconds": 3508.921,
+        "operations": 1048576000,
+        "throughput_ops_sec": 298831.0
+      },
+      "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+      "case_id": "baseline_1kb",
+      "compaction_sst_write_bytes": 12550979981312,
+      "dataset_gib": 1000,
+      "db_dir": "/work/vcomp/exp/baseline_coverage_260908_repeat1/full/repeat_02/baseline_1kb",
+      "elapsed_sec": 3528.0399081707,
+      "final_sst_bytes": 824017818100,
+      "final_sst_count": 13522,
+      "flush_sst_write_bytes": 1091460631615,
+      "key_bytes": 24,
+      "levels": {
+        "0": {
+          "files": 0,
+          "size_mib": 0
+        },
+        "1": {
+          "files": 5,
+          "size_mib": 242
+        },
+        "2": {
+          "files": 46,
+          "size_mib": 2542
+        },
+        "3": {
+          "files": 448,
+          "size_mib": 25599
+        },
+        "4": {
+          "files": 4163,
+          "size_mib": 255892
+        },
+        "5": {
+          "files": 8860,
+          "size_mib": 501570
+        },
+        "6": {
+          "files": 0,
+          "size_mib": 0
+        }
+      },
+      "loading_min": 58.80066513617833,
+      "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_repeat1/full/repeat_02/baseline_1kb",
+      "logical_input_bytes": 1073741824000,
+      "num_keys": 1048576000,
+      "peak_rss_kb": 6193540,
+      "phases": [
+        {
+          "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+          "elapsed_sec": 3528.0399081707,
+          "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_repeat1/full/repeat_02/baseline_1kb/phase1",
+          "peak_rss_kb": 6193540
+        }
+      ],
+      "repetitions": 1,
+      "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_repeat1/full/repeat_02/baseline_1kb/db_identity.json",
+      "status": "validated",
+      "system": "baseline",
+      "total_sst_write_bytes": 13642440612927,
+      "validation": "10000_of_10000_found_after_readonly_reopen",
+      "value_bytes": 1000,
+      "waf": 12.70551291566994
+    },
+    "name": "repeat_02",
+    "phase": "full"
+  }
+]

@@ -1,0 +1,71 @@
+{
+  "baseline_repeat_01": {
+    "benchmark": {
+      "avg_latency_us": 3.706,
+      "measured_seconds": 3886.176,
+      "operations": 1048576000,
+      "throughput_ops_sec": 269822.0
+    },
+    "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+    "case_id": "baseline_1kb",
+    "compaction_sst_write_bytes": 12774606422016,
+    "dataset_gib": 1000,
+    "db_dir": "/work/vcomp/exp/baseline_coverage_260908_night_n04/full/repeat_01/baseline_1kb",
+    "elapsed_sec": 3908.062294960022,
+    "final_sst_bytes": 823856475799,
+    "final_sst_count": 13509,
+    "flush_sst_write_bytes": 1091460571310,
+    "key_bytes": 24,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 4,
+        "size_mib": 220
+      },
+      "2": {
+        "files": 47,
+        "size_mib": 2504
+      },
+      "3": {
+        "files": 437,
+        "size_mib": 25565
+      },
+      "4": {
+        "files": 4129,
+        "size_mib": 255990
+      },
+      "5": {
+        "files": 8892,
+        "size_mib": 501413
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "loading_min": 65.13437158266703,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_night_n04/full/repeat_01/baseline_1kb",
+    "logical_input_bytes": 1073741824000,
+    "num_keys": 1048576000,
+    "peak_rss_kb": 6409360,
+    "phases": [
+      {
+        "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+        "elapsed_sec": 3908.062294960022,
+        "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_night_n04/full/repeat_01/baseline_1kb/phase1",
+        "peak_rss_kb": 6409360
+      }
+    ],
+    "repetitions": 1,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/baseline_coverage_260908_night_n04/full/repeat_01/baseline_1kb/db_identity.json",
+    "status": "validated",
+    "system": "baseline",
+    "total_sst_write_bytes": 13866066993326,
+    "validation": "10000_of_10000_found_after_readonly_reopen",
+    "value_bytes": 1000,
+    "waf": 12.913781212015078
+  }
+}

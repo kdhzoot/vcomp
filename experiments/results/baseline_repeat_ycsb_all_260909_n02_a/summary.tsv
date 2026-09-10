@@ -1,0 +1,3 @@
+phase	system	workload	status	duration_sec	threads	measured_seconds	process_elapsed_sec	operations	throughput_ops_sec	avg_latency_us	successful_gets	engine_keys_read	engine_keys_written	peak_rss_kb	log_dir
+pilot	baseline_repeat_01	workloada	ok	3	48	3.029	4.428058862686157	3445621	1137538.0	41.994	1377370	1722474	1723147	9310872	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/baseline_repeat_ycsb_all_260909_n02_a/pilot/workloada/baseline_repeat_01
+full	baseline_repeat_01	workloada	ok	300	48	300.027	305.07777976989746	210442050	701410.0	68.43	91315096	105217249	105224801	54038012	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/baseline_repeat_ycsb_all_260909_n02_a/full/workloada/baseline_repeat_01

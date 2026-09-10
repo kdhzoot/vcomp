@@ -2506,3 +2506,65 @@ Next candidates:
   file-location entries and refcounts for every file.
 - Re-run 1 TB after the clean baseline experiment finishes to get clean
   end-to-end and Phase 2 numbers.
+
+## 2026-09-08 ~ 10 — Physical SST size model, dedup-ratio estimate, fidelity and placement controls
+
+Two engine changes, then a measurement round that compares an F2Load-built
+1 TB state against naturally accumulated baselines on every dimension we can
+read from RocksDB. Campaign records: [SST size model](experiments/docs/SST_SIZE_MODEL.md),
+[F2Load fidelity](experiments/docs/F2LOAD_FIDELITY_260909.md),
+[baseline coverage repeats](experiments/docs/PAPER_BASELINE_COVERAGE_REPEATS.md).
+
+- **Physical SST size model.** `--vcomp_sst_size_model=calibrated` (default)
+  writes bounded calibration SSTs to an in-memory filesystem with the
+  materialization options and fits `ceil(n * slope) + fixed_bytes`. The model
+  now sizes L0 descriptors and compaction outputs, sets split capacity through
+  `MaxEntries`, and feeds the grandparent byte threshold; logical bytes still
+  batch memtable input. On the 1 TB reload the per-level actual/predicted byte
+  error is -0.0045% (L1) to -0.058% (L4/L5).
+- **Dedup ratio.** `EstimateKMVUnionEntries` scales `naive_entries` by
+  `sampled_unique / sampled_entries` (Part 1 above). 100 GiB sweep, 12/12
+  validated: unique100 -3.592% / -3.769% -> -1.001% / -1.032%; uniform50
+  +17.837% / +16.893% -> +3.099% / +3.453%; zipf99_50 +5.857% / +4.802% ->
+  -4.236% / -5.156% (1024 B / 91 B). On unique100 the descriptor count is now
+  within 0.022% / 0.026%; the remaining 1% is `dropped_live_entries` from
+  ranges that run out of integer keys under global-unique materialization.
+- **1 TB structure.** 13,247 SSTs / 766.74 GiB against the clean load's
+  13,483 / 767.20 GiB (-1.75% files, -0.06% bytes); L5 8,702 vs 8,867.
+  Full files are 0.665% *smaller* in vcomp (63.963 vs 64.391 MiB): clean's
+  hard cut fires on flushed bytes and overshoots the cap by the index/filter
+  tail, while `MaxEntries` lands under it. The count gap is 331 fewer <60 MiB
+  files (L5 -240, L4 -98). At L5 every under-filled file is a job's trailing
+  remainder in both engines (L6 is empty, so all three grandparent cuts are
+  dead there). Verified mechanism: vcomp's L4->L5 jobs re-absorb their own
+  short remainders far more often (533 vs 63 under-filled born-L5 files
+  destroyed; net born-L5 cohort -189 of the -331). The three grandparent cuts
+  exist verbatim in vcomp's physical compaction path; only the virtual
+  splitter lacks the `max_compaction_bytes` and `target/8` cuts, which are
+  live only at L1-L4.
+- **YCSB fidelity (50 GiB cache, A-F, arms interleaved).** Throughput ratios
+  A .982, B .988, C 1.042, D 1.058, E 1.151, F .989. Found fraction A/B/D/F
+  0.999-1.001; filter checks/op C .991, D .957; data cache miss/op 0.999-1.024
+  on every workload. Index-cache-miss ratios are noise (absolute <= 5e-4/op).
+  Under uniform reads (C) the found fraction is 0.669 vs 0.603 with the same
+  distinct count: the model-generated key set differs in position, not size.
+- **Baseline repeatability.** Four identical 1 TB loads agree on A within
+  3.0% once A and F are measured at 58% disk fill (A and F respond to fill;
+  n04's A went 321K -> 722K ops/s from 94% to 58%). L1 coverage ranges
+  9.82-88.78% across identical loads and is unusable as a fidelity metric.
+- **The scan (E) gap is physical placement, not structure.** Per operation
+  both arms do 0.95 seeks, 47.97 nexts, 9.00 data-block misses and 4.46
+  preads, yet a pread takes p50 88 vs 75 us (p99 169 vs 110) on the baseline
+  DB. QD1 raw reads over the same files are identical (73.8 vs 73.7 us); the
+  difference appears only under concurrency (per-NVMe r_await 90 vs 70 us at
+  99.8% util). Control: `cp -a` of each DB as one sequential stream, caches
+  dropped before every campaign. Baseline-copy E = 105,427 ops/s against
+  F2Load-original 104,301 (0.989); F2Load-copy 105,108 against
+  baseline-original 91,091 (1.154, unchanged from 1.151 three hours earlier).
+  The conventional load's write amplification leaves its final SSTs as GC
+  survivors on flash; F2Load's single write does not.
+- **Open.** The materializer writes `format_version=6` SSTs (phase 1 runs
+  with `--format_version=6`) while the baselines are 7; filter and index
+  layout are otherwise identical (kBinarySearch, full 10-bit bloom, whole-key).
+  The A-F placement campaign aborted on the runner's swap-activity guard after
+  three cells and its B counterpart did not run.

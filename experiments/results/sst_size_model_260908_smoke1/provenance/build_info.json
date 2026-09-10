@@ -1,0 +1,45 @@
+{
+  "qualification_date_utc": "2026-09-08",
+  "base_revision": "9445c66c5bc04640f3b9c50dc22252eb6dc72645",
+  "source_state": "base revision plus archived implementation.patch and new source files; uncommitted candidate",
+  "source_patch_sha256": "04c7fb5130e80e366b2865ac98d609e0a739e0ae7d831a525d2da7f05fcd8a96",
+  "private_build_directory": "/tmp/vcomp-sst-size-build.naPtjb",
+  "archived_binary": "experiments/artifacts/builds/sst_size_model_260908/db_bench",
+  "binary_sha256": "9f269e3d94177e95f5eb7c86e526d1ab33f936bfb4f51bf47124d1def10b6a06",
+  "original_workspace_binary_sha256": "c5964e54fb0afc4779fd17b82f7366bdd8d19be9bd2acae33dd26c77e55019cd",
+  "original_workspace_binary_preserved": true,
+  "build_command": "DEBUG_LEVEL=0 OPTIMIZE_LEVEL=-O3 ./make.sh > build.log 2>&1",
+  "build_exit_code": 0,
+  "compiler": "GCC/G++ 11.4.0 (Ubuntu 11.4.0-2ubuntu1~20.04)",
+  "build_flags": [
+    "-std=c++20",
+    "-O3",
+    "-DNDEBUG",
+    "-fno-rtti"
+  ],
+  "host": "dskbi001",
+  "kernel": "Linux 5.4.0-216-generic x86_64",
+  "build_not_parallel_with_baseline_campaign": true,
+  "validation": {
+    "arithmetic": "PASS; final standalone C++17 rebuild and run also passed",
+    "calibration": "PASS 517 checks, 34 held-out SST cases",
+    "virtual_sst": "PASS 11 tests",
+    "smoke": "PASS four serial 1 GiB cases",
+    "trillion_byte_qualification": "not run",
+    "calibration_build_command": "g++-11 -std=c++20 -O2 -fno-rtti -Wall -Wextra -Werror -I. -Iinclude -DSNAPPY -DZLIB tools/virtual_sst_size_calibration_test.cc librocksdb.a -lpthread -lrt -ldl -lsnappy -lgflags -lz -ltbb -o virtual_sst_size_calibration_test",
+    "arithmetic_build_command": "g++-11 -std=c++17 -O2 -Wall -Wextra -Werror -I. -Iinclude tools/virtual_sst_size_model_test.cc -o /tmp/vcomp-sst-size-build.naPtjb/virtual_sst_size_model_test",
+    "split_link_command": "g++-11 -fno-rtti db/virtual_compaction/virtual_sst_test.o test_util/testharness.o third-party/gtest-1.8.1/fused-src/gtest/gtest-all.o librocksdb.a -lpthread -lrt -ldl -lsnappy -lgflags -lz -ltbb -o virtual_sst_test",
+    "split_build_note": "The generic make virtual_sst_test target built the test objects but also pulled in unrelated db_test_util objects requiring debug-only TEST_ symbols absent in the Release library. Linking only the focused test, testharness and gtest objects against the same Release library succeeded; all 11 tests passed.",
+    "smoke_command": "python3 -u experiments/scripts/load/smoke_sst_size_model.py --binary /tmp/vcomp-sst-size-build.naPtjb/db_bench --run-id sst_size_model_260908_smoke1"
+  },
+  "extra_source_sha256": {
+    "db/virtual_compaction/sst_size_model.h": "ffba82f2773ddb92e8d50bf9fd224c08b7dc714cdda9f06acccb7707d682b060",
+    "db/virtual_compaction/sst_size_calibration.h": "6ec4f3581f8cd06049b7ee4261f88db7805d3b390198070c1773e9b8ba2d98c1",
+    "db/virtual_compaction/sst_size_calibration.cc": "89b7cef91cb5610adeef2809e57093a6dcb1c28f0b320fd1f5355d701c1c9835",
+    "tools/virtual_sst_size_model_test.cc": "2ff6158f64aff7fd6e4ddfc5d598692b82a521626210e4f3564bb524b56f855e",
+    "tools/virtual_sst_size_calibration_test.cc": "532d1a931f8cc5feaa109b499d328f7e2a9b387918e97657c17b46432d179034",
+    "experiments/scripts/load/smoke_sst_size_model.py": "a188d1d7d2d124b0d1a4c120adfd1acc9fae1b2b0bada70727e877272827bb82",
+    "experiments/lib/ch23_common.py": "46c4918cac2dfb49fa712d69991cfa847fde7586f0d99d4cba10c51dc60ba118",
+    "make.sh": "78cc01b2cd04c27bf0e6d8464dbb95d8e183c5f660c07a52903559d42011b47e"
+  }
+}

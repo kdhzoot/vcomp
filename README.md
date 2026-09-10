@@ -65,6 +65,14 @@ for O(N) batch radix sort.
 
 Current implementation:
 
+- `fillvirtual` defaults to `--vcomp_sst_size_model=calibrated`. Bounded
+  in-memory SST probes with the materialization options fit physical bytes
+  (including table overhead/compression) for virtual registration and splitting.
+  Logical KV bytes still determine input batch capacity. Use `logical` to
+  reproduce the old size estimate, not the old binary/merge implementation.
+  The model is approximate; per-level predicted/actual byte diagnostics and
+  final compaction draining remain required. See
+  [SST size model and validation](experiments/docs/SST_SIZE_MODEL.md).
 - Phase 1 queues generated L0 VSSTs in an in-memory pending window.
 - `RefillVirtualL0Window()` registers only a bounded visible L0 window through
   batched VersionEdits. The refill condition is:

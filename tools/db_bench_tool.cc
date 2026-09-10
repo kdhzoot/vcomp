@@ -99,6 +99,7 @@
 #include "util/xxhash.h"
 
 #include "db/virtual_compaction/plr_model.h"
+#include "db/virtual_compaction/sst_size_calibration.h"
 #include "db/virtual_compaction/virtual_sst.h"
 #include "rocksdb/sst_file_reader.h"
 #include "rocksdb/sst_file_writer.h"
@@ -917,6 +918,11 @@ DEFINE_string(vcomp_accuracy_trace_dir, "",
 DEFINE_string(vcomp_fidelity_report_dir, "",
               "If not empty, write fillvirtual descriptor/materialization "
               "cardinality diagnostics (fidelity.json and files.tsv) here.");
+
+DEFINE_string(vcomp_sst_size_model, "calibrated",
+              "fillvirtual SST bytes: calibrated uses completed in-memory SST "
+              "probes with the materialization options; logical reproduces "
+              "the old entries*(key+value) estimate. Input batching is unchanged.");
 
 DEFINE_bool(vcomp_global_unique_keys, false,
             "fillvirtual only: assert that every input key is distinct and "
@@ -5471,10 +5477,36 @@ class Benchmark {
 
   void WriteRandom(ThreadState* thread) { DoWrite(thread, RANDOM); }
 
+  Options VirtualMaterializationOptions() const {
+    Options opts = open_options_;
+    if (FLAGS_compression_type_e != kNoCompression) {
+      opts.compression = FLAGS_compression_type_e;
+    }
+    // Share this normalization between calibration and the actual SST writer.
+    const auto* table = opts.table_factory
+                            ? opts.table_factory->GetOptions<BlockBasedTableOptions>()
+                            : nullptr;
+    if (table && table->enable_index_compression != FLAGS_enable_index_compression) {
+      BlockBasedTableOptions adjusted = *table;
+      adjusted.enable_index_compression = FLAGS_enable_index_compression;
+      opts.table_factory.reset(NewBlockBasedTableFactory(adjusted));
+    }
+    return opts;
+  }
+
   // FillVirtual: generate random keys, flush as virtual L0 SSTs (PLR models),
   // let RocksDB's background threads handle compaction (via PLR merge),
   // then materialize to real SST files.
   void FillVirtual(ThreadState* thread) {
+    // Registry configuration/calibration is published once by one coordinator.
+    // Use phase1_shards/materialize_workers for parallelism within this load.
+    if (FLAGS_threads != 1) {
+      fprintf(stderr, "fillvirtual requires --threads=1; use "
+                      "--vcomp_phase1_shards and --vcomp_materialize_workers "
+                      "for parallel loading\n");
+      db_bench_exit(1);
+      return;
+    }
     auto* db_impl = static_cast<DBImpl*>(db_.db);
     auto* versions = db_impl->GetVersionSet();
     auto* registry = db_impl->GetVirtualSSTRegistry();
@@ -5486,7 +5518,8 @@ class Benchmark {
       return;
     }
 
-    // Configure registry parameters.
+    // Logical KV bytes still determine input batch capacity. Encoded SST bytes
+    // are calibrated separately before any virtual file is registered.
     uint64_t avg_entry_size =
         static_cast<uint64_t>(key_size_) + static_cast<uint64_t>(value_size);
     uint64_t target_sst_size = FLAGS_target_file_size_base > 0
@@ -5670,6 +5703,58 @@ class Benchmark {
               unique_reservation->key_domain(),
               unique_reservation->bytes() >> 20);
     }
+    // Calibration is mandatory loading work, included in Phase 1 and Total.
+    auto phase1_start = FLAGS_env->NowMicros();
+    const Options materialization_options = VirtualMaterializationOptions();
+    if (FLAGS_vcomp_sst_size_model == "calibrated") {
+      const uint64_t calibration_start = FLAGS_env->NowMicros();
+      SSTSizeModel calibrated;
+      std::vector<SSTSizeCalibrationSample> samples;
+      Status calibration = CalibrateSSTSizeModel(
+          materialization_options, avg_entry_size, key_domain_for_keys,
+          target_sst_size,
+          [&](SstFileWriter* writer, uint64_t entries, uint64_t stride) {
+            // Independent generators preserve the load's key and value RNGs.
+            RandomGenerator values;
+            std::string key_buffer(key_size_, '0');
+            Slice key(key_buffer);
+            for (uint64_t i = 0; i < entries; ++i) {
+              GenerateKeyFromInt(i * stride, key_domain_for_keys, &key);
+              Status s = writer->Put(key, values.Generate());
+              if (!s.ok()) return s;
+            }
+            return Status::OK();
+          }, &calibrated, &samples);
+      if (!calibration.ok()) {
+        fprintf(stderr, "SST size calibration failed: %s\n",
+                calibration.ToString().c_str());
+        if (load_trace_fp != nullptr) fclose(load_trace_fp);
+        db_bench_exit(1);
+        return;
+      }
+      registry->SetSSTSizeModel(calibrated);
+      for (const auto& sample : samples) {
+        fprintf(stderr,
+                "  SST size calibration: entries=%" PRIu64 " stride=%" PRIu64
+                " actual_bytes=%" PRIu64 " estimated_bytes=%" PRIu64 "\n",
+                sample.entries, sample.stride, sample.file_bytes,
+                calibrated.Estimate(sample.entries));
+      }
+      fprintf(stderr, "SST size calibration: %.6f sec (memory-only)\n",
+              (FLAGS_env->NowMicros() - calibration_start) / 1e6);
+    } else if (FLAGS_vcomp_sst_size_model != "logical") {
+      fprintf(stderr, "Invalid --vcomp_sst_size_model: %s\n",
+              FLAGS_vcomp_sst_size_model.c_str());
+      if (load_trace_fp != nullptr) fclose(load_trace_fp);
+      db_bench_exit(1);
+      return;
+    }
+    const SSTSizeModel& sst_size_model = registry->GetSSTSizeModel();
+    fprintf(stderr,
+            "SST size model: %s logical_entry_bytes=%" PRIu64
+            " target_bytes=%" PRIu64 " entries_at_target=%" PRIu64 "\n",
+            FLAGS_vcomp_sst_size_model.c_str(), avg_entry_size, target_sst_size,
+            sst_size_model.MaxEntries(target_sst_size));
     const uint64_t memtable_capacity =
         static_cast<uint64_t>(FLAGS_memtable_flush_size) * 1024 * 1024 /
         avg_entry_size;
@@ -5915,7 +6000,6 @@ class Benchmark {
             use_load_trace && FLAGS_vcomp_phase1_shards > 1
                 ? " (trace replay uses serial path)"
                 : "");
-    auto phase1_start = FLAGS_env->NowMicros();
 
     uint64_t sort_us = 0, flush_us = 0, plr_fit_us = 0;
     uint64_t keygen_measured_us = 0;
@@ -6173,8 +6257,7 @@ class Benchmark {
           vsst.key_max = keys.back();
           vsst.num_entries = keys.size();
           vsst.level = 0;
-          vsst.size_bytes =
-              VirtualSST::EstimateSize(keys.size(), avg_entry_size);
+          vsst.size_bytes = sst_size_model.Estimate(keys.size());
 
           Status cdf_status = CertifyVirtualSST(&vsst);
           if (!cdf_status.ok()) {
@@ -6289,8 +6372,7 @@ class Benchmark {
       vsst.key_max = memtable_buf.back();
       vsst.num_entries = memtable_buf.size();
       vsst.level = 0;
-      vsst.size_bytes =
-          VirtualSST::EstimateSize(memtable_buf.size(), avg_entry_size);
+      vsst.size_bytes = sst_size_model.Estimate(memtable_buf.size());
 
       Status cdf_status = CertifyVirtualSST(&vsst);
       if (!cdf_status.ok()) {
@@ -7144,26 +7226,7 @@ class Benchmark {
             std::string sst_path = TableFileName(
                 cfd->ioptions().cf_paths, res.file_number, 0u);
 
-            Options sst_opts = open_options_;
-            if (FLAGS_compression_type_e != kNoCompression) {
-              sst_opts.compression = FLAGS_compression_type_e;
-            }
-            // Force the materialized SST's index-block compression to match the
-            // configured flag (= baseline's setting). Without this the SST
-            // format can silently diverge from a normal RocksDB load.
-            {
-              auto* bbto_ptr =
-                  sst_opts.table_factory
-                      ? sst_opts.table_factory
-                            ->GetOptions<BlockBasedTableOptions>()
-                      : nullptr;
-              if (bbto_ptr && bbto_ptr->enable_index_compression !=
-                                  FLAGS_enable_index_compression) {
-                BlockBasedTableOptions bbto = *bbto_ptr;
-                bbto.enable_index_compression = FLAGS_enable_index_compression;
-                sst_opts.table_factory.reset(NewBlockBasedTableFactory(bbto));
-              }
-            }
+            Options sst_opts = materialization_options;
             EnvOptions env_opts;
             if (FLAGS_use_direct_io_for_flush_and_compaction) {
               env_opts.use_direct_writes = true;
@@ -7397,6 +7460,31 @@ class Benchmark {
         }
       }
       write_fidelity_report("after_materialization", true, materialize_ok);
+      // Keep descriptor/count errors separate from the physical-byte estimate.
+      // In particular global-unique mode can legitimately emit fewer entries.
+      struct LevelSizeAudit {
+        uint64_t descriptor_bytes = 0;
+        uint64_t predicted_written_bytes = 0;
+        uint64_t actual_bytes = 0;
+      };
+      std::map<int, LevelSizeAudit> size_audit;
+      for (size_t i = 0; i < tasks.size(); ++i) {
+        auto& audit = size_audit[tasks[i].level];
+        audit.descriptor_bytes += tasks[i].vsst->size_bytes;
+        audit.predicted_written_bytes += sst_size_model.Estimate(results[i].keys_written);
+        audit.actual_bytes += results[i].file_size;
+      }
+      for (const auto& item : size_audit) {
+        const auto& audit = item.second;
+        fprintf(stderr,
+                "  SST size audit: level=%d descriptor_bytes=%" PRIu64
+                " predicted_written_bytes=%" PRIu64 " actual_bytes=%" PRIu64
+                " actual_over_predicted_pct=%.6f\n",
+                item.first, audit.descriptor_bytes, audit.predicted_written_bytes,
+                audit.actual_bytes, audit.predicted_written_bytes == 0 ? 0.0 :
+                100.0 * (static_cast<double>(audit.actual_bytes) /
+                         audit.predicted_written_bytes - 1.0));
+      }
       if (!materialize_ok) {
         fprintf(stderr, "Error: materialization failed; VersionEdit skipped\n");
         {

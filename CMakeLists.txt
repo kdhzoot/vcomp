@@ -718,6 +718,7 @@ set(SOURCES
         db/virtual_compaction/discrete_cdf.cc
         db/virtual_compaction/discrete_merge.cc
         db/virtual_compaction/virtual_sst.cc
+        db/virtual_compaction/sst_size_calibration.cc
         db/compaction/sst_partitioner.cc
         db/compaction/subcompaction_state.cc
         db/convenience.cc

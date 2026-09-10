@@ -687,11 +687,19 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
                                       int target_level,
                                       const std::vector<uint64_t>& grandparent_boundaries,
                                       const std::vector<const VirtualSST*>* kmv_inputs,
-                                      size_t kmv_samples) {
+                                      size_t kmv_samples,
+                                      const SSTSizeModel* size_model) {
   std::vector<VirtualSST> result;
 
   if (total_entries == 0 || plr.Empty()) return result;
   if (avg_entry_size == 0) return result;
+  // Legacy/offline callers retain logical-byte behavior. The runtime registry
+  // supplies the physical model consistently for both sizes and split limits.
+  const SSTSizeModel logical_model = size_model == nullptr
+                                        ? SSTSizeModel::Logical(avg_entry_size)
+                                        : SSTSizeModel();
+  const SSTSizeModel& bytes = size_model == nullptr ? logical_model : *size_model;
+  if (!bytes.Valid()) return result;
   const DiscreteCDF* discrete = plr.DiscreteModel();
   if (discrete != nullptr && discrete->Count() != total_entries) return result;
 
@@ -711,7 +719,7 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
                                       : discrete->Select(total_entries - 1);
     vsst.num_entries = total_entries;
     vsst.level = 0;
-    vsst.size_bytes = VirtualSST::EstimateSize(total_entries, avg_entry_size);
+    vsst.size_bytes = bytes.Estimate(total_entries);
     if (kmv_inputs != nullptr) {
       vsst.kmv_sketch = MergeKMVSketchesForRange(*kmv_inputs, vsst.key_min,
                                                  vsst.key_max, kmv_samples);
@@ -734,7 +742,7 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
       ? (target_sst_size > UINT64_MAX / 2 ? UINT64_MAX : 2 * target_sst_size)
       : target_sst_size;
 
-  uint64_t keys_per_sst = max_sst_size / avg_entry_size;
+  uint64_t keys_per_sst = bytes.MaxEntries(max_sst_size);
   if (keys_per_sst == 0) keys_per_sst = 1;
 
   // Build split positions.
@@ -796,8 +804,7 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
       } else if (next_gp < total_entries) {
         // GP boundary: count it, then evaluate dynamic threshold in BYTES.
         switched++;
-        unsigned __int128 cur_bytes =
-            static_cast<unsigned __int128>(next_gp - last_split) * avg_entry_size;
+        uint64_t cur_bytes = bytes.Estimate(next_gp - last_split);
         uint64_t pct = 50 + std::min<uint64_t>(switched * 5, 40);
         unsigned __int128 threshold_bytes =
             (static_cast<unsigned __int128>(target_sst_size) * pct) / 100;
@@ -867,7 +874,7 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
     vsst.key_max = key_end;
     vsst.num_entries = n_entries;
     vsst.level = target_level;
-    vsst.size_bytes = VirtualSST::EstimateSize(n_entries, avg_entry_size);
+    vsst.size_bytes = bytes.Estimate(n_entries);
     if (kmv_inputs != nullptr) {
       vsst.kmv_sketch = MergeKMVSketchesForRange(*kmv_inputs, key_start,
                                                  key_end, kmv_samples);
@@ -952,7 +959,8 @@ std::vector<VirtualSST> VirtualCompact(
     const std::vector<const VirtualSST*>& inputs,
     uint64_t target_sst_size,
     uint64_t avg_entry_size,
-    int output_level) {
+    int output_level,
+    const SSTSizeModel* size_model) {
   if (inputs.empty()) return {};
 
   // Gather info for N-way merge.
@@ -1000,7 +1008,8 @@ std::vector<VirtualSST> VirtualCompact(
   return SplitIntoSSTs(merged, total_entries, target_sst_size, avg_entry_size,
                        global_min, global_max, output_level,
                        /*grandparent_boundaries=*/{},
-                       VirtualSSTKMVEnabled() ? &input_ptrs : nullptr);
+                       VirtualSSTKMVEnabled() ? &input_ptrs : nullptr,
+                       /*kmv_samples=*/0, size_model);
 }
 
 }  // namespace ROCKSDB_NAMESPACE

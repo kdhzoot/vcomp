@@ -1,0 +1,33 @@
+[==========] Running 11 tests from 2 test cases.
+[----------] Global test environment set-up.
+[----------] 8 tests from VirtualSSTTest
+[ RUN      ] VirtualSSTTest.KMVRuntimeSwitch
+[       OK ] VirtualSSTTest.KMVRuntimeSwitch (0 ms)
+[ RUN      ] VirtualSSTTest.PhysicalSizeModelControlsSplitAndRegistration
+[       OK ] VirtualSSTTest.PhysicalSizeModelControlsSplitAndRegistration (0 ms)
+[ RUN      ] VirtualSSTTest.PhysicalBytesDriveGrandparentThreshold
+[       OK ] VirtualSSTTest.PhysicalBytesDriveGrandparentThreshold (0 ms)
+[ RUN      ] VirtualSSTTest.CompleteKMVSketchDeduplicatesExactUnion
+[       OK ] VirtualSSTTest.CompleteKMVSketchDeduplicatesExactUnion (0 ms)
+[ RUN      ] VirtualSSTTest.IncompleteKMVEstimateIsBoundedByInputEntries
+[       OK ] VirtualSSTTest.IncompleteKMVEstimateIsBoundedByInputEntries (0 ms)
+[ RUN      ] VirtualSSTTest.SplitPreservesEntryCountAndOrderedRanges
+[       OK ] VirtualSSTTest.SplitPreservesEntryCountAndOrderedRanges (0 ms)
+[ RUN      ] VirtualSSTTest.L0SplitProducesSingleOutput
+[       OK ] VirtualSSTTest.L0SplitProducesSingleOutput (0 ms)
+[ RUN      ] VirtualSSTTest.MaterializedKeysAreStrictlyIncreasingAndBounded
+[       OK ] VirtualSSTTest.MaterializedKeysAreStrictlyIncreasingAndBounded (0 ms)
+[----------] 8 tests from VirtualSSTTest (0 ms total)
+
+[----------] 3 tests from VirtualSSTRegistryTest
+[ RUN      ] VirtualSSTRegistryTest.HandleRemainsValidAfterRemoval
+[       OK ] VirtualSSTRegistryTest.HandleRemainsValidAfterRemoval (0 ms)
+[ RUN      ] VirtualSSTRegistryTest.SnapshotIsStableAcrossReplacement
+[       OK ] VirtualSSTRegistryTest.SnapshotIsStableAcrossReplacement (0 ms)
+[ RUN      ] VirtualSSTRegistryTest.BatchLookupPreservesInputOrderAndMissingEntries
+[       OK ] VirtualSSTRegistryTest.BatchLookupPreservesInputOrderAndMissingEntries (0 ms)
+[----------] 3 tests from VirtualSSTRegistryTest (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 11 tests from 2 test cases ran. (0 ms total)
+[  PASSED  ] 11 tests.

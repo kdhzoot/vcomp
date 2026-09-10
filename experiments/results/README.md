@@ -7,6 +7,9 @@ in [the experiment guide](../README.md).
 
 ## Fidelity qualification, 2026-09-08
 
+- [Physical SST-size model](sst_size_model_260908_smoke1/README.md): four serial
+  1 GiB logical/calibrated controls plus arithmetic, builder and split tests.
+  Qualifies size estimation only; 1TB residual-compaction behavior is untested.
 - [Corrected 100 GiB rerun](fidelity_100gib_20260908_seqfix_run3/README.md):
   six configurations × baseline/F2Load, with the sequence correction. All
   baseline distinct counts match; corrected F2Load iterators pass strict

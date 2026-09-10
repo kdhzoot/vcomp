@@ -5979,7 +5979,8 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   std::vector<VirtualSST> output_vssts = SplitIntoSSTs(
       merged, total_entries, target_sst_size, avg_entry_size, global_min,
       global_max, output_level, gp_boundaries,
-      use_kmv ? &input_vsst_ptrs : nullptr);
+      use_kmv ? &input_vsst_ptrs : nullptr, /*kmv_samples=*/0,
+      &virtual_sst_registry_->GetSSTSizeModel());
   if (merged.DiscreteModel() != nullptr) {
     unsigned __int128 output_count = 0;
     bool valid = !output_vssts.empty();

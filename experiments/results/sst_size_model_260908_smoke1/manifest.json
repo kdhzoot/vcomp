@@ -1,0 +1,10 @@
+{
+  "binary": "/tmp/vcomp-sst-size-build.naPtjb/db_bench",
+  "binary_sha256": "9f269e3d94177e95f5eb7c86e526d1ab33f936bfb4f51bf47124d1def10b6a06",
+  "dataset_gib": 1,
+  "qualification_only": true,
+  "reader": "/home/smrc/virtual_compaction/rocksdb-f455-release/db_bench",
+  "reader_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+  "runner_sha256": "a188d1d7d2d124b0d1a4c120adfd1acc9fae1b2b0bada70727e877272827bb82",
+  "seed": 12345678
+}

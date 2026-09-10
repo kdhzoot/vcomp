@@ -80,6 +80,51 @@ TEST(VirtualSSTTest, KMVRuntimeSwitch) {
   }
 }
 
+TEST(VirtualSSTTest, PhysicalSizeModelControlsSplitAndRegistration) {
+  auto input = MakeVirtualSST(KeyRange(0, 100));
+  ASSERT_OK(CertifyVirtualSST(&input));
+  SSTSizeModel physical;
+  ASSERT_TRUE(physical.AddCalibration(10, 1100, 20, 2100));
+  const auto output = SplitIntoSSTs(input.plr_model, 100, 1000, 50, 0, 99, 1,
+                                  {}, nullptr, 0, &physical);
+  ASSERT_EQ(output.size(), 12U);  // Nine entries per full file, not twenty.
+  uint64_t count = 0;
+  for (const auto& file : output) {
+    count += file.num_entries;
+    ASSERT_EQ(file.size_bytes, physical.Estimate(file.num_entries));
+    ASSERT_LE(file.size_bytes, 1000U);
+    ASSERT_EQ(MaterializeKeys(file).size(), file.num_entries);
+  }
+  ASSERT_EQ(count, 100U);
+
+  const auto l0 = SplitIntoSSTs(input.plr_model, 100, 1000, 50, 0, 99, 0,
+                              {}, nullptr, 0, &physical);
+  ASSERT_EQ(l0.size(), 1U);
+  ASSERT_EQ(l0[0].size_bytes, 10100U);
+
+  VirtualSSTRegistry registry;
+  registry.SetAvgEntrySize(50);
+  registry.SetSSTSizeModel(physical);
+  ASSERT_EQ(registry.GetAvgEntrySize(), 50U);  // Logical input batching unchanged.
+  ASSERT_EQ(registry.GetSSTSizeModel().Estimate(10), 1100U);
+}
+
+TEST(VirtualSSTTest, PhysicalBytesDriveGrandparentThreshold) {
+  auto input = MakeVirtualSST(KeyRange(0, 100));
+  ASSERT_OK(CertifyVirtualSST(&input));
+  SSTSizeModel physical;
+  ASSERT_TRUE(physical.AddCalibration(10, 1100, 20, 2100));
+  const auto output = SplitIntoSSTs(input.plr_model, 100, 1000, 50, 0, 99, 1,
+                                  {5}, nullptr, 0, &physical);
+  ASSERT_FALSE(output.empty());
+  // 100 + 5*100 = 600 bytes crosses the first GP threshold (550 bytes).
+  ASSERT_EQ(output.front().num_entries, 5U);
+  ASSERT_EQ(output.front().size_bytes, 600U);
+  const auto legacy = SplitIntoSSTs(input.plr_model, 100, 1000, 50, 0, 99, 1,
+                                  {5});
+  ASSERT_EQ(legacy.front().num_entries, 40U);  // 250 logical bytes did not cross.
+}
+
 TEST(VirtualSSTTest, CompleteKMVSketchDeduplicatesExactUnion) {
   auto left = MakeVirtualSST(KeyRange(0, 32));
   auto right = MakeVirtualSST(KeyRange(16, 48));

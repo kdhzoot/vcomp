@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "db/virtual_compaction/plr_model.h"
+#include "db/virtual_compaction/sst_size_model.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -122,7 +123,8 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
                                       int target_level,
                                       const std::vector<uint64_t>& grandparent_boundaries = {},
                                       const std::vector<const VirtualSST*>* kmv_inputs = nullptr,
-                                      size_t kmv_samples = 0);
+                                      size_t kmv_samples = 0,
+                                      const SSTSizeModel* size_model = nullptr);
 
 // Materialize keys from a VirtualSST using PLR Inverse.
 // Returns sorted keys reconstructed from the model.
@@ -133,6 +135,7 @@ std::vector<VirtualSST> VirtualCompact(
     const std::vector<const VirtualSST*>& inputs,
     uint64_t target_sst_size,
     uint64_t avg_entry_size,
-    int output_level);
+    int output_level,
+    const SSTSizeModel* size_model = nullptr);
 
 }  // namespace ROCKSDB_NAMESPACE

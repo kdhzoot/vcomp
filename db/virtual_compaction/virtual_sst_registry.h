@@ -30,8 +30,16 @@ class VirtualSSTRegistry {
   void SetKeySize(uint32_t ks) { key_size_ = ks; }
   uint32_t GetKeySize() const { return key_size_; }
 
-  void SetAvgEntrySize(uint64_t s) { avg_entry_size_ = s; }
+  // Logical KV bytes determine input batching, independently of SST encoding.
+  void SetAvgEntrySize(uint64_t s) {
+    avg_entry_size_ = s;
+    size_model_ = SSTSizeModel::Logical(s);
+  }
   uint64_t GetAvgEntrySize() const { return avg_entry_size_; }
+
+  // Configure once, before registering any files/background compactions.
+  void SetSSTSizeModel(const SSTSizeModel& model) { size_model_ = model; }
+  const SSTSizeModel& GetSSTSizeModel() const { return size_model_; }
 
   void SetTargetSSTSize(uint64_t s) { target_sst_size_ = s; }
   uint64_t GetTargetSSTSize() const { return target_sst_size_; }
@@ -120,6 +128,7 @@ class VirtualSSTRegistry {
   std::unordered_set<uint64_t> retired_;
   uint32_t key_size_ = 16;
   uint64_t avg_entry_size_ = 1048;
+  SSTSizeModel size_model_ = SSTSizeModel::Logical(1048);
   uint64_t target_sst_size_ = 64ULL * 1024 * 1024;
 };
 

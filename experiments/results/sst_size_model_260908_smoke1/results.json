@@ -1,0 +1,324 @@
+[
+  {
+    "actual_over_predicted_pct": 1.589317767056353,
+    "benchmark": {
+      "avg_latency_us": 98964.0,
+      "measured_seconds": 0.099,
+      "operations": 1,
+      "throughput_ops_sec": 10.0
+    },
+    "calibration_samples": [],
+    "case": "logical_1024b",
+    "compaction_write_bytes": 0,
+    "db_dir": "/work/vcomp/exp/sst_size_model_260908_smoke1/logical_1024b",
+    "flush_batches": 16,
+    "input_keys": 1048576,
+    "kv_bytes": 1024,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 163
+      },
+      "2": {
+        "files": 8,
+        "size_mib": 520
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "materialized_bytes": 716347663,
+    "model": "logical",
+    "pending_bytes": 0,
+    "per_level_audits": [
+      [
+        "1",
+        "168269824",
+        "168269824",
+        "170950233",
+        "1.592923"
+      ],
+      [
+        "2",
+        "536870912",
+        "536870912",
+        "545397430",
+        "1.588188"
+      ]
+    ],
+    "predicted_written_bytes": 705140736,
+    "status": "validated",
+    "successful_reopen_gets": 671
+  },
+  {
+    "actual_over_predicted_pct": 0.008541874338385824,
+    "benchmark": {
+      "avg_latency_us": 143847.0,
+      "measured_seconds": 0.144,
+      "operations": 1,
+      "throughput_ops_sec": 6.0
+    },
+    "calibration_samples": [
+      [
+        "4096",
+        "1",
+        "4262532",
+        "4262532"
+      ],
+      [
+        "8192",
+        "1",
+        "8522356",
+        "8522356"
+      ],
+      [
+        "4096",
+        "16",
+        "4261268",
+        "4262532"
+      ],
+      [
+        "8192",
+        "16",
+        "8521875",
+        "8522356"
+      ]
+    ],
+    "case": "calibrated_1024b",
+    "compaction_write_bytes": 0,
+    "db_dir": "/work/vcomp/exp/sst_size_model_260908_smoke1/calibrated_1024b",
+    "flush_batches": 16,
+    "input_keys": 1048576,
+    "kv_bytes": 1024,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 171
+      },
+      "2": {
+        "files": 8,
+        "size_mib": 512
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "materialized_bytes": 716355965,
+    "model": "calibrated",
+    "pending_bytes": 0,
+    "per_level_audits": [
+      [
+        "1",
+        "179428044",
+        "179428044",
+        "179444953",
+        "0.009424"
+      ],
+      [
+        "2",
+        "536866736",
+        "536866736",
+        "536911012",
+        "0.008247"
+      ]
+    ],
+    "predicted_written_bytes": 716294780,
+    "status": "validated",
+    "successful_reopen_gets": 671
+  },
+  {
+    "actual_over_predicted_pct": 7.431757945843165,
+    "benchmark": {
+      "avg_latency_us": 286581.0,
+      "measured_seconds": 0.287,
+      "operations": 1,
+      "throughput_ops_sec": 3.0
+    },
+    "calibration_samples": [],
+    "case": "logical_91b",
+    "compaction_write_bytes": 0,
+    "db_dir": "/work/vcomp/exp/sst_size_model_260908_smoke1/logical_91b",
+    "flush_batches": 16,
+    "input_keys": 11799360,
+    "kv_bytes": 91,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 149
+      },
+      "2": {
+        "files": 8,
+        "size_mib": 550
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "materialized_bytes": 733214318,
+    "model": "logical",
+    "pending_bytes": 0,
+    "per_level_audits": [
+      [
+        "1",
+        "145622204",
+        "145622204",
+        "156526535",
+        "7.488096"
+      ],
+      [
+        "2",
+        "536870880",
+        "536870880",
+        "576687783",
+        "7.416477"
+      ]
+    ],
+    "predicted_written_bytes": 682493084,
+    "status": "validated",
+    "successful_reopen_gets": 640
+  },
+  {
+    "actual_over_predicted_pct": -0.013601461858292474,
+    "benchmark": {
+      "avg_latency_us": 357010.0,
+      "measured_seconds": 0.357,
+      "operations": 1,
+      "throughput_ops_sec": 2.0
+    },
+    "calibration_samples": [
+      [
+        "46091",
+        "1",
+        "4513041",
+        "4513041"
+      ],
+      [
+        "92182",
+        "1",
+        "9009010",
+        "9013400"
+      ],
+      [
+        "46091",
+        "16",
+        "4507044",
+        "4513041"
+      ],
+      [
+        "92182",
+        "16",
+        "9013400",
+        "9013400"
+      ]
+    ],
+    "case": "calibrated_91b",
+    "compaction_write_bytes": 0,
+    "db_dir": "/work/vcomp/exp/sst_size_model_260908_smoke1/calibrated_91b",
+    "flush_batches": 16,
+    "input_keys": 11799360,
+    "kv_bytes": 91,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 187
+      },
+      "2": {
+        "files": 8,
+        "size_mib": 512
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "materialized_bytes": 733181737,
+    "model": "calibrated",
+    "pending_bytes": 0,
+    "per_level_audits": [
+      [
+        "1",
+        "196410786",
+        "196410786",
+        "196311715",
+        "-0.050441"
+      ],
+      [
+        "2",
+        "536870688",
+        "536870688",
+        "536870022",
+        "-0.000124"
+      ]
+    ],
+    "predicted_written_bytes": 733281474,
+    "status": "validated",
+    "successful_reopen_gets": 640
+  }
+]

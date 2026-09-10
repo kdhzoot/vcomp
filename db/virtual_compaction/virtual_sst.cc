@@ -63,12 +63,6 @@ uint64_t MaxHash() {
   return std::numeric_limits<uint64_t>::max();
 }
 
-long double ThetaFraction(uint64_t theta_hash) {
-  const long double domain =
-      static_cast<long double>(std::numeric_limits<uint64_t>::max()) + 1.0L;
-  return (static_cast<long double>(theta_hash) + 1.0L) / domain;
-}
-
 KMVSketch BuildKMVSketchFromSortedKeyRange(
     std::vector<uint64_t>::const_iterator begin,
     std::vector<uint64_t>::const_iterator end,
@@ -247,25 +241,34 @@ uint64_t EstimateKMVUnionEntries(const std::vector<const VirtualSST*>& inputs,
       }
     }
   }
+  // Estimate the dedup ratio from the sample, not the absolute cardinality.
+  // Both counts are drawn under the same theta, so theta cancels:
+  //   sampled_unique / sampled_entries -> unique_entries / naive_entries.
+  // Rescaling a sample count by 1/theta instead would carry the sampling
+  // error of an absolute estimate (about 1/sqrt(k)) into every merge, and
+  // clamping that estimate to naive_entries from above but not from below
+  // turned the error into a systematic undercount. The ratio form has neither
+  // problem: it is at most one by construction, so no clamping is needed, and
+  // its variance vanishes as the true ratio approaches one. Disjoint inputs
+  // therefore return naive_entries exactly, with no sampling noise at all.
+  const uint64_t sampled_entries = merged_samples.size();
   SortUniqueByKey(&merged_samples);
+  const uint64_t sampled_unique = merged_samples.size();
 
+  if (sampled_entries == 0) return naive_entries;
+  if (sampled_unique >= sampled_entries) return naive_entries;
   if (complete) {
-    return std::min<uint64_t>(naive_entries, merged_samples.size());
+    // Every key was sampled, so the ratio is the exact dedup ratio.
+    return std::max<uint64_t>(1, static_cast<uint64_t>(std::llround(
+        static_cast<long double>(naive_entries) *
+        static_cast<long double>(sampled_unique) /
+        static_cast<long double>(sampled_entries))));
   }
-  if (merged_samples.empty()) {
-    return naive_entries;
-  }
-
-  const long double theta = ThetaFraction(theta_hash);
-  if (theta <= 0.0L) return naive_entries;
-
   const long double estimate =
-      static_cast<long double>(merged_samples.size()) / theta;
-  if (estimate >= static_cast<long double>(naive_entries)) {
-    return naive_entries;
-  }
-  return std::max<uint64_t>(
-      1, static_cast<uint64_t>(std::ceil(estimate)));
+      static_cast<long double>(naive_entries) *
+      static_cast<long double>(sampled_unique) /
+      static_cast<long double>(sampled_entries);
+  return std::max<uint64_t>(1, static_cast<uint64_t>(std::ceil(estimate)));
 }
 
 uint64_t EstimateKMVUnionEntriesForRange(
@@ -342,21 +345,23 @@ uint64_t EstimateKMVUnionEntriesForRange(
       }
     }
   }
+  // Same change as EstimateKMVUnionEntries: the samples answer "what fraction
+  // of these entries are duplicates", and the proportional density term
+  // answers "how many entries fall in this range". Multiplying the two keeps
+  // theta out of the result.
+  const uint64_t sampled_entries = merged_samples.size();
   SortUniqueByKey(&merged_samples);
+  const uint64_t sampled_unique = merged_samples.size();
 
-  if (complete) {
-    return std::min<uint64_t>(input_entries_cap, merged_samples.size());
+  const long double in_range = std::min<long double>(
+      density_estimate, static_cast<long double>(input_entries_cap));
+  if (sampled_entries == 0 || sampled_unique >= sampled_entries) {
+    return std::min<uint64_t>(input_entries_cap,
+                              static_cast<uint64_t>(std::ceil(in_range)));
   }
-  if (merged_samples.empty()) {
-    return std::min<uint64_t>(
-        input_entries_cap,
-        static_cast<uint64_t>(std::ceil(density_estimate)));
-  }
-
-  const long double theta = ThetaFraction(theta_hash);
-  if (theta <= 0.0L) return 0;
-  const long double estimate =
-      static_cast<long double>(merged_samples.size()) / theta;
+  const long double estimate = in_range *
+                               static_cast<long double>(sampled_unique) /
+                               static_cast<long double>(sampled_entries);
   return std::min<uint64_t>(
       input_entries_cap,
       std::max<uint64_t>(1, static_cast<uint64_t>(std::ceil(estimate))));

@@ -1,0 +1,8 @@
+{
+  "db_root": "/work/vcomp/exp/fidelity_100gib_260909_ratio_run2",
+  "finished": "2026-09-09T11:55:10.141799+00:00",
+  "md0_array_state": "clean",
+  "probe_directory": "/work/vcomp/exp/fidelity_100gib_260909_ratio_run2/storage_probe_full_1788954910128254348",
+  "started": "2026-09-09T11:55:10.126596+00:00",
+  "status": "passed"
+}

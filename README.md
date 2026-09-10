@@ -302,6 +302,16 @@ reconciles integer masses by capped weighted allocation. Sample witnesses
 are preserved without retaining or enumerating all original keys. Initially
 fitted flush descriptors are certified through the same builder.
 
+`EstimateKMVUnionEntries` reports the merged distinct count as a dedup ratio
+applied to the summed input counts. The K-minimum samples of every input are
+merged under one theta, and `sampled_unique / sampled_entries` scales
+`naive_entries`; theta cancels, so the estimate carries no absolute-cardinality
+sampling error, is at most one by construction, and returns `naive_entries`
+exactly for disjoint inputs. `EstimateKMVUnionEntriesForRange` multiplies the
+same ratio by the proportional in-range density. The earlier form rescaled the
+sample count by `1/theta` and clamped it to `naive_entries` from above only,
+which turned sampling noise into a systematic undercount on every merge.
+
 The model's exact reconstructed count and the sketch's estimated original
 count are distinct. Output range buckets store both values; a reconstructed
 count is not reused as an upper bound on original-key cardinality. Legacy

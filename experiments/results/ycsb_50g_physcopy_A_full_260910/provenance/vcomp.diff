@@ -1,0 +1,73 @@
+diff --git a/experiments/lib/ch23_common.py b/experiments/lib/ch23_common.py
+index bac1f90b26..a5a7bc17ab 100644
+--- a/experiments/lib/ch23_common.py
++++ b/experiments/lib/ch23_common.py
+@@ -181,6 +181,29 @@ def vm_swap(text):
+     return {k: int(v) for k, v in re.findall(r'^(pswpin|pswpout) (\d+)$', text, re.M)}
+ 
+ 
++# A benchmark starved of memory pages OUT, so any pswpout during a run
++# invalidates it. Pages read back IN can instead come from residual swap that
++# an unrelated process touches: a 300 s cell whose RSS is a twentieth of RAM is
++# unaffected by a handful of those, and discarding an hour of measurement over
++# 64 pages costs more than it protects. Swap-in below this bound is recorded in
++# the cell's evidence and its row rather than being fatal.
++SWAP_IN_TOLERANCE_PAGES = 1024
++
++
++def swap_delta(before_text, after_text):
++    before, after = vm_swap(before_text), vm_swap(after_text)
++    return {k: after.get(k, 0) - before.get(k, 0) for k in ('pswpin', 'pswpout')}
++
++
++def require_no_swap_pressure(raw):
++    delta = swap_delta((Path(raw) / 'vmstat.start').read_text(),
++                       (Path(raw) / 'vmstat.end').read_text())
++    save_json(Path(raw) / 'swap_delta.json', delta)
++    require(delta['pswpout'] == 0 and delta['pswpin'] <= SWAP_IN_TOLERANCE_PAGES,
++            'swap pressure during benchmark: {}'.format(delta))
++    return delta
++
++
+ def active_benchmarks():
+     pids = []
+     for name in ('db_bench', 'titandb_bench'):
+@@ -265,12 +288,12 @@ def measure(cmd, log, events, min_free=2*TIB):
+     text = (log / 'bench.out').read_text(errors='replace')
+     require(not re.search(r'WARNING: (Optimization is disabled|Assertions are enabled)|Corruption:|Segmentation fault|Assertion .*failed|FATAL|Out of memory|Get returned an error:', text),
+             'invalid benchmark output: ' + str(log))
+-    require(vm_swap((raw/'vmstat.start').read_text()) == vm_swap((raw/'vmstat.end').read_text()),
+-            'new swap activity during benchmark')
++    swap = require_no_swap_pressure(raw)
+     rss = re.search(r'Maximum resident set size \(kbytes\):\s*(\d+)', (raw/'time.out').read_text())
+     require(rss is not None, 'missing peak RSS')
+     result = dict(elapsed_sec=elapsed, peak_rss_kb=int(rss.group(1)),
+-                  log_dir=str(log), binary_sha256=HASHES[cmd[0]])
++                  log_dir=str(log), binary_sha256=HASHES[cmd[0]],
++                  swap_pages_in=swap['pswpin'])
+     events('END', '{} ({:.2f}s)'.format(log, elapsed))
+     return result, text
+ 
+diff --git a/experiments/scripts/read/run_ycsb_alternatives.py b/experiments/scripts/read/run_ycsb_alternatives.py
+index 054705f36b..02bf11b610 100644
+--- a/experiments/scripts/read/run_ycsb_alternatives.py
++++ b/experiments/scripts/read/run_ycsb_alternatives.py
+@@ -22,7 +22,7 @@ sys.path.insert(0, str(EXPERIMENTS / 'lib'))
+ sys.path.insert(0, str(EXPERIMENTS / 'analysis'))
+ from ch23_common import (BASE, GIB, TIB, SYSTEMS, active_benchmarks as all_benchmarks, command,
+                          db_identity, levels, require, save_json, sha,
+-                         snapshot, stage_db, vm_swap)
++                         require_no_swap_pressure, snapshot, stage_db)
+ from parse_ycsb_alternatives import parse_metrics
+ 
+ SOURCE_BUNDLE = EXPERIMENTS / 'results/paper_ch23_common_260907_f2_completion1'
+@@ -363,8 +363,7 @@ class Campaign:
+                       process_elapsed_sec=time.time() - started,
+                       started_epoch=started, ended_epoch=time.time())
+         save_json(raw / 'execution.json', result)
+-        require(vm_swap((raw / 'vmstat.start').read_text()) ==
+-                vm_swap((raw / 'vmstat.end').read_text()), 'new swap activity')
++        result['swap_pages_in'] = require_no_swap_pressure(raw)['pswpin']
+         rss = re.search(r'Maximum resident set size \(kbytes\):\s*(\d+)',
+                         (raw / 'time.out').read_text())
+         result['peak_rss_kb'] = int(rss.group(1)) if rss else None

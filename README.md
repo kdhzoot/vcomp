@@ -2552,19 +2552,27 @@ read from RocksDB. Campaign records: [SST size model](experiments/docs/SST_SIZE_
   3.0% once A and F are measured at 58% disk fill (A and F respond to fill;
   n04's A went 321K -> 722K ops/s from 94% to 58%). L1 coverage ranges
   9.82-88.78% across identical loads and is unusable as a fidelity metric.
-- **The scan (E) gap is physical placement, not structure.** Per operation
-  both arms do 0.95 seeks, 47.97 nexts, 9.00 data-block misses and 4.46
-  preads, yet a pread takes p50 88 vs 75 us (p99 169 vs 110) on the baseline
-  DB. QD1 raw reads over the same files are identical (73.8 vs 73.7 us); the
-  difference appears only under concurrency (per-NVMe r_await 90 vs 70 us at
-  99.8% util). Control: `cp -a` of each DB as one sequential stream, caches
-  dropped before every campaign. Baseline-copy E = 105,427 ops/s against
-  F2Load-original 104,301 (0.989); F2Load-copy 105,108 against
-  baseline-original 91,091 (1.154, unchanged from 1.151 three hours earlier).
-  The conventional load's write amplification leaves its final SSTs as GC
-  survivors on flash; F2Load's single write does not.
+- **The read gap is physical placement, not tree state.** Per operation both
+  arms do the same work on E: 0.95 seeks, 47.97 nexts, 9.00 data-block misses,
+  4.46 preads. Yet a pread takes p50 88 vs 75 us (p99 169 vs 110) on the
+  baseline DB. QD1 raw reads over the same files are identical (73.8 vs
+  73.7 us), so the difference appears only under concurrency (per-NVMe
+  r_await 90 vs 70 us at 99.8% util). Control: `cp -a` of each DB as one
+  sequential stream, caches dropped before every cell. Three A-F campaigns
+  complete the 2x2 over which arm is rewritten, 12/12 cells each. The
+  F2Load/baseline ratio follows the baseline arm and nothing else: with the
+  baseline as loaded, E is 1.151 and 1.152; with the baseline rewritten,
+  0.993 and 0.993. Rewriting the baseline gains E +15.8%, D +4.8%, C +4.1%,
+  B +1.4%, A and F nil; rewriting the F2Load DB gains nothing (device p50
+  74.7 -> 74.6 us). **Under the fair protocol every workload is within 2% of
+  parity** (A .983, B .998, C 1.002, D 1.020, E .993, F .989) and the device
+  read p50 ratio is 0.998-1.008 everywhere. The baseline load wrote 14.5 TB
+  to the device for a 0.82 TB result across 206,050 created and 192,589
+  deleted SSTs; F2Load wrote once, in 28 s. Every read result before
+  2026-09-10 used a hardlink clone and therefore carries the loader's
+  placement, so the comparison protocol is now a fresh copy for both arms.
 - **Open.** The materializer writes `format_version=6` SSTs (phase 1 runs
   with `--format_version=6`) while the baselines are 7; filter and index
   layout are otherwise identical (kBinarySearch, full 10-bit bloom, whole-key).
-  The A-F placement campaign aborted on the runner's swap-activity guard after
-  three cells and its B counterpart did not run.
+  Workload C's found fraction is 1.109 with the distinct counts matching, an
+  artefact of where model-generated keys land that only uniform reads see.

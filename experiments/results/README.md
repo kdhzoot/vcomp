@@ -17,10 +17,15 @@ in [the experiment guide](../README.md).
   [ycsb_50g_f2ratio_260909](ycsb_50g_f2ratio_260909/): A-F at 50 GiB cache,
   baseline and F2Load interleaved, before and after the estimator change.
   Figure: [f2load_fidelity_260909.png](f2load_fidelity_260909.png).
-- [ycsb_50g_physcopy_A_e_260909](ycsb_50g_physcopy_A_e_260909/) and
-  [ycsb_50g_physcopy_B_e_260909](ycsb_50g_physcopy_B_e_260909/): workload E on
-  byte-copied DBs against the originals; source bundles in
-  `physcopy_260909_bundle_A/` and `physcopy_260909_bundle_B/`.
+- Placement control: [ycsb_50g_physcopy_C_full_260910](ycsb_50g_physcopy_C_full_260910/)
+  is the fair A-F comparison with both arms read from a fresh single-stream
+  copy; [_A_full_260910](ycsb_50g_physcopy_A_full_260910/) and
+  [_B_full_260910](ycsb_50g_physcopy_B_full_260910/) rewrite one arm each, and
+  [_A_e_260909](ycsb_50g_physcopy_A_e_260909/) / [_B_e_260909](ycsb_50g_physcopy_B_e_260909/)
+  are the original workload-E pair. Source bundles in
+  `physcopy_260909_bundle_{A,B,C}/`. Figures:
+  [physcopy_matrix_260910.png](physcopy_matrix_260910.png),
+  [physcopy_control_e_260909.png](physcopy_control_e_260909.png).
 - Baseline repeats: [PAPER_BASELINE_COVERAGE_REPEATS.md](../docs/PAPER_BASELINE_COVERAGE_REPEATS.md)
   for the loads, `baseline_repeat_ycsb_all_260908_night_n01..n04/` for A-F on
   each, `baseline_repeat_ycsb_all_260909_n01_all/`, `_n02_a/`, `_n03_a/`,

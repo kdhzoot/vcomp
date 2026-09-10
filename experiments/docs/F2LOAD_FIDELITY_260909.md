@@ -48,7 +48,9 @@ workload, so the ratio is noise.
 
 A, B and F sit inside the 3.0% spread the four baseline repeats show on A.
 C, D and E moved toward the baseline on every logical counter. The row that did
-not move is device read latency, which is the subject of the next section.
+not move is device read latency, which the next two sections show was measuring
+flash placement rather than tree state; under the fair copy protocol these
+throughput ratios become 0.983 / 0.998 / 1.002 / 1.020 / 0.993 / 0.989.
 One regression: C's found fraction is 0.669 against the baseline's 0.603 under
 uniform reads while the distinct-key counts agree within 0.1%; the
 model-generated key set differs in position, and only a uniform sampler sees
@@ -81,7 +83,7 @@ differs from the release only in a timestamp hunk); the virtual splitter
 implements only the dynamic 50->90% pre-cut and lacks the `max_compaction_bytes`
 and `target/8` cuts, which are live only at L1-L4.
 
-## The scan gap is physical placement
+## The gap is physical placement, not tree state
 
 Workload E per operation, both arms: 0.950 seeks, 47.97 nexts, 9.00 data-block
 misses, 6.07 index-block hits, 4.46 preads. The same work, but each pread on the
@@ -92,30 +94,61 @@ CV <= 0.006, 99.8-99.9% util on both arms, r_await 90 vs 70 us at the same
 gives identical raw latency (p50 73.8 vs 73.7 us), so the difference exists
 only under concurrency. Extent fragmentation points the other way (vcomp files
 have 10 extents, clean 2-4) and is irrelevant to 4 KiB reads on a 1 MiB-chunk
-RAID0. Both arms use `use_direct_reads` and direct flush/compaction I/O, so the
-page cache cannot serve a read.
+RAID0. Both arms use `use_direct_reads` and direct flush/compaction I/O, and
+the runner drops the page cache before every cell, so the page cache serves
+nothing.
 
-Control (`ycsb_50g_physcopy_{A,B}_e_260909`): each DB copied with `cp -a` as
-one sequential stream into `physcopy_260909/`, `sync` + `drop_caches` before
-every campaign, originals untouched. A: baseline-copy against F2Load-original;
-B: baseline-original against F2Load-copy.
+### The 2x2 control
 
-| cell | throughput | avg latency | pread p50 / p99 |
-|---|---:|---:|---:|
-| baseline original (reference, 3 h earlier) | 92,043 | 521.5 us | 88.0 / 168.8 |
-| baseline original (B) | 91,091 | 526.9 us | 88.9 / 168.8 |
-| **baseline copy (A)** | **105,427** | **455.3 us** | **75.1 / 109.7** |
-| F2Load original (reference) | 105,967 | 453.0 us | 74.7 / 109.8 |
-| F2Load original (A) | 104,301 | 460.1 us | 75.3 / 109.7 |
-| F2Load copy (B) | 105,108 | 456.7 us | 74.9 / 109.7 |
+Each DB was copied with `cp -a` into `physcopy_260909/` as one sequential
+stream; the originals were never opened for writing. Four A-F campaigns then
+differ only in which arm read a copy. Every campaign interleaves its two arms
+in one session, so a column is a within-session comparison. 36/36 full cells
+validated, and `swap_pages_in` is 0 in all of them.
 
-Rewriting the baseline as one stream removes the whole gap (A: 0.989); copying
-the F2Load DB changes nothing (B: 1.154, the original ratio). The baseline was
-written over 0.8 h by 48 concurrent compaction streams that created 206,050
-SSTs and deleted 192,589 of them, so its final files are the survivors of the
-drives' own garbage collection; the F2Load DB was written once, in 28 s. The
-E measurement therefore reports flash placement, not LSM-tree state, and the
-fair protocol is to measure both systems from a fresh copy.
+| byte-copied arm | run id | A | B | C | D | E | F | mean \|ratio-1\| |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| neither (as loaded) | `ycsb_50g_f2ratio_260909` | 0.982 | 0.988 | 1.042 | 1.058 | 1.151 | 0.989 | 4.87% |
+| baseline | `ycsb_50g_physcopy_A_full_260910` | 0.975 | 1.014 | 0.991 | 1.005 | 0.993 | 1.002 | 1.02% |
+| F2Load | `ycsb_50g_physcopy_B_full_260910` | 1.015 | 1.032 | 1.031 | 1.043 | 1.152 | 0.999 | 4.57% |
+| both | `ycsb_50g_physcopy_C_full_260910` | 0.983 | 0.998 | 1.002 | 1.020 | 0.993 | 0.989 | **0.98%** |
+
+Rewriting the baseline removes the gap; rewriting F2Load does not touch it
+(E stays at 1.152). Each (system, treatment) combination was measured in two
+of the four sessions, so the effect of the copy can be pooled:
+
+| | A | B | C | D | E | F |
+|---|---:|---:|---:|---:|---:|---:|
+| baseline, copy vs as loaded | +0.1% | +2.3% | +4.0% | +4.3% | **+15.8%** | +0.1% |
+| F2Load, copy vs as loaded | +2.1% | +0.1% | -0.3% | -0.1% | -0.1% | -0.4% |
+
+The size of the gain tracks how device-bound the workload is: C, D and E all
+sit at p99 165-169 us as loaded and converge on 109 us after the copy, while A
+and F are already at ~500 us where the device tail is not what limits them.
+The F2Load row is flat, which is the null control — copying does not make a DB
+faster in general, it repairs a placement that conventional loading damaged.
+Figure: `results/physcopy_matrix_260910.png` (E-pair only:
+`results/physcopy_control_e_260909.png`).
+
+The baseline was written over 0.8 h by 48 concurrent compaction streams that
+created 206,050 SSTs and deleted 192,589 of them (14.5 TB to the device for a
+0.82 TB result, device WAF 13.5), so its surviving files are what the drives'
+own garbage collection left behind; the F2Load DB was written once, in 28 s.
+`/work` receives TRIM only from the weekly `fstrim` timer, and the drives
+reported 93.0% of their namespace as live at every load, so all baselines were
+written with the drives near full regardless of the 61% filesystem fill. That
+is a plausible amplifier, but not the cause: the F2Load DB and both copies were
+written under the same drive condition and are clean.
+
+### Consequence for the comparison
+
+Read from fresh copies, F2Load's state is indistinguishable from a naturally
+accumulated one across A-F: every ratio is within 2% of 1.0 and the mean
+absolute deviation is 0.98%, below the 3.0% spread the four baseline repeats
+show on A alone. The residual A and F values (0.983, 0.989) are inside that
+spread. Read as loaded, the same comparison would credit F2Load with a
+spurious 15% scan advantage. Any read comparison of the two loaders must
+therefore measure both from fresh copies, and that is now the protocol.
 
 ## Repeatability of the baseline itself
 
@@ -130,9 +163,11 @@ loads is 9.82-88.78%, decided by 4 of ~13,400 SSTs; it is not a fidelity metric.
 - The materializer writes `format_version=6` SSTs while the baselines are 7;
   filter/index layout is otherwise identical (kBinarySearch, `bloomfilter:10`,
   whole-key, `partition_filters=false`, 4 KiB blocks).
-- `ycsb_50g_physcopy_A_full_260909` stopped after three cells on the runner's
-  swap-activity guard; the B counterpart did not run. The E pair above is
-  complete and suffices for the placement question.
+- `ycsb_50g_physcopy_A_full_260909` stopped after three cells because the
+  swap guard compared `pswpin` exactly and 64 pages of unrelated swap-in
+  tripped it. The guard now fails on any `pswpout` and tolerates `pswpin`
+  below `SWAP_IN_TOLERANCE_PAGES`, recording the delta per cell; the three
+  2026-09-10 campaigns replaced that run and all reported zero.
 - C's uniform found-fraction difference is a property of model-generated keys
   and needs a statement in the paper rather than an engine change.
 - The residual 1% on unique100 is `dropped_live_entries`, not estimation.
@@ -141,7 +176,9 @@ loads is 9.82-88.78%, decided by 4 of ~13,400 SSTs; it is not a fidelity metric.
 
 `results/ycsb_50g_f2load_baseline_260909`, `results/ycsb_50g_f2ratio_260909`,
 `results/ycsb_50g_physcopy_A_e_260909`, `results/ycsb_50g_physcopy_B_e_260909`,
-`results/physcopy_260909_bundle_{A,B}` (source bundles),
+`results/ycsb_50g_physcopy_{A,B,C}_full_260910`,
+`results/physcopy_260909_bundle_{A,B,C}` (source bundles),
+`results/physcopy_matrix_260910.png`, `results/physcopy_control_e_260909.png`,
 `results/f2load_1tb_260909_ratio_bundle`, `results/f2load_fidelity_260909.png`,
 `results/ycsb_across_loads_260909.png`, `results/baseline_repeat_variance_260909.png`,
 `results/fidelity_100gib_260909_ratio_run2`. Raw logs remain under

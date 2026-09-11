@@ -1,0 +1,19 @@
+{
+  "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+  "clone_db_dir": "/work/vcomp/exp/ch3_ycsb_cache50_260911_run2/full/workloadb/flush_only",
+  "duration_sec": 300,
+  "ended_epoch": 1789125263.5275214,
+  "exit_code": -15,
+  "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ch3_ycsb_cache50_260911_run2/full/workloadb/flush_only",
+  "peak_rss_kb": null,
+  "phase": "full",
+  "process_elapsed_sec": 903.795812368393,
+  "source_db_dir": "/work/vcomp/exp/paper_ch23_common_260905_approved_run3/full/flush_only_1kb",
+  "started_epoch": 1789124359.7317069,
+  "status": "timeout",
+  "swap_pages_in": 0,
+  "system": "flush_only",
+  "threads": 48,
+  "timed_out": true,
+  "workload": "workloadb"
+}

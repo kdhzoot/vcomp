@@ -1,0 +1,6 @@
+state	size_gib	sst_count	avg_sst_mib	L0_files	L0_gib	L1_files	L1_gib	L2_files	L2_gib	L3_files	L3_gib	L4_files	L4_gib	L5_files	L5_gib	L6_files	L6_gib
+baseline	767.4	13461	58.4	0	0.0	4	0.2	43	2.5	444	25.0	4132	250.0	8838	489.8	0	0.0
+flush_only	1016.5	16237	64.1	16237	1016.5	0	0.0	0	0.0	0	0.0	0	0.0	0	0.0	0	0.0
+last_comp	642.2	10213	64.4	0	0.0	10213	642.2	0	0.0	0	0.0	0	0.0	0	0.0	0	0.0
+fillseq	1015.9	16237	64.1	0	0.0	1	0.1	36	2.3	396	24.8	3992	249.8	11812	739.0	0	0.0
+fillseq_ow	1113.5	18062	63.1	0	0.0	3	0.2	42	2.5	447	25.0	4210	250.0	13360	835.9	0	0.0

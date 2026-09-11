@@ -1,0 +1,86 @@
+diff --git a/experiments/scripts/read/run_ycsb_alternatives.py b/experiments/scripts/read/run_ycsb_alternatives.py
+index 02bf11b610..dfccf2f74f 100644
+--- a/experiments/scripts/read/run_ycsb_alternatives.py
++++ b/experiments/scripts/read/run_ycsb_alternatives.py
+@@ -60,7 +60,8 @@ def group_members(pgid):
+     return members
+ 
+ 
+-def options(source, db, log, workload, duration, cache_size=1):
++def options(source, db, log, workload, duration, cache_size=1,
++            request_distribution=None):
+     result = dict(BASE, num=source['num_keys'], key_size=source['key_bytes'],
+                   value_size=source['value_bytes'], db=str(db),
+                   benchmarks=workload + ',stats,levelstats',
+@@ -75,8 +76,9 @@ def options(source, db, log, workload, duration, cache_size=1):
+                   open_files=-1, stats_level=3, histogram=True, perf_level=3,
+                   report_interval_seconds=1, report_file=str(log / 'report.rep'),
+                   stats_interval_seconds=30, stats_per_interval=1,
+-                  ycsb_requestdistribution='latest' if workload == 'workloadd'
+-                  else 'zipfian', ycsb_minscanlength=1, ycsb_maxscanlength=100,
++                  ycsb_requestdistribution=request_distribution or
++                  ('latest' if workload == 'workloadd' else 'zipfian'),
++                  ycsb_minscanlength=1, ycsb_maxscanlength=100,
+                   ycsb_scanlengthdistribution='uniform')
+     return result
+ 
+@@ -93,6 +95,12 @@ class Campaign:
+     def __init__(self, args):
+         self.args = args
+         self.cache_size = getattr(args, 'cache_size', 1)
++        # None keeps YCSB's own per-workload choice (latest for D, zipfian
++        # elsewhere). An override applies to every workload in the campaign.
++        self.request_distribution = getattr(args, 'request_distribution', None)
++        require(self.request_distribution in
++                (None, 'uniform', 'zipfian', 'latest', 'hotspot', 'sequential',
++                 'exponential'), 'unknown request distribution')
+         self.root = EXPERIMENTS / 'artifacts/log_runs' / args.run_id
+         self.dbroot = Path('/work/vcomp/exp') / args.run_id
+         bundle = Path(getattr(args, 'source_bundle', None) or SOURCE_BUNDLE)
+@@ -200,6 +208,7 @@ class Campaign:
+             profiler_commit=SOURCE_COMMIT, binary_sha256=BINARY_HASH,
+             frozen_binary=str(self.binary), repetitions=1,
+             selected_systems=self.systems, selected_workloads=self.workloads,
++            request_distribution=self.request_distribution,
+             excluded_systems=[s for s in SYSTEMS if s not in self.systems],
+             full_order=self.cells, total_full=len(self.cells), pilot_seconds=[3, 5],
+             reuse_run=self.args.reuse_run,
+@@ -207,7 +216,7 @@ class Campaign:
+             representative_options=options(self.sources['baseline_1kb'],
+                 self.dbroot / 'full/workloada/baseline',
+                 self.root / 'full/workloada/baseline', 'workloada', self.args.duration,
+-                self.cache_size)))
++                self.cache_size, self.request_distribution)))
+         self.event('READY', message='sources locked; executable and configuration frozen')
+ 
+     def reuse_results(self):
+@@ -405,7 +414,8 @@ class Campaign:
+         self.event('STAGING', source=source['db_dir'], destination=str(db))
+         before = stage_db(source['db_dir'], db)
+         require(before == self.identities[system], 'source changed before staging')
+-        opts = options(source, db, log, workload, duration, self.cache_size)
++        opts = options(source, db, log, workload, duration, self.cache_size,
++                       self.request_distribution)
+         execution, output = self.measure(command(self.binary, opts), log,
+             timeout=180 if phase == 'pilot' else duration + 600)
+         require(db_identity(source['db_dir']) == before, 'source DB changed')
+@@ -535,6 +545,10 @@ def main():
+     parser.add_argument('--exclude-flush-only', action='store_true')
+     parser.add_argument('--systems',
+                         help='comma-separated subset of ' + ','.join(SYSTEMS))
++    parser.add_argument('--request-distribution',
++                        help='override the YCSB key distribution for every '
++                             'workload (uniform, zipfian, latest, ...); '
++                             'default keeps latest for D and zipfian elsewhere')
+     parser.add_argument('--workloads', default='abcdef',
+                         help='workload letters to run in the full phase (default abcdef); '
+                              'the pilot cells are unchanged')
+@@ -553,7 +567,7 @@ def main():
+             common_options=options(campaign.sources['baseline_1kb'],
+                 campaign.dbroot / 'full/workloada/baseline',
+                 campaign.root / 'full/workloada/baseline', 'workloada', 300,
+-                campaign.cache_size)), indent=2))
++                campaign.cache_size, campaign.request_distribution)), indent=2))
+         return
+     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
+     campaign.run()

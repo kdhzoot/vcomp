@@ -1,0 +1,55 @@
+{
+  "benchmark": {
+    "avg_latency_us": 301591003.0,
+    "measured_seconds": 301.591,
+    "operations": 1,
+    "throughput_ops_sec": 0.0
+  },
+  "binary": "/home/smrc/virtual_compaction/vcomp/db_bench",
+  "binary_sha256": "3d71cc8f84b6a79517122af2d5f027bff027442c2e455561c78af76b186aff0e",
+  "dataset_gib": 2000,
+  "db_dir": "/work/vcomp/exp/f2load_91b_260911/f2load_91b_2000gib",
+  "elapsed_sec": 306.88890647888184,
+  "final_sst_bytes": 1624957380574,
+  "final_sst_count": 28432,
+  "key_bytes": 48,
+  "levels": {
+    "0": {
+      "files": 0,
+      "size_mib": 0
+    },
+    "1": {
+      "files": 4,
+      "size_mib": 242
+    },
+    "2": {
+      "files": 47,
+      "size_mib": 2525
+    },
+    "3": {
+      "files": 453,
+      "size_mib": 25258
+    },
+    "4": {
+      "files": 4230,
+      "size_mib": 252543
+    },
+    "5": {
+      "files": 23698,
+      "size_mib": 1269112
+    },
+    "6": {
+      "files": 0,
+      "size_mib": 0
+    }
+  },
+  "loading_min": 5.1148151079813635,
+  "log_dir": "artifacts/log_loads/f2load_91b_260911/f2load_91b_2000gib",
+  "num_keys": 23598721406,
+  "peak_rss_kb": 2201256,
+  "status": "validated",
+  "system": "f2load",
+  "total_wall_sec": 313.1,
+  "validation": "637_of_1000_found_after_readonly_reopen",
+  "value_bytes": 43
+}

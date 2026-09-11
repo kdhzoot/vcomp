@@ -1,0 +1,152 @@
+{
+  "fillseq": {
+    "benchmark": {
+      "avg_latency_us": 0.912,
+      "measured_seconds": 956.555,
+      "operations": 1048576000,
+      "throughput_ops_sec": 1096200.0
+    },
+    "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+    "case_id": "fillseq_1kb",
+    "compaction_jobs": 1,
+    "compaction_read_bytes": 260440154,
+    "compaction_sst_write_bytes": 258891776,
+    "cumulative_compaction_sec": 0.590719,
+    "dataset_gib": 1000,
+    "db_dir": "/work/vcomp/exp/paper_ch23_common_260905_approved_run3/full/fillseq_1kb",
+    "device_waf": 1.0169356689453124,
+    "device_write_bytes": 1091926360064,
+    "elapsed_sec": 962.644020318985,
+    "final_sst_bytes": 1090796586074,
+    "final_sst_count": 16237,
+    "flush_sst_write_bytes": 1090824855406,
+    "key_bytes": 24,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 1,
+        "size_mib": 54
+      },
+      "2": {
+        "files": 36,
+        "size_mib": 2307
+      },
+      "3": {
+        "files": 396,
+        "size_mib": 25371
+      },
+      "4": {
+        "files": 3992,
+        "size_mib": 255760
+      },
+      "5": {
+        "files": 11812,
+        "size_mib": 756773
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "loading_min": 16.044067005316418,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/fillseq_1kb",
+    "logical_input_bytes": 1073741824000,
+    "num_keys": 1048576000,
+    "peak_rss_kb": 7137644,
+    "phases": [
+      {
+        "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+        "elapsed_sec": 962.644020318985,
+        "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/fillseq_1kb/phase1",
+        "peak_rss_kb": 7137644
+      }
+    ],
+    "repetitions": 1,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/fillseq_1kb/db_identity.json",
+    "stall_sec": 0.0,
+    "status": "validated",
+    "system": "fillseq",
+    "total_sst_write_bytes": 1091083747182,
+    "validation": "10000_of_10000_found_after_readonly_reopen",
+    "value_bytes": 1000,
+    "waf": 1.016150924546644
+  },
+  "flush_only": {
+    "benchmark": {
+      "avg_latency_us": 0.934,
+      "measured_seconds": 979.299,
+      "operations": 1048576000,
+      "throughput_ops_sec": 1070741.0
+    },
+    "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+    "case_id": "flush_only_1kb",
+    "compaction_jobs": 0,
+    "compaction_read_bytes": 0,
+    "compaction_sst_write_bytes": 0,
+    "cumulative_compaction_sec": 0.0,
+    "dataset_gib": 1000,
+    "db_dir": "/work/vcomp/exp/paper_ch23_common_260905_approved_run3/full/flush_only_1kb",
+    "device_waf": 1.0170677185058594,
+    "device_write_bytes": 1092068147200,
+    "elapsed_sec": 979.7261683940887,
+    "final_sst_bytes": 1091415631669,
+    "final_sst_count": 16237,
+    "flush_sst_write_bytes": 1091449356114,
+    "key_bytes": 24,
+    "levels": {
+      "0": {
+        "files": 16237,
+        "size_mib": 1040855
+      },
+      "1": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "2": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "loading_min": 16.32876947323481,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/flush_only_1kb",
+    "logical_input_bytes": 1073741824000,
+    "num_keys": 1048576000,
+    "peak_rss_kb": 7016956,
+    "phases": [
+      {
+        "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+        "elapsed_sec": 979.7261683940887,
+        "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/flush_only_1kb/phase1",
+        "peak_rss_kb": 7016956
+      }
+    ],
+    "repetitions": 1,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/flush_only_1kb/db_identity.json",
+    "stall_sec": 0.0,
+    "status": "validated",
+    "system": "flush_only",
+    "total_sst_write_bytes": 1091449356114,
+    "validation": "100_of_100_found_after_readonly_reopen",
+    "value_bytes": 1000,
+    "waf": 1.0164914243984968
+  }
+}

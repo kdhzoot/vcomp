@@ -664,3 +664,58 @@ These are tracked here so they don't get lost between sessions.
   genuine tree-shape advantage (sst_reads_per_get −3.9%). Fair
   apples-to-apples comparison requires both groups measured at same
   NVMe freshness.
+
+---
+
+## 8. Section 3 alternatives and the 91 B scale-up (2026-09-11)
+
+### 8.1 YCSB A-D on three 1 TB states, 50 GiB block cache
+
+`results/ch3_ycsb_cache50_260911_run2`, 300 s per cell, 48 threads. Baseline is
+reused from `results/ycsb_band_n01_260910`, the independently loaded arm whose
+A-D throughput sits closest to the median of ten such loadings (within 0.42%).
+
+| state | A | B | C | D |
+|---|---|---|---|---|
+| incremental construction | 695,604 | 1,037,150 | 1,594,123 | 2,658,994 |
+| fillseq | 747,594 | 976,981 | 1,231,296 | 2,075,100 |
+| flush-only | timeout | timeout | 1,581 | timeout |
+
+Flush-only serves only workload C. A, B and D carry writes, and the DB stops
+writes 0.6 s after open with 16,237 $L_0$ files against a stop trigger of 36;
+the watchdog ends each of those cells at 903.6 s. On C it runs at 1/1008 of
+baseline throughput.
+
+Per-lookup work on C, which is what produces that: SSTs consulted 3.65 /
+1.00 / 10,398.93, of which positive 0.63 / 1.00 / 101.92 and true positive 0.60
+/ 1.00 / 0.60. Flush-only's positives are 99.41% false, so a single lookup pays
+for about 101 wasted data-block reads. Fillseq checks exactly one SST because
+trivial move leaves no inter-level overlap, yet it is still 23% slower than
+baseline on C: every key exists there (100% successful lookups against 60.3%),
+so every operation reaches a data block.
+
+Collected numbers: `results/paper_ch3_state_comparison.tsv`. Final-state shape
+across all six loaded states: `results/paper_ch3_final_state_shape.tsv`.
+Figures: `analysis/plot_ch3_alternatives.py`.
+
+### 8.2 Run-to-run band across independent loadings
+
+Ten independent baseline loadings and six F2Load loadings, YCSB A-F, 1 TB,
+50 GiB block cache (`results/ycsb_band_*`, `results/ycsb_f2band_*`). The
+baseline band is 98.5-103.5% (A), 97.9-102.3% (B), 94.4-102.6% (C),
+98.3-101.2% (D), 98.9-100.5% (E) and 99.2-101.0% (F) of its own mean. F2Load
+lands inside it on A, B, D and E; C sits at 0.926 and F at 0.988. One F2Load C
+run (f01) reads 71.4% and pulls that mean down; without it C is 96.8%, inside
+the band. The band is a loading band, not a measurement band: the ten source
+databases hold 13,460 to 13,549 SSTs, so they are distinct loads.
+
+### 8.3 F2Load 91 B scale-up
+
+Full record in `results/f2load_91b_scaling_260911/RESULTS.md`. 1.33 / 2.64 /
+5.11 / 12.99 / 49.84 min at 500 GiB to 8 TB, linear to 2 TB and superlinear
+after, with peak RSS turning harder than time (4.4x and 4.6x per doubling past
+2 TB). The break coincides with the tree reaching $L_6$ at 4 TB.
+
+The comparable baseline series was loaded with the db_bench default of two
+memtables rather than the frozen 16, so the two cannot be divided directly; see
+that file for the stall evidence.

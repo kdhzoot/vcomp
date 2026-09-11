@@ -2576,3 +2576,37 @@ read from RocksDB. Campaign records: [SST size model](experiments/docs/SST_SIZE_
   layout are otherwise identical (kBinarySearch, full 10-bit bloom, whole-key).
   Workload C's found fraction is 1.109 with the distinct counts matching, an
   artefact of where model-generated keys land that only uniform reads see.
+
+## 2026-09-11 — Section 3 alternatives, the run-to-run band, and F2Load at 91 B
+
+A measurement round for Chapter 3 plus the first F2Load runs at the 91 B KV
+size. No engine changes. Frozen option set now written down once in
+[COMMON_OPTIONS.md](experiments/docs/COMMON_OPTIONS.md); numbers in
+[RESULTS.md §8](experiments/docs/RESULTS.md).
+
+- **Alternatives under a real workload.** YCSB A-D on incremental
+  construction, fillseq and flush-only at 1 TB with a 50 GiB block cache.
+  Flush-only serves only workload C: the other three carry writes and the DB
+  stops writes 0.6 s after open with 16,237 $L_0$ files against a stop trigger
+  of 36. On C it runs at 1,581 ops/s, 1/1008 of baseline, because a lookup
+  consults 10,399 SSTs and 99.41% of the positives are false. Fillseq consults
+  exactly one SST yet is still 23% slower than baseline on C, since every key
+  exists there and every operation reaches a data block. The two alternatives
+  fail in opposite directions, which is the point Chapter 3 needs.
+- **The band is a loading band.** Ten independently loaded baselines
+  (13,460-13,549 SSTs, so genuinely distinct loads) put YCSB A-F run-to-run
+  spread between 1.5% and 8.2%. Six F2Load loadings land inside it on A, B, D
+  and E. This is the tolerance a fidelity claim has to be read against.
+- **F2Load at 91 B.** First runs at `key_size=48`/`value_size=43`, five sizes
+  from 500 GiB to 8 TB: 1.33 / 2.64 / 5.11 / 12.99 / 49.84 min. Scaling is
+  linear to 2 TB (1.98x and 1.94x per doubling) and breaks after it (2.54x,
+  then 3.84x). Peak RSS turns first and harder, 1.3x per doubling up to 2 TB
+  and 4.4x after. Both breaks coincide with the tree reaching $L_6$ at 4 TB.
+  Runner: `experiments/scripts/paper/run_f2load_91b.py`.
+- **The 91 B baseline series is not comparable as it stands.** It was loaded
+  without write-buffer flags, so it took the db_bench default of two memtables
+  against the frozen 16, and spent 36.6% of its 1 TB run stalled against 27.0%.
+  Dividing one series by the other would credit F2Load with a handicap we
+  imposed on baseline, so the 91 B speedups are held back until baseline is
+  re-measured under the frozen configuration. Tracked in
+  [EXPERIMENTS_PLANNED.md](experiments/docs/EXPERIMENTS_PLANNED.md).

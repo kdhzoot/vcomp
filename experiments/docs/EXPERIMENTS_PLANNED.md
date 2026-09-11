@@ -6,6 +6,38 @@
 
 **2026-09-06 common Chapter 2/3 update:** Seven load states and twenty reads completed and were reflected in Figures 2(b), 4 and 5 and their prose. Use [PAPER_CHAPTER23_COMMON_RESULTS.md](PAPER_CHAPTER23_COMMON_RESULTS.md) for the current shared baseline. Earlier paper values below are historical for these comparisons. F2Load recovery/reads and the scaling/breakdown follow-ups remain deferred.
 
+## 2026-09-11: Baseline Series Unification and Phase 1 Shard Sweep
+
+Two items left open by the 91 B scale-up, both blocking numbers that would
+otherwise go into the paper.
+
+**Unify the baseline series before quoting any 91 B speedup.** The five-point
+baseline curve (`exp_260604_exp91b_baseline`, `exp_260822_paper_bg_91b_8tb_direct`)
+passes no write-buffer flags and therefore ran with two memtables; the frozen
+configuration uses 16. The same 1 TB load reads 5.58 h there and 3.17 h in
+`paper_ch23_common_260905_approved_run3`, and cumulative stall accounts for
+about half the gap (36.6% of the run against 27.0%).
+
+**Decision (2026-09-11): re-measure baseline under the frozen configuration.**
+Re-measuring F2Load under the older one instead would be far cheaper, about 72
+minutes against more than 80 hours, but it would compare F2Load against a
+baseline handicapped by a setting we would not choose for it, and the speedup
+would carry that handicap. The comparison has to run both systems under the
+configuration the paper claims to use. Deferred for now, not dropped: the 91 B
+speedups stay out of the paper until this is measured.
+
+**Sweep `--vcomp_phase1_shards`.** Phase 1 is fixed at 8 shards while
+materialization uses 48 workers, and during the 8 TB load the process held
+about 9.5 cores of the 48 online. Throughput falls from 6.3 to 2.7 GiB/s
+between 1 TB and 8 TB. A sweep over 8/16/32/48 at 1 TB costs four runs of
+under three minutes each and would show how much of the scale-up loss is the
+shard count rather than the extra level.
+
+**Also open:** peak RSS grows faster than SST count past 2 TB (4.4x and 4.6x
+per doubling against 2.0x). At that slope a 16 TB load needs roughly 190 GiB
+and a 32 TB load roughly 870 GiB against 1.0 TiB of DRAM. Worth understanding
+before any run above 8 TB is scheduled.
+
 ## 2026-09-03: Paired No-Comp and Last-Comp at 16 Write Buffers
 
 **Status:** Completed and validated. No-comp was 973 seconds; its preserved

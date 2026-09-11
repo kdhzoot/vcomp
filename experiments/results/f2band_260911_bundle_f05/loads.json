@@ -1,0 +1,170 @@
+{
+  "baseline_1kb": {
+    "benchmark": {
+      "avg_latency_us": 3.321,
+      "measured_seconds": 3482.079,
+      "operations": 1048576000,
+      "throughput_ops_sec": 301135.0
+    },
+    "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+    "case_id": "baseline_1kb",
+    "compaction_jobs": 47817,
+    "compaction_read_bytes": 12888641864517,
+    "compaction_sst_write_bytes": 12559770537984,
+    "created_sst_count": 206050,
+    "cumulative_compaction_sec": 33109.376648,
+    "dataset_gib": 1000,
+    "db_dir": "/work/vcomp/exp/paper_ch23_common_260905_approved_run3/full/baseline_1kb",
+    "device_waf": 13.502023593902589,
+    "device_write_bytes": 14497687441408,
+    "elapsed_sec": 3501.4172496795654,
+    "final_sst_bytes": 824004110212,
+    "final_sst_count": 13461,
+    "flush_sst_write_bytes": 1091460446077,
+    "key_bytes": 24,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 4,
+        "size_mib": 241
+      },
+      "2": {
+        "files": 43,
+        "size_mib": 2542
+      },
+      "3": {
+        "files": 444,
+        "size_mib": 25563
+      },
+      "4": {
+        "files": 4132,
+        "size_mib": 255980
+      },
+      "5": {
+        "files": 8838,
+        "size_mib": 501506
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "loading_min": 58.356954161326094,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/baseline_1kb",
+    "logical_input_bytes": 1073741824000,
+    "num_keys": 1048576000,
+    "peak_rss_kb": 6205956,
+    "phases": [
+      {
+        "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+        "elapsed_sec": 3501.4172496795654,
+        "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/baseline_1kb/phase1",
+        "peak_rss_kb": 6205956
+      }
+    ],
+    "repetitions": 1,
+    "retained_sst_pct": 6.532880368842514,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/baseline_1kb/db_identity.json",
+    "stall_sec": 2346.696347,
+    "status": "validated",
+    "system": "baseline",
+    "total_sst_write_bytes": 13651230984061,
+    "validation": "10000_of_10000_found_after_readonly_reopen",
+    "value_bytes": 1000,
+    "waf": 12.713699586746284
+  },
+  "f2load_1kb": {
+    "benchmark": {
+      "avg_latency_us": 91769141.0,
+      "measured_seconds": 91.769,
+      "operations": 1,
+      "throughput_ops_sec": 0.0
+    },
+    "binary_sha256": "c5964e54fb0afc4779fd17b82f7366bdd8d19be9bd2acae33dd26c77e55019cd",
+    "case_id": "f2load_1kb",
+    "compaction_jobs": 61,
+    "compaction_read_bytes": 23238713571,
+    "compaction_sst_write_bytes": 20995141632,
+    "completion_binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+    "cumulative_compaction_sec": 46.67864,
+    "dataset_gib": 1000,
+    "db_dir": "/work/vcomp/exp/f2band_260911/f05",
+    "device_waf": 0.7918578109741211,
+    "device_write_bytes": 850250850304,
+    "elapsed_sec": 134.7306969165802,
+    "final_sst_bytes": 820334062505,
+    "final_sst_count": 12912,
+    "flush_sst_write_bytes": 0,
+    "key_bytes": 24,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 252
+      },
+      "2": {
+        "files": 46,
+        "size_mib": 2532
+      },
+      "3": {
+        "files": 424,
+        "size_mib": 25553
+      },
+      "4": {
+        "files": 4064,
+        "size_mib": 255980
+      },
+      "5": {
+        "files": 8375,
+        "size_mib": 498014
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "load_protocol": "materialize_then_clean_automatic_settle",
+    "loading_min": 2.2455116152763366,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260907_f2_completion1/full/f2load_1kb",
+    "logical_input_bytes": 1073741824000,
+    "materialized_process_sec": 96.95702600479126,
+    "num_keys": 1048576000,
+    "peak_rss_kb": 5351752,
+    "pending_after_settle": 0,
+    "pending_before_settle": 17255557663,
+    "phases": [
+      {
+        "binary_sha256": "c5964e54fb0afc4779fd17b82f7366bdd8d19be9bd2acae33dd26c77e55019cd",
+        "elapsed_sec": 96.95702600479126,
+        "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260907_f2_completion1/full/f2load_1kb/phase1",
+        "peak_rss_kb": 1521092
+      },
+      {
+        "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+        "elapsed_sec": 37.77367091178894,
+        "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260907_f2_completion1/full/f2load_1kb/phase2",
+        "peak_rss_kb": 5351752
+      }
+    ],
+    "pre_settle_db_dir": "/work/vcomp/exp/paper_ch23_common_260907_f2_completion1/full/f2load_1kb_materialized",
+    "repetitions": 1,
+    "settle_compaction_read_bytes": 23238713571,
+    "settle_compaction_write_bytes": 20995141632,
+    "settle_process_sec": 37.77367091178894,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/f2band_260911/f05/db_identity.json",
+    "sst_waf_note": "F2 materialization bypasses flush/compaction tickers; use separately recorded device writes.",
+    "stall_sec": 0.0,
+    "status": "validated",
+    "system": "f2load",
+    "total_sst_write_bytes": 20995141632,
+    "validation": "629_of_1000_found_after_readonly_reopen;zero_pending_after_timed_settle",
+    "value_bytes": 1000,
+    "waf": null
+  }
+}

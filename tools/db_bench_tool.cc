@@ -1033,6 +1033,13 @@ DEFINE_uint64(vcomp_visible_l0_batch_mb, 0,
               "Target total registered virtual L0 size, in MiB. Set to zero "
               "to use the column family's max_compaction_bytes.");
 
+DEFINE_bool(vcomp_l0_backpressure, true,
+            "Gate virtual L0 registration with the column family's write-stall "
+            "conditions (level0_slowdown/stop_writes_trigger, soft/hard_pending_"
+            "compaction_bytes_limit), as fillrandom's flushes are. Keeps every "
+            "level near its target during the load so the tree shape tracks "
+            "baseline at scale.");
+
 DEFINE_bool(vcomp_log_apply_timing, true,
             "Collect detailed LogAndApply timing breakdown for fillvirtual. "
             "Disable to measure instrumentation overhead.");
@@ -6390,7 +6397,8 @@ class Benchmark {
             : std::max<uint64_t>(
                   1, cfd->GetLatestMutableCFOptions().max_compaction_bytes);
     db_impl->ConfigureVirtualL0Window(visible_l0_batch_bytes,
-                                      register_batch_max);
+                                      register_batch_max,
+                                      FLAGS_vcomp_l0_backpressure);
     const uint64_t reserved_l0_file_base =
         versions->FetchAddFileNumber(total_flushes_expected);
     uint64_t next_reserved_l0_file = reserved_l0_file_base;
@@ -7065,6 +7073,11 @@ class Benchmark {
         l0_window_after_wait.max_register_batch_bytes / 1024.0 / 1024.0,
         l0_window_after_wait.max_pending_files,
         l0_window_after_wait.target_visible_bytes / 1024.0 / 1024.0);
+    fprintf(stderr,
+        "  L0 backpressure: %s stops=%" PRIu64 " trickles=%" PRIu64 "\n",
+        FLAGS_vcomp_l0_backpressure ? "on" : "off",
+        l0_window_after_wait.backpressure_stops,
+        l0_window_after_wait.backpressure_trickles);
     fprintf(stderr,
         "  L0 visible window breakdown: refill=%.3fs log_apply=%.3fs "
         "install_schedule=%.3fs cleanup=%.3fs pending_mb=%.2f "

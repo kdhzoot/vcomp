@@ -5189,9 +5189,11 @@ DBImpl::VirtualCompactionStats DBImpl::GetVirtualCompactionStats() const {
 }
 
 void DBImpl::ConfigureVirtualL0Window(uint64_t target_visible_bytes,
-                                      uint64_t max_register_batch_files) {
+                                      uint64_t max_register_batch_files,
+                                      bool backpressure) {
   InstrumentedMutexLock l(&mutex_);
   virtual_l0_target_visible_bytes_ = target_visible_bytes;
+  virtual_l0_backpressure_ = backpressure;
   virtual_l0_max_register_batch_files_ =
       std::max<uint64_t>(1, max_register_batch_files);
   virtual_l0_window_stats_.target_visible_bytes =
@@ -5277,16 +5279,55 @@ Status DBImpl::RefillVirtualL0WindowLocked(VirtualL0RegistrationStats* stats) {
                                     : virtual_l0_pending_.front().file_size;
   Status s;
 
+  // Mirror the write stalls that pace fillrandom's flushes. The stop
+  // conditions (L0 stop trigger, hard pending-compaction bytes) halt the feed;
+  // the slowdown conditions (L0 slowdown trigger, soft pending-compaction
+  // bytes) admit one file per refill so compaction gets more turns per
+  // admitted byte, which is what delayed writes amount to in event order.
+  enum Pressure { kFree, kSlowdown, kStop };
+  auto pressure = [&]() -> Pressure {
+    if (!virtual_l0_backpressure_) return kFree;
+    const auto* vstorage = cfd->current()->storage_info();
+    const auto& mopts = cfd->GetLatestMutableCFOptions();
+    const int l0 = vstorage->NumLevelFiles(0);
+    const uint64_t pending = vstorage->estimated_compaction_needed_bytes();
+    if ((mopts.level0_stop_writes_trigger > 0 &&
+         l0 >= mopts.level0_stop_writes_trigger) ||
+        (mopts.hard_pending_compaction_bytes_limit > 0 &&
+         pending >= mopts.hard_pending_compaction_bytes_limit)) {
+      return kStop;
+    }
+    if ((mopts.level0_slowdown_writes_trigger > 0 &&
+         l0 >= mopts.level0_slowdown_writes_trigger) ||
+        (mopts.soft_pending_compaction_bytes_limit > 0 &&
+         pending >= mopts.soft_pending_compaction_bytes_limit)) {
+      return kSlowdown;
+    }
+    return kFree;
+  };
+
+  bool trickled = false;
   while (!virtual_l0_pending_.empty() &&
-         virtual_l0_visible_bytes_ < target_bytes) {
+         virtual_l0_visible_bytes_ < target_bytes && !trickled) {
+    const Pressure p = pressure();
+    if (p == kStop) {
+      virtual_l0_window_stats_.backpressure_stops++;
+      break;
+    }
+    const bool trickle = (p == kSlowdown);
+    if (trickle) {
+      virtual_l0_window_stats_.backpressure_trickles++;
+      trickled = true;
+    }
     const uint64_t refill_t0 = immutable_db_options_.clock->NowMicros();
     std::vector<VirtualL0WindowFile> batch;
     batch.reserve(virtual_l0_max_register_batch_files_);
     uint64_t batch_bytes = 0;
     const uint64_t remaining = target_bytes - virtual_l0_visible_bytes_;
+    const size_t batch_cap =
+        trickle ? 1 : static_cast<size_t>(virtual_l0_max_register_batch_files_);
 
-    while (!virtual_l0_pending_.empty() &&
-           batch.size() < virtual_l0_max_register_batch_files_) {
+    while (!virtual_l0_pending_.empty() && batch.size() < batch_cap) {
       const uint64_t file_size = virtual_l0_pending_.front().file_size;
       if (!batch.empty() && batch_bytes + file_size > remaining) {
         break;

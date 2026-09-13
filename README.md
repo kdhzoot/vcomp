@@ -139,12 +139,47 @@ The wrapper defaults to the same current values as the code:
 |---------|---------|---------|
 | `--vcomp_register_batch_max` / `VCOMP_REGISTER_BATCH_MAX` | `256` | Max pending virtual L0 files registered per VersionEdit |
 | `--vcomp_visible_l0_batch_mb` / `VCOMP_VISIBLE_L0_BATCH_MB` | `0` | Visible virtual-L0 byte target in MiB; zero uses `max_compaction_bytes` |
+| `--vcomp_l0_backpressure` | `true` | Gate virtual-L0 registration with the CF's write-stall conditions (`level0_slowdown/stop_writes_trigger`, `soft/hard_pending_compaction_bytes_limit`); stop conditions halt the feed, slowdown conditions admit one file per refill |
 | `VCOMP_BG_COMMIT_BATCH_MAX` | `16` | Max virtual compaction commit requests grouped into one manifest write |
 | `VCOMP_BG_COMMIT_DELAY_US` | `100` | Leader wait before draining the virtual commit queue |
 | `--vcomp_log_apply_timing` / `VCOMP_LOG_APPLY_TIMING` | `true` | Collect detailed LogAndApply timing breakdowns |
 
 `--vcomp_visible_l0_batch_mb=0` is the default: `db_bench` uses the effective
 column-family `max_compaction_bytes` as `target_bytes`.
+
+### Canonical experiment configuration
+
+Every option that shapes the LSM-Tree is pinned rather than inherited from
+RocksDB defaults, so points loaded days apart stay comparable. The evaluation
+plan is [experiments/docs/PAPER_EVALUATION_PLAN.md](experiments/docs/PAPER_EVALUATION_PLAN.md);
+its runner is `experiments/scripts/eval/run_eval_campaign.py`.
+
+Benchmarks: `fillrandom,flush,compact0,waitforcompaction,stats,levelstats` for
+baseline, `fillvirtual,...` for F2Load.
+
+| Group | Fixed options |
+|---|---|
+| Writer | `threads=1`, `batch_size=1`, `seed=12345678` |
+| Memtable | `memtablerep=vector`, `max_write_buffer_number=16`, `min_write_buffer_number_to_merge=1`, `allow_concurrent_memtable_write=true` |
+| Background | `max_background_jobs=48`, `subcompactions=1` |
+| Compaction | `compaction_style=0` (leveled), `num_levels=7` |
+| Level sizing | `level_compaction_dynamic_level_bytes=false` |
+| L0 triggers | `level0_file_num_compaction_trigger=4`, `level0_slowdown_writes_trigger=20`, `level0_stop_writes_trigger=36` |
+| Pending | `soft_pending_compaction_bytes_limit=64 GiB`, `hard_pending_compaction_bytes_limit=128 GiB` |
+| I/O | `disable_wal=true`, `compression_type=none`, `use_direct_reads=true`, `use_direct_io_for_flush_and_compaction=true` |
+| SST | `format_version=7`, `bloom_bits=10`, `enable_index_compression=false` |
+| F2Load | `use_virtual_compaction=true`, `plr_error_bound=8`, `vcomp_register_batch_max=256`, `vcomp_visible_l0_batch_mb=0`, `vcomp_phase1_shards=8`, `vcomp_materialize_workers=48` |
+
+The remaining options are the swept variables, and each experiment changes only
+its own. Their values at the plan's reference point are in parentheses.
+
+| Swept option | Experiment |
+|---|---|
+| `num`, `key_size`, `value_size` (`1048576000`, `24`, `1000`) | E1 KV size, E2 dataset size |
+| generator unique ratio (`0.632`) | E3 key uniqueness |
+| `max_bytes_for_level_base`, `max_bytes_for_level_multiplier` (`256 MiB`, `10`) | E4 level configuration |
+| `write_buffer_size`, `target_file_size_base`, `memtable_flush_size` (`64 MiB`) | E5 memtable / SST size |
+| `compaction_pri` (`3`, kMinOverlappingRatio) | E6 compaction policy |
 
 ---
 
@@ -182,7 +217,16 @@ Important current semantics:
 
 - Registered virtual L0 files are immediately visible. There is no
   separate visibility or eligibility bit.
-- L0 refill is byte-targeted by `virtual_l0_visible_bytes_ < target_bytes`.
+- L0 refill is byte-targeted by `virtual_l0_visible_bytes_ < target_bytes`,
+  and (with `--vcomp_l0_backpressure`, the default) gated by the column
+  family's write-stall conditions, the way `fillrandom`'s flushes are:
+  `level0_stop_writes_trigger` / `hard_pending_compaction_bytes_limit` halt
+  the refill, `level0_slowdown_writes_trigger` /
+  `soft_pending_compaction_bytes_limit` admit one file per refill. Without
+  this gate the feed only stops on visible L0 bytes, every deeper level runs
+  far above its target during the load (7-24x at 1 TiB with small level
+  targets), and the final per-level key-range layout diverges from baseline.
+  See `experiments/docs/F2LOAD_L0_BACKPRESSURE.md`.
 - The real-vs-virtual dispatch decision is based on registry membership of
   compaction inputs, not on file-level eligibility metadata.
 

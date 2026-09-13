@@ -1147,10 +1147,14 @@ class DBImpl : public DB {
     uint64_t log_apply_us = 0;
     uint64_t install_schedule_us = 0;
     uint64_t cleanup_us = 0;
+    // Refill calls that were stopped / reduced to one file by backpressure.
+    uint64_t backpressure_stops = 0;
+    uint64_t backpressure_trickles = 0;
   };
 
   void ConfigureVirtualL0Window(uint64_t target_visible_bytes,
-                                uint64_t max_register_batch_files);
+                                uint64_t max_register_batch_files,
+                                bool backpressure);
   Status EnqueueVirtualL0Files(std::vector<VirtualL0WindowFile>&& files,
                                VirtualL0RegistrationStats* stats = nullptr);
   Status RefillVirtualL0Window(VirtualL0RegistrationStats* stats = nullptr);
@@ -1563,6 +1567,12 @@ class DBImpl : public DB {
   uint64_t virtual_l0_visible_bytes_ = 0;
   uint64_t virtual_l0_target_visible_bytes_ = 0;
   uint64_t virtual_l0_max_register_batch_files_ = 1;
+  // Gate the synthetic L0 feed with the column family's write-stall
+  // conditions, the way fillrandom's flushes are gated. Without it the feed
+  // only stops on visible L0 bytes, so every deeper level runs far above its
+  // target for the whole load (7-24x at 1 TiB with small level targets) and
+  // the final key-range layout diverges from baseline.
+  bool virtual_l0_backpressure_ = false;
   VirtualL0WindowStats virtual_l0_window_stats_;
 
   ErrorHandler error_handler_;

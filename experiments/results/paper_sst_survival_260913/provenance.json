@@ -1,0 +1,38 @@
+{
+  "rows": [
+    {
+      "case": "baseline_8tb_91b",
+      "dataset_gib": 8000,
+      "key_bytes": 48,
+      "value_bytes": 43,
+      "flush_sst_count": 154771,
+      "compaction_output_sst_count": 2805519,
+      "created_sst_count": 2960290,
+      "final_sst_count": 106160,
+      "retained_sst_pct": 3.5861351421651255,
+      "log": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/exp_260822_paper_bg_91b_8tb_direct/preserved/bench.first_complete.out",
+      "log_sha256": "588e60488f7ece3d8f9c7e868d6b3dec1808fce567a618403d155b1bfa41e684"
+    },
+    {
+      "case": "control_baseline_1tb_1kb",
+      "dataset_gib": 1000,
+      "key_bytes": 24,
+      "value_bytes": 1000,
+      "flush_sst_count": 16237,
+      "compaction_output_sst_count": 189813,
+      "created_sst_count": 206050,
+      "final_sst_count": 13461,
+      "retained_sst_pct": 6.532880368842514,
+      "log": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/baseline_1kb/phase1/bench.out",
+      "log_sha256": "58724c85acd5c579c8c5024a2e3fd5face504874ac383227b9ff407e81b6e301"
+    }
+  ],
+  "parser_sha256": "be43ff5860e3ab970f5a8308ba2e76d299e990bec6f6ee03d8844ce3456ed4b9",
+  "method": "Final levelstats count divided by flush plus compaction output sync histogram counts",
+  "control_loads": "/home/smrc/virtual_compaction/vcomp/experiments/results/paper_ch23_common_260907_f2_completion1/loads.json",
+  "control_loads_sha256": "a7db69ce7fa69f84352ef90da6ffc0631346951270e894a49e5e6b49f0655234",
+  "control_check": "Matches independently counted table_file_creation events",
+  "run_provenance": "# 8 TB true-91 B baseline run provenance\n\n- Start: 2026-08-22 07:00:21 UTC\n- Run ID: `260822_paper_bg_91b_8tb_direct`\n- Baseline repository commit: `cae42cd895f3bdeaaed1e58c0d27e2755b6ad308`\n- Baseline worktree: only untracked `make.sh`; no tracked source changes\n- Baseline binary: `/home/smrc/virtual_compaction/rocksdb/db_bench`\n- Baseline binary SHA-256: `289f4783ed194761c98e740b9def72a68950c2d31bd172804f10fbd30e314259`\n- Experiment repository commit: `f9e281caa65943140385aa99fff1066da4117be8`\n- `run_exp_91b_scaling.sh` SHA-256: `781a7786cd297a1d26b6b4174f52beca9a612cda8f62e897ec1f846af8a5b4aa`\n- `load.sh` SHA-256: `5aee2ca6251dff71fb1c8b7ca0aaca2cc15de6321948002db2e9c7fc75341295`\n- `common.sh` SHA-256: `3120838e2a4a3db7a7727fd8929ca2d725ab5e9d2cb24b7ef27f347e8b7c7497`\n- Relevant tracked runner diff SHA-256: `268b2977b00cdd76c1cc1f23e0c3be60f72aa5e350b6145d0c8b41ecb785b81b`\n- `/work` free space before run: 57 TB\n- `md0` idle-write check: 32 sectors (16 KiB) over approximately 60 seconds\n\n## Configuration\n\n- Logical target: 8,000 GiB\n- Key/value size: 48 B / 43 B (91 B total)\n- Keys: 94,394,885,626\n- Compression: none\n- Write threads: 1\n- Memtable: vector\n- Background jobs: 48\n- WAL: disabled\n- Direct reads: enabled\n- Direct I/O for flush and compaction: enabled\n- Bloom filter: 10 bits\n- Seed: 12345678\n- Final sequence: `flush,compact0,waitforcompaction,stats,levelstats`\n\nThe exact generated command is stored in the run's `raw/load_cmd.sh`.\n\n## Pilot\n\nThe same pipeline completed a 100 GiB true-91 B pilot immediately before this\nrun:\n\n- Run ID: `260822_paper_bg_91b_pilot100`\n- Status: ok\n- Elapsed: 1,824 seconds\n- `fillrandom`: 1,759.127 seconds\n- Peak RSS: 2.947 GiB\n- Final L0 file count: 0\n- Host-visible md0 writes: 913.04 GiB\n- RocksDB ingest: 116.48 GiB\n- RocksDB compaction writes: 866.43 GiB\n\n## Completion gate\n\nDo not promote the 8 TB row unless the runner exits with status `ok`, the\nsummary contains complete elapsed and benchmark metrics, final stats and\nlevelstats are present, L0 is settled, diskstats are parseable, and no\nout-of-space or background error occurred.\n",
+  "run_preservation": "# 8 TB True-91 B Baseline Log Preservation\n\n## Disposition\n\n- The first baseline run started at 2026-08-22 07:00:21 UTC and completed its\n  full `fillrandom,flush,compact0,waitforcompaction,stats,levelstats` sequence.\n- The shared `load.sh` was modified in place while the first run was active.\n  When the first `db_bench` returned, Bash resumed reading the modified file at\n  the old byte offset and unintentionally launched the measurement block a\n  second time.\n- The second run started at 2026-08-24 05:14:11 UTC and was deliberately\n  terminated with SIGTERM at 2026-08-24 11:34 UTC after the incident was\n  confirmed.\n- The incomplete second-run database directory was deleted after all available\n  logs were preserved. It is not recoverable from this workspace.\n- This artifact must not be treated as a clean device-write-amplification run.\n  `diskstats.start` was overwritten as an empty file and two `iostat` processes\n  wrote to the same output file.\n\n## Preserved logs\n\n- `scaling_91b_none/baseline_8000gb_91b_none/bench.out`: original mixed log,\n  retained unchanged after termination.\n- `preserved/bench.first_complete.out`: lines 1--489915 of the mixed log; the\n  complete first run.\n- `preserved/bench.second_interrupted.out`: lines 489916--550336 of the mixed\n  log; the interrupted second run.\n- `scaling_91b_none/run.log`: runner output, including the malformed\n  `oc/diskstats` command and the later unbound-variable error.\n- `scaling_91b_none/baseline_8000gb_91b_none/raw/time.out`: GNU time output for\n  the interrupted second run only. The first run's time file was overwritten.\n- `scaling_91b_none/baseline_8000gb_91b_none/raw/iostat.log`: retained for\n  forensic purposes only; it is not a valid time series.\n\n## Recoverable first-run result\n\n- Operations: 94,394,885,626\n- `fillrandom` time: 166,310.973 seconds (46.1975 hours)\n- Throughput: 567,580 operations/s, 49.3 MB/s\n- Final RocksDB uptime: approximately 166,414 seconds\n- `waitforcompaction`: completed with status `OK`\n- Estimated pending compaction bytes at completion: 0\n- Final reported LSM size: 6.46 TB\n- RocksDB-reported cumulative compaction write: 176,695.7 GB\n- RocksDB-reported compaction write amplification: 20.2\n\nThe first run overlapped briefly with the concurrent 100 GB subcompaction\ndiagnostic. Treat its timing as a completed but not fully isolated measurement.\nThe engine statistics above are recoverable; host-visible device write\namplification is not.\n\n## Interrupted second-run state\n\n- Wall time before termination: 6:20:11\n- Last reported ingest: 1,359.96 GB\n- Partial DB size before deletion: 1.2 TB\n- Maximum resident set size: 24,892,640 KB\n- `/proc/<db_bench>/io` immediately before termination reported\n  19,570,711,592,960 read bytes and 20,624,729,243,648 write bytes. These are\n  diagnostic process counters, not a replacement for the planned device-write\n  metric.\n\n## SHA-256\n\n```text\n0a4ccf60b72fa401fa2ce3b463e54ffbdfe41315b89ec72ba2cb9643f034800b  scaling_91b_none/baseline_8000gb_91b_none/bench.out\n588e60488f7ece3d8f9c7e868d6b3dec1808fce567a618403d155b1bfa41e684  preserved/bench.first_complete.out\n232babb1873339556fa320b981fe5f648240f5869a1193e2d770d7fc8d2e5eec  preserved/bench.second_interrupted.out\ne80adb1f52cf70d05a6956852aef144578c2bba9279422f2523dc34cc260ea27  scaling_91b_none/run.log\n7cc878ff2db21cda240378c2a78c24888651dca24027d40b5bcdcdc586dae630  scaling_91b_none/baseline_8000gb_91b_none/raw/time.out\n```\n\nThese checksums describe the files immediately after termination and log\nseparation on 2026-08-24.\n",
+  "limitation": "Counts do not establish the fraction of loading wall time spent on intermediate SSTs."
+}

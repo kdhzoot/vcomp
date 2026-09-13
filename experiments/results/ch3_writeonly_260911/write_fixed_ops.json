@@ -1,0 +1,112 @@
+[
+  {
+    "avg_latency_us": 117.085,
+    "compaction_read_per_key": 8094.5,
+    "compaction_write_per_key": 7531.1,
+    "elapsed_sec": 275.42950773239136,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 211
+      },
+      "2": {
+        "files": 46,
+        "size_mib": 2502
+      },
+      "3": {
+        "files": 438,
+        "size_mib": 25575
+      },
+      "4": {
+        "files": 4155,
+        "size_mib": 255968
+      },
+      "5": {
+        "files": 9203,
+        "size_mib": 521183
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "measured_seconds": 256.439,
+    "operations": 105003696,
+    "operations_requested": 105003696,
+    "pending_bytes_end": 0,
+    "state": "baseline",
+    "throughput_ops_sec": 409468.0,
+    "total": {
+      "compact_read_bytes": 849948808950,
+      "compact_write_bytes": 790791086080,
+      "compaction_key_drop_obsolete": 0,
+      "flush_write_bytes": 74550167499,
+      "number_keys_read": 0,
+      "number_keys_written": 105003696,
+      "stall_micros": 79363767
+    },
+    "wall_sec": 276.7,
+    "workload": "workloada",
+    "write_amplification": 10.61,
+    "write_only": true
+  },
+  {
+    "avg_latency_us": 107.208,
+    "compaction_read_per_key": 4414.1,
+    "compaction_write_per_key": 4071.9,
+    "elapsed_sec": 247.65627670288086,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 4,
+        "size_mib": 251
+      },
+      "2": {
+        "files": 47,
+        "size_mib": 2558
+      },
+      "3": {
+        "files": 482,
+        "size_mib": 25555
+      },
+      "4": {
+        "files": 4546,
+        "size_mib": 255908
+      },
+      "5": {
+        "files": 12408,
+        "size_mib": 794957
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "measured_seconds": 234.625,
+    "operations": 105003696,
+    "operations_requested": 105003696,
+    "pending_bytes_end": 0,
+    "state": "fillseq",
+    "throughput_ops_sec": 447539.0,
+    "total": {
+      "compact_read_bytes": 463491768645,
+      "compact_write_bytes": 427569176576,
+      "compaction_key_drop_obsolete": 0,
+      "flush_write_bytes": 74603096480,
+      "number_keys_read": 0,
+      "number_keys_written": 105003696,
+      "stall_micros": 81254829
+    },
+    "wall_sec": 249.1,
+    "workload": "workloada",
+    "write_amplification": 5.73,
+    "write_only": true
+  }
+]

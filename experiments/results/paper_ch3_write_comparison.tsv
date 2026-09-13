@@ -1,0 +1,3 @@
+state	label	operations	keys_written	measured_sec	throughput_ops_sec	flush_write_bytes	flush_write_gb	compaction_write_bytes	compaction_write_gb	compaction_write_per_key_bytes	write_amplification	throughput_vs_baseline	compaction_write_vs_baseline
+baseline	Incremental construction	210000000	105003686	289.583	725180.0	74518326907	74.5	812010967040	812.0	7733.2	10.9	1.0	1.0
+fillseq	Fillseq	210000000	105003686	276.923	758334.0	74523866125	74.5	447669366784	447.7	4263.4	6.01	1.046	0.551

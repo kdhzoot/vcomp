@@ -1,0 +1,3 @@
+# Sparse fixed-count YCSB A with compaction drain
+
+Full measurement: 210,000,000 operations, including 105,003,686 writes; same options and profiler as both historical fixed-A references. The benchmark tail is workloada,stats,waitforcompaction,stats,levelstats. It does not add an explicit memtable flush, matching the references. Compaction byte counters include the drain; final pending bytes are zero. Throughput and mean latency cover workload execution. Process time includes drain/open/close. A 48,000-operation pilot passed first. Each cell used a fresh SST-hardlink clone with separate mutable metadata; the original sparse DB remains unchanged.

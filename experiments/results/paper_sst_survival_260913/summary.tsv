@@ -1,0 +1,3 @@
+case	dataset_gib	key_bytes	value_bytes	flush_sst_count	compaction_output_sst_count	created_sst_count	final_sst_count	retained_sst_pct	log	log_sha256
+baseline_8tb_91b	8000	48	43	154771	2805519	2960290	106160	3.5861351421651255	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/exp_260822_paper_bg_91b_8tb_direct/preserved/bench.first_complete.out	588e60488f7ece3d8f9c7e868d6b3dec1808fce567a618403d155b1bfa41e684
+control_baseline_1tb_1kb	1000	24	1000	16237	189813	206050	13461	6.532880368842514	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/baseline_1kb/phase1/bench.out	58724c85acd5c579c8c5024a2e3fd5face504874ac383227b9ff407e81b6e301

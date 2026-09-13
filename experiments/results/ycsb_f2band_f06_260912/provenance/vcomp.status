@@ -1,0 +1,10 @@
+?? experiments/analysis/build_ch3_write_comparison.py
+?? experiments/analysis/plot_ch3_band.py
+?? experiments/analysis/plot_figure6_intervals.py
+?? experiments/docs/PAPER_FIGURE6_VARIATION_PRESENTATION.md
+?? experiments/results/ch3_band.png
+?? experiments/results/ch3_write_fixed_260911/
+?? experiments/results/ch3_writeonly_260911/
+?? experiments/results/paper_ch3_write_comparison.tsv
+?? experiments/scripts/paper/run_ch3_write_fixed_ops.py
+?? experiments/scripts/paper/run_f2load_band_chain.py

@@ -943,6 +943,24 @@ DEFINE_uint64(vcomp_global_unique_keys_max_mb, 1024,
               "reservation bitmap (one bit per key id in the trace key "
               "domain). fillvirtual fails before loading if it needs more.");
 
+DEFINE_bool(vcomp_exact_membership, false,
+            "fillvirtual only: record every ingested key id in a bitmap and "
+            "materialize from that bitmap instead of inverting the PLR model. "
+            "The set of live keys is fixed once ingestion ends, so the bitmap "
+            "is built in one pass and read-only afterwards; virtual compaction "
+            "changes only which range a file covers. Levels materialize "
+            "shallowest first; a file spends its entry budget on key ids no "
+            "shallower level has taken, then fills the remainder with ids that "
+            "one already holds, which are superseded copies. The union over "
+            "all files is therefore the ingested key set itself. Costs two "
+            "bits per key id. Synthetic and trace loads only: it needs a key "
+            "domain that is a dense integer range.");
+
+DEFINE_uint64(vcomp_exact_membership_max_mb, 1024,
+              "Memory budget, in MiB, for the two --vcomp_exact_membership "
+              "bitmaps together. fillvirtual fails before loading if the key "
+              "domain needs more.");
+
 DEFINE_string(load_trace_file, "",
               "Path to a VLOADTR1 binary key-id trace for baseload.");
 DEFINE_int64(load_trace_max_ops, 0,
@@ -2162,6 +2180,283 @@ class UniqueKeyReservation {
   }
 
   std::unique_ptr<std::atomic<uint64_t>[]> bits_;
+  uint64_t words_;
+  uint64_t key_domain_;
+};
+
+// Membership bitmap for --vcomp_exact_membership.
+//
+// One bit per key id, set while the keys are ingested. Which keys exist is a
+// property of the input sequence, not of the tree, so the bitmap is written
+// once and read afterwards; virtual compaction moves descriptors around but
+// never creates or removes a key. At materialization a file reads the set bits
+// inside its own range, which costs one pass over that range rather than a
+// pass over the domain.
+// Serves Phase 1 the key ids that db_bench's own write path would produce, in
+// batch order. A load's fidelity is judged against the state incremental
+// construction reaches from the same loading specification, and the generator
+// is part of that specification: per operation the write path draws one value
+// to pick the key generator and the next one for the key. std::mt19937_64
+// cannot be split, so one thread runs the draw while the Phase 1 shards
+// consume whole batches; the serial part is the draw alone, and sorting, model
+// fitting and bitmap marking all stay parallel behind it.
+class BaselineKeyStream {
+ public:
+  BaselineKeyStream(uint64_t seed, uint64_t domain, uint64_t total,
+                    uint64_t batch_keys, size_t depth)
+      : domain_(domain),
+        total_(total),
+        batch_keys_(std::max<uint64_t>(1, batch_keys)),
+        depth_(std::max<size_t>(1, depth)) {
+    worker_ = std::thread([this, seed]() { Produce(seed); });
+  }
+
+  ~BaselineKeyStream() { Stop(); }
+
+  // Hands over the next batch. Batches come out in the order they were drawn,
+  // so the batch a key lands in - and with it the tree Phase 1 builds - does
+  // not depend on how the shards interleave.
+  bool Next(std::vector<uint64_t>* out) {
+    std::unique_lock<std::mutex> lock(mu_);
+    ready_.wait(lock, [this] { return !queue_.empty() || finished_; });
+    if (queue_.empty()) return false;
+    *out = std::move(queue_.front());
+    queue_.pop_front();
+    space_.notify_one();
+    return true;
+  }
+
+  void Stop() {
+    {
+      std::lock_guard<std::mutex> lock(mu_);
+      stop_ = true;
+    }
+    space_.notify_all();
+    ready_.notify_all();
+    if (worker_.joinable()) worker_.join();
+  }
+
+ private:
+  void Produce(uint64_t seed) {
+    Random64 stream(seed);
+    for (uint64_t emitted = 0; emitted < total_;) {
+      const uint64_t n = std::min(batch_keys_, total_ - emitted);
+      std::vector<uint64_t> chunk;
+      chunk.reserve(static_cast<size_t>(n));
+      for (uint64_t i = 0; i < n; i++) {
+        stream.Next();
+        chunk.push_back(stream.Next() % domain_);
+      }
+      emitted += n;
+      std::unique_lock<std::mutex> lock(mu_);
+      space_.wait(lock, [this] { return queue_.size() < depth_ || stop_; });
+      if (stop_) break;
+      queue_.push_back(std::move(chunk));
+      ready_.notify_one();
+    }
+    std::lock_guard<std::mutex> lock(mu_);
+    finished_ = true;
+    ready_.notify_all();
+  }
+
+  const uint64_t domain_;
+  const uint64_t total_;
+  const uint64_t batch_keys_;
+  const size_t depth_;
+  std::mutex mu_;
+  std::condition_variable ready_;
+  std::condition_variable space_;
+  std::deque<std::vector<uint64_t>> queue_;
+  bool finished_ = false;
+  bool stop_ = false;
+  std::thread worker_;
+};
+
+class KeyMembership {
+ public:
+  static std::unique_ptr<KeyMembership> Create(uint64_t key_domain,
+                                               uint64_t max_bytes,
+                                               std::string* error) {
+    if (key_domain == 0) {
+      *error = "key domain is zero";
+      return nullptr;
+    }
+    const uint64_t words = (key_domain + 63) / 64;
+    if (words > max_bytes / sizeof(uint64_t)) {
+      char message[192];
+      snprintf(message, sizeof(message),
+               "key domain %" PRIu64 " needs %" PRIu64 " bytes > budget %" PRIu64
+               " bytes",
+               key_domain, words * sizeof(uint64_t), max_bytes);
+      *error = message;
+      return nullptr;
+    }
+    return std::unique_ptr<KeyMembership>(new KeyMembership(key_domain, words));
+  }
+
+  // Which keys of a range a cursor walks. kNewest is the keys no shallower
+  // level has claimed yet, so the file that emits them becomes the shallowest
+  // holder and is where a lookup stops. kStale is the keys a shallower level
+  // already holds, so a deeper copy of them is a superseded version. The two
+  // are disjoint and together are kPresent.
+  enum Mode { kPresent, kNewest, kStale };
+
+  uint64_t key_domain() const { return key_domain_; }
+  uint64_t bytes() const {
+    return words_ * sizeof(uint64_t) * (claimed_ == nullptr ? 1 : 2);
+  }
+  bool claims_enabled() const { return claimed_ != nullptr; }
+
+  // Adds the companion bitmap that records which key ids a shallower level has
+  // already taken. Called once, before materialization starts.
+  void EnableClaims() {
+    if (claimed_ == nullptr) claimed_.reset(new std::atomic<uint64_t>[words_]());
+  }
+
+  // Ingestion. Phase 1 shards run concurrently and repeat key ids freely, so
+  // the write is an unconditional relaxed or.
+  void Mark(uint64_t key) {
+    if (key >= key_domain_) return;
+    bits_[key >> 6].fetch_or(uint64_t{1} << (key & 63), std::memory_order_relaxed);
+  }
+
+  // Replay marks from one thread only, so the read-modify-write does not have
+  // to be atomic. A relaxed load/store pair compiles to plain moves and drops
+  // the lock prefix that Mark()'s fetch_or carries on every key.
+  void MarkSerial(uint64_t key) {
+    if (key >= key_domain_) return;
+    std::atomic<uint64_t>& word = bits_[key >> 6];
+    word.store(word.load(std::memory_order_relaxed) |
+                   (uint64_t{1} << (key & 63)),
+               std::memory_order_relaxed);
+  }
+
+  // Materialization. Same-level ranges are disjoint and levels are separated
+  // by a barrier, so claims never race for the same word's outcome.
+  void Claim(uint64_t key) {
+    if (claimed_ == nullptr || key >= key_domain_) return;
+    claimed_[key >> 6].fetch_or(uint64_t{1} << (key & 63),
+                                std::memory_order_relaxed);
+  }
+
+  uint64_t ClaimedTotal() const {
+    if (claimed_ == nullptr) return 0;
+    uint64_t taken = 0;
+    for (uint64_t word = 0; word < words_; word++) {
+      taken += static_cast<uint64_t>(
+          BitsSetToOne(claimed_[word].load(std::memory_order_relaxed)));
+    }
+    return taken;
+  }
+
+  uint64_t CountPresent(uint64_t first, uint64_t last,
+                        Mode mode = kPresent) const {
+    uint64_t present = 0;
+    ForEachWord(first, last, [&](uint64_t word, uint64_t mask) {
+      present += static_cast<uint64_t>(BitsSetToOne(mask & Word(word, mode)));
+      return true;
+    });
+    return present;
+  }
+
+  uint64_t Total() const {
+    uint64_t present = 0;
+    for (uint64_t word = 0; word < words_; word++) {
+      present += static_cast<uint64_t>(BitsSetToOne(Load(word)));
+    }
+    return present;
+  }
+
+  // Walks the present keys of one range in order and hands back `want` of them,
+  // spread evenly over the range rather than taken from its start, so a file
+  // that plans fewer entries than its range holds keeps the range's density.
+  class Cursor {
+   public:
+    Cursor(const KeyMembership* map, uint64_t first, uint64_t last,
+           uint64_t want, Mode mode = kPresent)
+        : map_(map), last_(last), want_(want), mode_(mode) {
+      present_ = map->CountPresent(first, last, mode);
+      if (first < map->key_domain_) {
+        word_ = first >> 6;
+        const uint64_t low = first & 63;
+        pending_ = map->Word(word_, mode) & ((~uint64_t{0}) << low);
+      } else {
+        word_ = map->words_;
+      }
+    }
+
+    uint64_t present() const { return present_; }
+
+    bool Next(uint64_t* key) {
+      if (want_ == 0 || emitted_ >= want_ || present_ == 0) return false;
+      const uint64_t target = emitted_ * present_ / want_;
+      while (true) {
+        while (pending_ == 0) {
+          if (++word_ >= map_->words_ || (word_ << 6) > last_) return false;
+          pending_ = map_->Word(word_, mode_);
+        }
+        const uint64_t bit = static_cast<uint64_t>(CountTrailingZeroBits(pending_));
+        pending_ &= pending_ - 1;
+        const uint64_t candidate = (word_ << 6) + bit;
+        if (candidate > last_) return false;
+        const uint64_t rank = seen_++;
+        if (rank >= target) {
+          emitted_++;
+          *key = candidate;
+          return true;
+        }
+      }
+    }
+
+   private:
+    const KeyMembership* map_;
+    uint64_t last_;
+    uint64_t want_;
+    Mode mode_ = kPresent;
+    uint64_t present_ = 0;
+    uint64_t word_ = 0;
+    uint64_t pending_ = 0;
+    uint64_t seen_ = 0;
+    uint64_t emitted_ = 0;
+  };
+
+  Cursor NewCursor(uint64_t first, uint64_t last, uint64_t want,
+                   Mode mode = kPresent) const {
+    return Cursor(this, first, last, want, mode);
+  }
+
+ private:
+  KeyMembership(uint64_t key_domain, uint64_t words)
+      : bits_(new std::atomic<uint64_t>[words]()),
+        words_(words),
+        key_domain_(key_domain) {}
+
+  uint64_t Load(uint64_t word) const {
+    return bits_[word].load(std::memory_order_relaxed);
+  }
+  uint64_t Word(uint64_t word, Mode mode) const {
+    const uint64_t present = Load(word);
+    if (mode == kPresent || claimed_ == nullptr) return present;
+    const uint64_t taken = claimed_[word].load(std::memory_order_relaxed);
+    return mode == kNewest ? (present & ~taken) : (present & taken);
+  }
+
+  template <typename Fn>
+  void ForEachWord(uint64_t first, uint64_t last, Fn fn) const {
+    if (first > last || first >= key_domain_) return;
+    if (last >= key_domain_) last = key_domain_ - 1;
+    const uint64_t last_word = last >> 6;
+    for (uint64_t word = first >> 6; word <= last_word; word++) {
+      const uint64_t low_bit = (word == (first >> 6)) ? (first & 63) : 0;
+      const uint64_t high_bit = (word == last_word) ? (last & 63) : 63;
+      uint64_t mask = (~uint64_t{0}) << low_bit;
+      mask &= (~uint64_t{0}) >> (63 - high_bit);
+      if (!fn(word, mask)) return;
+    }
+  }
+
+  std::unique_ptr<std::atomic<uint64_t>[]> bits_;
+  std::unique_ptr<std::atomic<uint64_t>[]> claimed_;
   uint64_t words_;
   uint64_t key_domain_;
 };
@@ -5703,6 +5998,70 @@ class Benchmark {
               unique_reservation->key_domain(),
               unique_reservation->bytes() >> 20);
     }
+    // Allocated before Phase 1 for the same reason as the reservation: an
+    // oversized key domain must fail now, not after the load.
+    std::unique_ptr<KeyMembership> membership;
+    if (FLAGS_vcomp_exact_membership) {
+      if (FLAGS_vcomp_global_unique_keys) {
+        fprintf(stderr,
+                "fillvirtual: --vcomp_exact_membership and "
+                "--vcomp_global_unique_keys both drive key selection; enable "
+                "one of them\n");
+        if (load_trace_fp != nullptr) {
+          fclose(load_trace_fp);
+          load_trace_fp = nullptr;
+        }
+        db_bench_exit(1);
+        return;
+      }
+      // Two bitmaps of the key domain: which ids were ingested, and which a
+      // shallower level has already taken. The budget covers both.
+      std::string membership_error;
+      membership = KeyMembership::Create(
+          key_domain_for_keys,
+          FLAGS_vcomp_exact_membership_max_mb * 1024 * 1024 / 2,
+          &membership_error);
+      if (membership == nullptr) {
+        fprintf(stderr,
+                "fillvirtual: --vcomp_exact_membership bitmap: %s "
+                "(raise --vcomp_exact_membership_max_mb)\n",
+                membership_error.c_str());
+        if (load_trace_fp != nullptr) {
+          fclose(load_trace_fp);
+          load_trace_fp = nullptr;
+        }
+        db_bench_exit(1);
+        return;
+      }
+      membership->EnableClaims();
+      fprintf(stderr,
+              "FillVirtual: exact membership on, key domain %" PRIu64
+              ", bitmaps %" PRIu64 " MiB\n",
+              membership->key_domain(), membership->bytes() >> 20);
+    }
+
+    // Which key ids the bitmap records. Phase 1 draws from per-batch streams so
+    // that batches stay independent, which preserves the key distribution but
+    // not the realization db_bench's write path would have produced. For a
+    // synthetic load the keys therefore come from BaselineKeyStream instead, so
+    // that the tree Phase 1 builds and the key set it materializes are one
+    // sample rather than two. A trace load needs none of this: its key ids come
+    // from the trace both times.
+    if (membership != nullptr && !use_load_trace && FLAGS_threads != 1) {
+      fprintf(stderr,
+              "fillvirtual: --vcomp_exact_membership replays the write path's "
+              "key stream, which is defined per writer thread; run the load "
+              "with --threads=1\n");
+      if (load_trace_fp != nullptr) {
+        fclose(load_trace_fp);
+        load_trace_fp = nullptr;
+      }
+      db_bench_exit(1);
+      return;
+    }
+    const bool membership_drives_keys =
+        membership != nullptr && !use_load_trace;
+    KeyMembership* const ingest_membership = membership.get();
     // Calibration is mandatory loading work, included in Phase 1 and Total.
     auto phase1_start = FLAGS_env->NowMicros();
     const Options materialization_options = VirtualMaterializationOptions();
@@ -6141,25 +6500,35 @@ class Benchmark {
     };
 
     auto process_synthetic_batch =
-        [&](uint64_t batch_id, uint64_t batch_keys) {
+        [&](uint64_t batch_id, uint64_t batch_keys,
+            std::vector<uint64_t> supplied) {
           Phase1BatchResult result;
           result.pending_file.file_number = reserved_l0_file_base + batch_id;
           result.pending_file.epoch_number = batch_id + 1;
 
           std::vector<uint64_t> keys;
-          keys.reserve(static_cast<size_t>(batch_keys));
 
           auto keygen_t0 = FLAGS_env->NowMicros();
-          // Parallel mode intentionally uses deterministic per-batch streams.
-          // This preserves the uniform-random workload while avoiding a shared
-          // RNG bottleneck and keeping batch/file order deterministic.
-          const uint64_t seed =
-              static_cast<uint64_t>(*seed_base) ^
-              (0x9e3779b97f4a7c15ULL + batch_id * 0xbf58476d1ce4e5b9ULL);
-          Random64 local_rng(seed);
-          for (uint64_t i = 0; i < batch_keys; ++i) {
-            keys.push_back(local_rng.Next() % key_domain_for_keys);
+          const bool from_stream = !supplied.empty();
+          if (from_stream) {
+            // The write path's own draw, handed over by BaselineKeyStream.
+            keys = std::move(supplied);
+          } else {
+            keys.reserve(static_cast<size_t>(batch_keys));
+            // Parallel mode intentionally uses deterministic per-batch streams.
+            // This preserves the uniform-random workload while avoiding a
+            // shared RNG bottleneck and keeping batch/file order deterministic.
+            const uint64_t seed =
+                static_cast<uint64_t>(*seed_base) ^
+                (0x9e3779b97f4a7c15ULL + batch_id * 0xbf58476d1ce4e5b9ULL);
+            Random64 local_rng(seed);
+            for (uint64_t i = 0; i < batch_keys; ++i) {
+              const uint64_t key_id = local_rng.Next() % key_domain_for_keys;
+              keys.push_back(key_id);
+              if (ingest_membership != nullptr) ingest_membership->Mark(key_id);
+            }
           }
+          const bool already_marked = !from_stream;
           auto keygen_t1 = FLAGS_env->NowMicros();
 
           auto sort_t0 = keygen_t1;
@@ -6231,6 +6600,12 @@ class Benchmark {
             unique_t0 = FLAGS_env->NowMicros();
           }
           keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+          if (ingest_membership != nullptr && !already_marked) {
+            // Marked here rather than as the ids arrive: the batch is sorted
+            // and duplicate-free by now, so the bitmap is touched in ascending
+            // order and once per distinct id.
+            for (uint64_t key_id : keys) ingest_membership->Mark(key_id);
+          }
           auto sort_t1 = FLAGS_env->NowMicros();
           if (FLAGS_vcomp_sort_detail_timing) {
             result.sort_unique_us += sort_t1 - unique_t0;
@@ -6440,6 +6815,11 @@ class Benchmark {
           memtable_buf.resize(old_size + take);
           memcpy(memtable_buf.data() + old_size, trace_read_buf.data() + pos,
                  take * sizeof(uint64_t));
+          if (membership != nullptr) {
+            for (size_t i = 0; i < take; i++) {
+              membership->Mark(trace_read_buf[pos + i]);
+            }
+          }
           pos += take;
           trace_records_read += static_cast<int64_t>(take);
 
@@ -6455,6 +6835,18 @@ class Benchmark {
     } else {
       const uint64_t phase1_shards =
           std::max<uint64_t>(1, FLAGS_vcomp_phase1_shards);
+      // One producer, deep enough to keep every shard fed while it draws.
+      std::unique_ptr<BaselineKeyStream> key_stream;
+      if (membership_drives_keys) {
+        key_stream.reset(new BaselineKeyStream(
+            static_cast<uint64_t>(*seed_base + 1), key_domain_for_keys,
+            static_cast<uint64_t>(num_ops), memtable_capacity,
+            2 * std::max<uint64_t>(1, phase1_shards)));
+        fprintf(stderr,
+                "FillVirtual: exact membership drives Phase 1 keys from the "
+                "write path's stream (seed %" PRIu64 ")\n",
+                static_cast<uint64_t>(*seed_base + 1));
+      }
       if (phase1_shards > 1) {
         fprintf(stderr,
                 "FillVirtual: parallel synthetic Phase 1 enabled "
@@ -6477,9 +6869,15 @@ class Benchmark {
           const uint64_t remaining =
               static_cast<uint64_t>(num_ops) - batch_start;
           const uint64_t batch_keys = std::min(memtable_capacity, remaining);
+          std::vector<uint64_t> supplied;
+          if (key_stream != nullptr && !key_stream->Next(&supplied)) {
+            fprintf(stderr, "FillVirtual: key stream ended early at batch %"
+                    PRIu64 "\n", batch_id);
+            break;
+          }
           in_flight.emplace_back(std::async(std::launch::async,
                                             process_synthetic_batch, batch_id,
-                                            batch_keys));
+                                            batch_keys, std::move(supplied)));
           if (in_flight.size() >= phase1_shards) {
             drain_one_parallel_batch();
           }
@@ -6490,12 +6888,20 @@ class Benchmark {
           drain_one_parallel_batch();
         }
       } else {
+        Random64 write_path_stream(static_cast<uint64_t>(*seed_base + 1));
         for (int64_t i = 0; i < num_ops; i++) {
           if (l0_window_failed.load(std::memory_order_relaxed)) {
             break;
           }
-          uint64_t key_id = rng.Next() % key_domain_for_keys;
+          uint64_t key_id;
+          if (membership_drives_keys) {
+            write_path_stream.Next();
+            key_id = write_path_stream.Next() % key_domain_for_keys;
+          } else {
+            key_id = rng.Next() % key_domain_for_keys;
+          }
           memtable_buf.push_back(key_id);
+          if (ingest_membership != nullptr) ingest_membership->Mark(key_id);
 
           if (memtable_buf.size() >= memtable_capacity) {
             do_flush();
@@ -7121,7 +7527,7 @@ class Benchmark {
       // task_order sequence. Without the flag there is one group in the
       // original task order.
       std::vector<std::vector<size_t>> groups;
-      if (unique_reservation == nullptr) {
+      if (unique_reservation == nullptr && membership == nullptr) {
         groups.emplace_back(tasks.size());
         for (size_t i = 0; i < tasks.size(); i++) groups.back()[i] = i;
       } else {
@@ -7132,7 +7538,9 @@ class Benchmark {
           }
           groups.back().push_back(idx);
         }
-        if (FLAGS_vcomp_global_unique_keys_deep_first) {
+        // Exact membership needs shallowest first: a level may only take a
+        // key id as its own after every shallower level has had its turn.
+        if (FLAGS_vcomp_global_unique_keys_deep_first && membership == nullptr) {
           std::reverse(groups.begin(), groups.end());
         }
       }
@@ -7142,7 +7550,8 @@ class Benchmark {
 
       for (const auto& group : groups) {
       const bool overlapping_group =
-          unique_reservation != nullptr && tasks[group.front()].level == 0;
+          (unique_reservation != nullptr || membership != nullptr) &&
+          tasks[group.front()].level == 0;
       const size_t group_workers =
           overlapping_group ? 1 : std::min(num_workers, group.size());
       std::vector<std::thread> threads;
@@ -7222,6 +7631,63 @@ class Benchmark {
               }
             }
 
+            // Exact membership: this file emits the key ids that were
+            // actually ingested inside its range, so the model is used only
+            // for how many entries the file holds, not for which keys.
+            //
+            // The budget is spent on unclaimed keys first. Those make this
+            // file the shallowest holder of them, which is where a lookup
+            // stops, and levels are materialized shallowest first, so the
+            // assignment follows the tree's own ordering. Whatever budget is
+            // left over is filled with keys a shallower level already holds,
+            // which is exactly what a superseded version is; those land in the
+            // deepest levels because that is where the leftover budget is.
+            // Across all files the union is then the ingested key set itself,
+            // once, with the remaining entries as stale copies.
+            //
+            // Both cursors walk the range in ascending order over disjoint
+            // sets, so merging them keeps the file's keys sorted and distinct.
+            // Claims are buffered and applied after the file is written: the
+            // stale cursor reads the same bitmap, and claiming mid-file would
+            // let it see this file's own fresh keys.
+            std::unique_ptr<KeyMembership::Cursor> member_fresh;
+            std::unique_ptr<KeyMembership::Cursor> member_stale;
+            bool member_have[2] = {false, false};
+            uint64_t member_next[2] = {0, 0};
+            std::vector<uint64_t> member_claims;
+            if (membership != nullptr) {
+              uint64_t member_hi = task.materialize_key_max;
+              if (member_hi >= membership->key_domain()) {
+                member_hi = membership->key_domain() - 1;
+              }
+              const uint64_t member_lo = task.materialize_key_min;
+              const uint64_t want = task.vsst->num_entries;
+              const uint64_t fresh_avail = membership->CountPresent(
+                  member_lo, member_hi, KeyMembership::kNewest);
+              const uint64_t stale_avail = membership->CountPresent(
+                  member_lo, member_hi, KeyMembership::kStale);
+              const uint64_t want_fresh = std::min(want, fresh_avail);
+              const uint64_t want_stale =
+                  std::min(want - want_fresh, stale_avail);
+              member_fresh.reset(new KeyMembership::Cursor(
+                  membership->NewCursor(member_lo, member_hi, want_fresh,
+                                        KeyMembership::kNewest)));
+              member_stale.reset(new KeyMembership::Cursor(
+                  membership->NewCursor(member_lo, member_hi, want_stale,
+                                        KeyMembership::kStale)));
+              res.unique_free_capacity = fresh_avail + stale_avail;
+              res.unique_shortfall = want - want_fresh - want_stale;
+              member_claims.reserve(want_fresh);
+              member_have[0] = member_fresh->Next(&member_next[0]);
+              member_have[1] = member_stale->Next(&member_next[1]);
+              if (!member_have[0] && !member_have[1]) {
+                res.report_status = "skipped";
+                res.stop_reason = "membership_empty_range";
+                res.ok = true;
+                continue;
+              }
+            }
+
             // Write SST file.
             std::string sst_path = TableFileName(
                 cfd->ioptions().cf_paths, res.file_number, 0u);
@@ -7269,7 +7735,24 @@ class Benchmark {
                 break;
               }
               uint64_t k;
-              if (discrete != nullptr) {
+              if (member_fresh != nullptr) {
+                int pick;
+                if (member_have[0] && member_have[1]) {
+                  pick = member_next[0] <= member_next[1] ? 0 : 1;
+                } else if (member_have[0]) {
+                  pick = 0;
+                } else if (member_have[1]) {
+                  pick = 1;
+                } else {
+                  res.stop_reason = "membership_exhausted";
+                  break;
+                }
+                k = member_next[pick];
+                if (pick == 0) member_claims.push_back(k);
+                member_have[pick] =
+                    (pick == 0 ? member_fresh : member_stale)
+                        ->Next(&member_next[pick]);
+              } else if (discrete != nullptr) {
                 if (!discrete_cursor.Next(&k)) {
                   res.stop_reason = "discrete_cursor_exhausted";
                   break;
@@ -7375,7 +7858,8 @@ class Benchmark {
             // Entries that no free key could carry are a measured capacity
             // limit of global-unique materialization, so they count as a
             // shortfall. Any other missing entry still fails the file.
-            if ((discrete != nullptr || unique_reservation != nullptr) &&
+            if ((discrete != nullptr || unique_reservation != nullptr ||
+                 membership != nullptr) &&
                 (keys_in_file + res.unique_shortfall !=
                      task.vsst->num_entries ||
                  !discrete_cursor_ok || res.skipped_nonincreasing_keys != 0)) {
@@ -7402,6 +7886,13 @@ class Benchmark {
                 fprintf(stderr, "SST Finish failed: %s\n", s.ToString().c_str());
               }
               continue;
+            }
+
+            // The file is on disk, so the key ids it took are now the
+            // shallowest copy of themselves and deeper levels must treat them
+            // as superseded.
+            if (membership != nullptr) {
+              for (uint64_t claimed : member_claims) membership->Claim(claimed);
             }
 
             uint64_t fsize = 0;
@@ -7436,6 +7927,29 @@ class Benchmark {
       auto phase2a_end = FLAGS_env->NowMicros();
       fprintf(stderr, "  Phase 2a (materialize + SST write): %.3f sec\n",
               (phase2a_end - phase2a_start) / 1e6);
+      if (membership != nullptr) {
+        // Claimed bits are the key ids that got a shallowest holder, so their
+        // count against the ingested total is the in-run coverage oracle, and
+        // entries beyond them are the superseded copies.
+        uint64_t shortfall = 0, short_files = 0, put_successes = 0;
+        for (const auto& res : results) {
+          shortfall += res.unique_shortfall;
+          short_files += res.unique_shortfall != 0 ? 1 : 0;
+          put_successes += res.put_successes;
+        }
+        const uint64_t ingested = membership->CountPresent(
+            0, membership->key_domain() - 1, KeyMembership::kPresent);
+        const uint64_t claimed = membership->ClaimedTotal();
+        fprintf(stderr,
+                "  Phase 2a exact membership: ingested key ids %" PRIu64
+                ", covered %" PRIu64 " (%.4f%%), materialized entries %" PRIu64
+                ", stale copies %" PRIu64 ", shortfall %" PRIu64
+                " entries in %" PRIu64 " files\n",
+                ingested, claimed,
+                ingested == 0 ? 0.0 : 100.0 * claimed / ingested, put_successes,
+                put_successes >= claimed ? put_successes - claimed : 0,
+                shortfall, short_files);
+      }
       if (unique_reservation != nullptr) {
         // Taken bits are distinct by construction, so their count equal to the
         // materialized entries is the in-run global-uniqueness oracle.

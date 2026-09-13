@@ -1,0 +1,56 @@
+[
+  {
+    "avg_latency_us": 63.234,
+    "compaction_read_per_key": 4605.5,
+    "compaction_write_per_key": 4263.4,
+    "elapsed_sec": 291.57586646080017,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 4,
+        "size_mib": 200
+      },
+      "2": {
+        "files": 44,
+        "size_mib": 2515
+      },
+      "3": {
+        "files": 487,
+        "size_mib": 25571
+      },
+      "4": {
+        "files": 4549,
+        "size_mib": 255942
+      },
+      "5": {
+        "files": 12408,
+        "size_mib": 794957
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "measured_seconds": 276.923,
+    "operations": 210000000,
+    "operations_requested": 210000000,
+    "pending_bytes_end": 0,
+    "state": "fillseq",
+    "throughput_ops_sec": 758334.0,
+    "total": {
+      "compact_read_bytes": 483595487127,
+      "compact_write_bytes": 447669366784,
+      "compaction_key_drop_obsolete": 0,
+      "flush_write_bytes": 74523866125,
+      "number_keys_read": 104996314,
+      "number_keys_written": 105003686,
+      "stall_micros": 51135511
+    },
+    "wall_sec": 293.0,
+    "workload": "workloada",
+    "write_amplification": 6.01
+  }
+]

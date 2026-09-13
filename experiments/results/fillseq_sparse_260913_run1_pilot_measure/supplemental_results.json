@@ -1,0 +1,530 @@
+[
+  {
+    "avg_latency_us": 15.104,
+    "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+    "bloom_full_positive": 6059298,
+    "bloom_full_true_positive": 6026077,
+    "bloom_positive_per_op": 0.6355038619198468,
+    "bloom_true_positive_per_op": 0.6320196177389468,
+    "bloom_useful": 3475300,
+    "clone_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1_pilot_measure/pilot_extra/uniform_read/baseline",
+    "data_cache_hit": 5893612,
+    "data_cache_miss": 165775,
+    "ended_epoch": 1789280948.5675151,
+    "exit_code": 0,
+    "filter_cache_hit": 9534580,
+    "filter_cache_miss": 18,
+    "filter_positive_pct": 63.55063947111352,
+    "filter_probes": 9534598,
+    "filter_probes_per_op": 0.9999960145306019,
+    "final_levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 142
+      },
+      "2": {
+        "files": 8,
+        "size_mib": 515
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "index_cache_hit": 6059267,
+    "index_cache_miss": 31,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_260913_run1_pilot_measure/pilot_extra/uniform_read/baseline",
+    "measured_seconds": 3.005,
+    "operations": 9534636,
+    "p50_latency_us": 4.912274,
+    "p95_latency_us": 64.549043,
+    "p99_latency_us": 101.47276,
+    "peak_rss_kb": 903280,
+    "phase": "pilot_extra",
+    "process_elapsed_sec": 3.1731348037719727,
+    "source_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1/pilot_baseline",
+    "started_epoch": 1789280945.3943799,
+    "status": "ok",
+    "successful_gets": 6026077,
+    "successful_lookup_pct": 63.20196177389467,
+    "swap_pages_in": 0,
+    "system": "baseline",
+    "throughput_ops_sec": 3173269.0,
+    "timed_out": false,
+    "workload": "uniform_read"
+  },
+  {
+    "avg_latency_us": 77.419,
+    "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+    "clone_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1_pilot_measure/pilot_extra/fixed_a/baseline",
+    "ended_epoch": 1789280954.4426045,
+    "exit_code": 0,
+    "final_levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 142
+      },
+      "2": {
+        "files": 8,
+        "size_mib": 515
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_260913_run1_pilot_measure/pilot_extra/fixed_a/baseline",
+    "measured_seconds": 0.084,
+    "operations": 48000,
+    "operations_requested": 48000,
+    "peak_rss_kb": 192524,
+    "pending_bytes_end": 0,
+    "phase": "pilot_extra",
+    "process_elapsed_sec": 5.2239625453948975,
+    "source_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1/pilot_baseline",
+    "started_epoch": 1789280949.2186415,
+    "status": "ok",
+    "swap_pages_in": 0,
+    "system": "baseline",
+    "throughput_ops_sec": 572307.0,
+    "timed_out": false,
+    "total": {
+      "compact_read_bytes": 0,
+      "compact_write_bytes": 0,
+      "compaction_key_drop_obsolete": 0,
+      "flush_write_bytes": 0,
+      "number_keys_read": 24056,
+      "number_keys_written": 23944,
+      "stall_micros": 0
+    },
+    "workload": "fixed_a"
+  },
+  {
+    "avg_latency_us": 12.945,
+    "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+    "bloom_full_positive": 7069919,
+    "bloom_full_true_positive": 7030737,
+    "bloom_positive_per_op": 0.6355138179096318,
+    "bloom_true_positive_per_op": 0.6319917545856623,
+    "bloom_useful": 4054665,
+    "clone_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1_pilot_measure/pilot_extra/uniform_read/fillseq_sparse",
+    "data_cache_hit": 6904162,
+    "data_cache_miss": 165773,
+    "ended_epoch": 1789280974.353678,
+    "exit_code": 0,
+    "filter_cache_hit": 11124570,
+    "filter_cache_miss": 14,
+    "filter_positive_pct": 63.552210132082244,
+    "filter_probes": 11124584,
+    "filter_probes_per_op": 0.9999869659746319,
+    "final_levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 147
+      },
+      "2": {
+        "files": 8,
+        "size_mib": 511
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "index_cache_hit": 7069895,
+    "index_cache_miss": 24,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_260913_run1_pilot_measure/pilot_extra/uniform_read/fillseq_sparse",
+    "measured_seconds": 3.005,
+    "operations": 11124729,
+    "p50_latency_us": 5.780632,
+    "p95_latency_us": 43.909203,
+    "p99_latency_us": 89.430845,
+    "peak_rss_kb": 902976,
+    "phase": "pilot_extra",
+    "process_elapsed_sec": 3.17372989654541,
+    "source_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1/pilot_sparse",
+    "started_epoch": 1789280971.1799474,
+    "status": "ok",
+    "successful_gets": 7030737,
+    "successful_lookup_pct": 63.19917545856622,
+    "swap_pages_in": 0,
+    "system": "fillseq_sparse",
+    "throughput_ops_sec": 3702599.0,
+    "timed_out": false,
+    "workload": "uniform_read"
+  },
+  {
+    "avg_latency_us": 40.044,
+    "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+    "clone_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1_pilot_measure/pilot_extra/fixed_a/fillseq_sparse",
+    "ended_epoch": 1789280980.2226186,
+    "exit_code": 0,
+    "final_levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 147
+      },
+      "2": {
+        "files": 8,
+        "size_mib": 511
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_260913_run1_pilot_measure/pilot_extra/fixed_a/fillseq_sparse",
+    "measured_seconds": 0.047,
+    "operations": 48000,
+    "operations_requested": 48000,
+    "peak_rss_kb": 191784,
+    "pending_bytes_end": 0,
+    "phase": "pilot_extra",
+    "process_elapsed_sec": 5.224264621734619,
+    "source_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1/pilot_sparse",
+    "started_epoch": 1789280974.9983532,
+    "status": "ok",
+    "swap_pages_in": 0,
+    "system": "fillseq_sparse",
+    "throughput_ops_sec": 1026189.0,
+    "timed_out": false,
+    "total": {
+      "compact_read_bytes": 0,
+      "compact_write_bytes": 0,
+      "compaction_key_drop_obsolete": 0,
+      "flush_write_bytes": 0,
+      "number_keys_read": 24056,
+      "number_keys_written": 23944,
+      "stall_micros": 0
+    },
+    "workload": "fixed_a"
+  },
+  {
+    "avg_latency_us": 14.362,
+    "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+    "bloom_full_positive": 6372101,
+    "bloom_full_true_positive": 6337138,
+    "bloom_positive_per_op": 0.6354721472245556,
+    "bloom_true_positive_per_op": 0.6319853831755532,
+    "bloom_useful": 3655205,
+    "clone_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1_pilot_measure/full_extra/uniform_read/baseline",
+    "data_cache_hit": 6206414,
+    "data_cache_miss": 165779,
+    "ended_epoch": 1789280984.0500455,
+    "exit_code": 0,
+    "filter_cache_hit": 10027290,
+    "filter_cache_miss": 16,
+    "filter_positive_pct": 63.547487231366034,
+    "filter_probes": 10027306,
+    "filter_probes_per_op": 0.9999957117279951,
+    "final_levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 142
+      },
+      "2": {
+        "files": 8,
+        "size_mib": 515
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "index_cache_hit": 6372069,
+    "index_cache_miss": 32,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_260913_run1_pilot_measure/full_extra/uniform_read/baseline",
+    "measured_seconds": 3.005,
+    "operations": 10027349,
+    "p50_latency_us": 5.350806,
+    "p95_latency_us": 54.445517,
+    "p99_latency_us": 95.764446,
+    "peak_rss_kb": 903132,
+    "phase": "full_extra",
+    "process_elapsed_sec": 3.1823649406433105,
+    "source_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1/pilot_baseline",
+    "started_epoch": 1789280980.86768,
+    "status": "ok",
+    "successful_gets": 6337138,
+    "successful_lookup_pct": 63.19853831755532,
+    "swap_pages_in": 0,
+    "system": "baseline",
+    "throughput_ops_sec": 3337264.0,
+    "timed_out": false,
+    "workload": "uniform_read"
+  },
+  {
+    "avg_latency_us": 12.831,
+    "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+    "bloom_full_positive": 7132376,
+    "bloom_full_true_positive": 7092863,
+    "bloom_positive_per_op": 0.63549235498093,
+    "bloom_true_positive_per_op": 0.6319717596810802,
+    "bloom_useful": 4090862,
+    "clone_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1_pilot_measure/full_extra/uniform_read/fillseq_sparse",
+    "data_cache_hit": 6966611,
+    "data_cache_miss": 165781,
+    "ended_epoch": 1789280987.8656294,
+    "exit_code": 0,
+    "filter_cache_hit": 11223223,
+    "filter_cache_miss": 15,
+    "filter_positive_pct": 63.55007351710799,
+    "filter_probes": 11223238,
+    "filter_probes_per_op": 0.9999868132486934,
+    "final_levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 147
+      },
+      "2": {
+        "files": 8,
+        "size_mib": 511
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "index_cache_hit": 7132346,
+    "index_cache_miss": 30,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_260913_run1_pilot_measure/full_extra/uniform_read/fillseq_sparse",
+    "measured_seconds": 3.005,
+    "operations": 11223386,
+    "p50_latency_us": 5.351332,
+    "p95_latency_us": 45.424261,
+    "p99_latency_us": 93.410135,
+    "peak_rss_kb": 903120,
+    "phase": "full_extra",
+    "process_elapsed_sec": 3.1733343601226807,
+    "source_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1/pilot_sparse",
+    "started_epoch": 1789280984.6922944,
+    "status": "ok",
+    "successful_gets": 7092863,
+    "successful_lookup_pct": 63.19717596810802,
+    "swap_pages_in": 0,
+    "system": "fillseq_sparse",
+    "throughput_ops_sec": 3735282.0,
+    "timed_out": false,
+    "workload": "uniform_read"
+  },
+  {
+    "avg_latency_us": 66.937,
+    "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+    "clone_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1_pilot_measure/full_extra/fixed_a/fillseq_sparse",
+    "ended_epoch": 1789281041.2645452,
+    "exit_code": 0,
+    "final_levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 147
+      },
+      "2": {
+        "files": 8,
+        "size_mib": 511
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_260913_run1_pilot_measure/full_extra/fixed_a/fillseq_sparse",
+    "measured_seconds": 0.072,
+    "operations": 48000,
+    "operations_requested": 48000,
+    "peak_rss_kb": 194932,
+    "pending_bytes_end": 0,
+    "phase": "full_extra",
+    "process_elapsed_sec": 5.22523045539856,
+    "source_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1/pilot_sparse",
+    "started_epoch": 1789281036.039314,
+    "status": "ok",
+    "swap_pages_in": 0,
+    "system": "fillseq_sparse",
+    "throughput_ops_sec": 663845.0,
+    "timed_out": false,
+    "total": {
+      "compact_read_bytes": 0,
+      "compact_write_bytes": 0,
+      "compaction_key_drop_obsolete": 0,
+      "flush_write_bytes": 0,
+      "number_keys_read": 24056,
+      "number_keys_written": 23944,
+      "stall_micros": 0
+    },
+    "workload": "fixed_a"
+  },
+  {
+    "avg_latency_us": 38.879,
+    "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+    "clone_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1_pilot_measure/full_extra/fixed_a/baseline",
+    "ended_epoch": 1789281047.1260712,
+    "exit_code": 0,
+    "final_levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 142
+      },
+      "2": {
+        "files": 8,
+        "size_mib": 515
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_260913_run1_pilot_measure/full_extra/fixed_a/baseline",
+    "measured_seconds": 0.046,
+    "operations": 48000,
+    "operations_requested": 48000,
+    "peak_rss_kb": 189832,
+    "pending_bytes_end": 0,
+    "phase": "full_extra",
+    "process_elapsed_sec": 5.223532199859619,
+    "source_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1/pilot_baseline",
+    "started_epoch": 1789281041.9025385,
+    "status": "ok",
+    "swap_pages_in": 0,
+    "system": "baseline",
+    "throughput_ops_sec": 1049914.0,
+    "timed_out": false,
+    "total": {
+      "compact_read_bytes": 0,
+      "compact_write_bytes": 0,
+      "compaction_key_drop_obsolete": 0,
+      "flush_write_bytes": 0,
+      "number_keys_read": 24056,
+      "number_keys_written": 23944,
+      "stall_micros": 0
+    },
+    "workload": "fixed_a"
+  }
+]

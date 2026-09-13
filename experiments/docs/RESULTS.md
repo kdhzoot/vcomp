@@ -719,3 +719,63 @@ after, with peak RSS turning harder than time (4.4x and 4.6x per doubling past
 The comparable baseline series was loaded with the db_bench default of two
 memtables rather than the frozen 16, so the two cannot be divided directly; see
 that file for the stall evidence.
+
+## 9. Key-set identity (2026-09-13)
+
+### 9.1 The loaded key set, measured directly
+
+`analysis` had no way to compare *which* keys two DBs hold, so a scanner was
+written: open every `*.sst` through `SstFileReader`, take the key id from the
+first eight bytes big-endian, and set a bit. 823 GB scans in ~30 s on 48
+threads. Comparing bitmaps gives overlap, missing, invented and Jaccard.
+
+At 1 TB, against `paper_ch23_common_260905_approved_run3/full/baseline_1kb`
+(662,840,067 distinct ids, 63.2134% of the domain):
+
+| load | distinct | overlap | missing | invented | Jaccard |
+|---|---|---|---|---|---|
+| f2band f06 (PLR) | 662,463,395 | 63.1756% | 244,086,622 | 243,709,950 | 0.4619 |
+| exact membership, replayed bitmap | 659,665,161 | 99.5210% | 3,174,906 | 0 | 0.9952 |
+| exact membership, producer-driven Phase 1 | 659,686,399 | 99.5242% | 3,153,668 | 0 | 0.9952 |
+
+63.1756% is not a near miss. Two independent subsets of that size overlap at
+63.1774% in expectation, so the PLR key set was statistically indistinguishable
+from a fresh random draw of the right cardinality.
+
+### 9.2 Why only YCSB C saw it
+
+Cardinality was right, so DB size, SST count, average SST size and level layout
+all matched baseline; the 25-arm band figure shows A, B, D, E and F agreeing
+within 1%. Workload C is the only one that reads the loaded state without
+writing into it, so its positive lookup rate is the only measurement that
+depends on key identity. baseline holds it at 60.292-60.293% across ten
+loadings - the key set is deterministic, so the band has no width - while
+fifteen PLR loadings spread over 61.06-66.94%, mean 63.213%, which is the
+domain coverage rather than anything about baseline.
+
+### 9.3 Where the divergence came from
+
+Ingestion, not materialization. `fillvirtual` Phase 1 gives each batch its own
+stream so that batches stay independent; that keeps the distribution and loses
+the realization. db_bench's write path instead draws twice per operation out of
+`Random64(*seed_base + thread_seed)`: the first value picks the key generator,
+the second is the key. Replaying that reproduces a baseline DB's key set to the
+last id - 6,626,871 at 10 GB and 662,840,067 at 1 TB, both equal to the scanned
+count, overlap 100.0000%.
+
+### 9.4 What the fix costs and buys
+
+`BaselineKeyStream` runs that stream on one thread and feeds Phase 1 batches;
+the shards mark the bitmap after sort and dedup. Phase 1 lengthens from 9.2 s to
+19.1 s behind the serial draw, but keygen leaves the shards (15.6 s to 0.001 s)
+and virtual compaction overlaps the longer phase (19.8 s to 10.5 s), so
+`fillvirtual` lands at 51.8 s against 55.9 s without the mode.
+
+YCSB C on the result: positive lookup 60.042% (baseline 60.292%), filter checks
+3.227 (baseline 3.318-4.025), throughput 1,654,876 ops/s (baseline
+1,511,066-1,642,937). The remaining positive lookup gap is the 0.48% of ids no
+file claims: 60.292 x 0.995242 predicts 60.006 against 60.042 measured.
+
+Single loading. The band for this build is not yet known, and the other five
+workloads have not been re-measured.
+

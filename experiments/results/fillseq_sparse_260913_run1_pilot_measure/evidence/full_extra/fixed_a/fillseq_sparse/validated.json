@@ -1,0 +1,62 @@
+{
+  "avg_latency_us": 66.937,
+  "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+  "clone_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1_pilot_measure/full_extra/fixed_a/fillseq_sparse",
+  "ended_epoch": 1789281041.2645452,
+  "exit_code": 0,
+  "final_levels": {
+    "0": {
+      "files": 0,
+      "size_mib": 0
+    },
+    "1": {
+      "files": 3,
+      "size_mib": 147
+    },
+    "2": {
+      "files": 8,
+      "size_mib": 511
+    },
+    "3": {
+      "files": 0,
+      "size_mib": 0
+    },
+    "4": {
+      "files": 0,
+      "size_mib": 0
+    },
+    "5": {
+      "files": 0,
+      "size_mib": 0
+    },
+    "6": {
+      "files": 0,
+      "size_mib": 0
+    }
+  },
+  "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_260913_run1_pilot_measure/full_extra/fixed_a/fillseq_sparse",
+  "measured_seconds": 0.072,
+  "operations": 48000,
+  "operations_requested": 48000,
+  "peak_rss_kb": 194932,
+  "pending_bytes_end": 0,
+  "phase": "full_extra",
+  "process_elapsed_sec": 5.22523045539856,
+  "source_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1/pilot_sparse",
+  "started_epoch": 1789281036.039314,
+  "status": "ok",
+  "swap_pages_in": 0,
+  "system": "fillseq_sparse",
+  "throughput_ops_sec": 663845.0,
+  "timed_out": false,
+  "total": {
+    "compact_read_bytes": 0,
+    "compact_write_bytes": 0,
+    "compaction_key_drop_obsolete": 0,
+    "flush_write_bytes": 0,
+    "number_keys_read": 24056,
+    "number_keys_written": 23944,
+    "stall_micros": 0
+  },
+  "workload": "fixed_a"
+}

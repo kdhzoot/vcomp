@@ -1,0 +1,3 @@
+phase	system	workload	status	duration_sec	threads	measured_seconds	process_elapsed_sec	operations	throughput_ops_sec	avg_latency_us	successful_gets	engine_keys_read	engine_keys_written	peak_rss_kb	log_dir
+pilot	f2load	workloadc	ok	3	48	3.028	4.227952241897583	3641366	1202562.0	39.695	2186113	3641366	0	11506840	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_membership_stream_260913/pilot/workloadc/f2load
+full	f2load	workloadc	ok	300	48	300.031	304.39194321632385	496514589	1654876.0	29.003	298115273	496514589	0	53156824	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_membership_stream_260913/full/workloadc/f2load

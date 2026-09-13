@@ -593,3 +593,30 @@ Open follow-up:
   revisit trace generation and test a hash/permutation mapping with better
   low-byte randomness while preserving unique-key semantics.
   Raw analysis: `artifacts/log_loads/sort_bottleneck_analysis.tsv`.
+
+## Queued after exact membership (2026-09-13)
+
+1. **Band for the exact-membership build.** Three to five 1 TB loadings with
+   `--vcomp_exact_membership`, YCSB C on each. Everything measured so far is a
+   single loading, so it is not known whether positive lookup 60.042% and filter
+   checks 3.227 are reproducible or whether they move the way the PLR loadings
+   did. baseline's positive lookup band has no width, so F2Load's own spread is
+   the only thing the gap can be judged against. Decide whether item 2 is needed
+   only after this.
+2. **Close the 0.48% coverage gap.** In the deepest levels a file's entry budget
+   can be smaller than the unclaimed ids in its range, and nothing deeper takes
+   them; 3.15 M of 662.84 M ids are lost that way. The budget is globally
+   sufficient (790 M entries against 663 M ids), so a redistribution pass that
+   gives a deep file more budget where unclaimed ids remain should close it. It
+   only ever loses keys, so this is the whole remaining positive lookup gap.
+3. **Re-measure workloads A, B, D, E, F** on the exact-membership build. They
+   matched baseline under PLR, but compaction write ran 2-4% high, and the key
+   set changing could move it either way.
+4. **Re-do the run-to-run band material.** The 25-arm figure
+   (`analysis/plot_ch3_band25.py`, `results/paper_ch3_band25_raw.tsv`) and the
+   Section 5 fidelity material are all PLR loadings. If the paper adopts exact
+   membership they have to be re-measured.
+5. **Exercise the trace path.** A Twitter-trace load still marks the bitmap from
+   ingestion, which is correct there, but it has not been run against the
+   claimed-bitmap materialization.
+

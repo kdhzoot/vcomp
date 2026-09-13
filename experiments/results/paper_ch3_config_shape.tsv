@@ -1,0 +1,7 @@
+config	db_tb	sst_count	avg_sst_mb	levels	bottom_level	bottom_level_files	bottom_level_gb	filter_checks_C	positive_lookup_C	compaction_write_A_gb
+P0-r1	0.749	13539	58.0	5	L5	8864	489	3.427	60.29	774.8
+E2-4T	2.669	47740	58.6	5	L5	42938	2455	4.139	62.61	824.1
+E3-u25	0.268	4874	57.6	4	L4	4363	246	2.550	24.06	680.2
+E4-64m4	0.640	11013	60.9	5	L6	10490	634	4.031	60.29	446.7
+E5-256	0.749	3237	242.6	5	L5	2127	489	4.200	60.28	732.8
+E7-lz4	0.382	6811	58.8	5	L5	1954	113	2.774	60.30	799.8

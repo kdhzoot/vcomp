@@ -1,0 +1,115 @@
+metric	workload	config	value	p0_value	ratio_to_p0	pct_change
+Throughput (ops/s)	A	P0-r1	691689.0	691689.0	1.0	0.0
+Throughput (ops/s)	A	E2-4T	570362.0	691689.0	0.8246	-17.54
+Throughput (ops/s)	A	E3-u25	678290.0	691689.0	0.9806	-1.94
+Throughput (ops/s)	A	E4-64m4	747409.0	691689.0	1.0806	8.06
+Throughput (ops/s)	A	E5-256	694246.0	691689.0	1.0037	0.37
+Throughput (ops/s)	A	E7-lz4	691291.0	691689.0	0.9994	-0.06
+Throughput (ops/s)	B	P0-r1	1002901.0	1002901.0	1.0	0.0
+Throughput (ops/s)	B	E2-4T	984408.0	1002901.0	0.9816	-1.84
+Throughput (ops/s)	B	E3-u25	1143085.0	1002901.0	1.1398	13.98
+Throughput (ops/s)	B	E4-64m4	1034847.0	1002901.0	1.0319	3.19
+Throughput (ops/s)	B	E5-256	998977.0	1002901.0	0.9961	-0.39
+Throughput (ops/s)	B	E7-lz4	1029137.0	1002901.0	1.0262	2.62
+Throughput (ops/s)	C	P0-r1	1474872.0	1474872.0	1.0	0.0
+Throughput (ops/s)	C	E2-4T	1279469.0	1474872.0	0.8675	-13.25
+Throughput (ops/s)	C	E3-u25	3186181.0	1474872.0	2.1603	116.03
+Throughput (ops/s)	C	E4-64m4	1388852.0	1474872.0	0.9417	-5.83
+Throughput (ops/s)	C	E5-256	949432.0	1474872.0	0.6437	-35.63
+Throughput (ops/s)	C	E7-lz4	1691141.0	1474872.0	1.1466	14.66
+Throughput (ops/s)	D	P0-r1	2511581.0	2511581.0	1.0	0.0
+Throughput (ops/s)	D	E2-4T	2585993.0	2511581.0	1.0296	2.96
+Throughput (ops/s)	D	E3-u25	4196075.0	2511581.0	1.6707	67.07
+Throughput (ops/s)	D	E4-64m4	2548029.0	2511581.0	1.0145	1.45
+Throughput (ops/s)	D	E5-256	2504426.0	2511581.0	0.9972	-0.28
+Throughput (ops/s)	D	E7-lz4	2662390.0	2511581.0	1.06	6.0
+Throughput (ops/s)	E	P0-r1	90887.0	90887.0	1.0	0.0
+Throughput (ops/s)	E	E2-4T	107477.0	90887.0	1.1825	18.25
+Throughput (ops/s)	E	E3-u25	129260.0	90887.0	1.4222	42.22
+Throughput (ops/s)	E	E4-64m4	123855.0	90887.0	1.3627	36.27
+Throughput (ops/s)	E	E5-256	91358.0	90887.0	1.0052	0.52
+Throughput (ops/s)	E	E7-lz4	115679.0	90887.0	1.2728	27.28
+Throughput (ops/s)	F	P0-r1	567233.0	567233.0	1.0	0.0
+Throughput (ops/s)	F	E2-4T	485702.0	567233.0	0.8563	-14.37
+Throughput (ops/s)	F	E3-u25	618146.0	567233.0	1.0898	8.98
+Throughput (ops/s)	F	E4-64m4	598641.0	567233.0	1.0554	5.54
+Throughput (ops/s)	F	E5-256	574240.0	567233.0	1.0124	1.24
+Throughput (ops/s)	F	E7-lz4	567741.0	567233.0	1.0009	0.09
+Filter checks per lookup	A	P0-r1	8.9688	8.9688	1.0	0.0
+Filter checks per lookup	A	E2-4T	8.0313	8.9688	0.8955	-10.45
+Filter checks per lookup	A	E3-u25	9.0773	8.9688	1.0121	1.21
+Filter checks per lookup	A	E4-64m4	9.75	8.9688	1.0871	8.71
+Filter checks per lookup	A	E5-256	9.059	8.9688	1.0101	1.01
+Filter checks per lookup	A	E7-lz4	8.8786	8.9688	0.9899	-1.01
+Filter checks per lookup	B	P0-r1	4.2565	4.2565	1.0	0.0
+Filter checks per lookup	B	E2-4T	4.1108	4.2565	0.9658	-3.42
+Filter checks per lookup	B	E3-u25	3.9708	4.2565	0.9329	-6.71
+Filter checks per lookup	B	E4-64m4	4.1456	4.2565	0.9739	-2.61
+Filter checks per lookup	B	E5-256	4.2709	4.2565	1.0034	0.34
+Filter checks per lookup	B	E7-lz4	3.9112	4.2565	0.9189	-8.11
+Filter checks per lookup	C	P0-r1	3.4268	3.4268	1.0	0.0
+Filter checks per lookup	C	E2-4T	4.1392	3.4268	1.2079	20.79
+Filter checks per lookup	C	E3-u25	2.5499	3.4268	0.7441	-25.59
+Filter checks per lookup	C	E4-64m4	4.031	3.4268	1.1763	17.63
+Filter checks per lookup	C	E5-256	4.2004	3.4268	1.2257	22.57
+Filter checks per lookup	C	E7-lz4	2.7743	3.4268	0.8096	-19.04
+Filter checks per lookup	D	P0-r1	1.0497	1.0497	1.0	0.0
+Filter checks per lookup	D	E2-4T	0.9629	1.0497	0.9173	-8.27
+Filter checks per lookup	D	E3-u25	0.7782	1.0497	0.7414	-25.86
+Filter checks per lookup	D	E4-64m4	1.1357	1.0497	1.0819	8.19
+Filter checks per lookup	D	E5-256	1.1495	1.0497	1.0951	9.51
+Filter checks per lookup	D	E7-lz4	0.9132	1.0497	0.87	-13.0
+Filter checks per lookup	F	P0-r1	7.6588	7.6588	1.0	0.0
+Filter checks per lookup	F	E2-4T	6.7576	7.6588	0.8823	-11.77
+Filter checks per lookup	F	E3-u25	7.9789	7.6588	1.0418	4.18
+Filter checks per lookup	F	E4-64m4	8.7244	7.6588	1.1391	13.91
+Filter checks per lookup	F	E5-256	7.5651	7.6588	0.9878	-1.22
+Filter checks per lookup	F	E7-lz4	7.4787	7.6588	0.9765	-2.35
+Positive lookups (%)	A	P0-r1	86.7288	86.7288	1.0	0.0
+Positive lookups (%)	A	E2-4T	85.6686	86.7288	0.9878	-1.22
+Positive lookups (%)	A	E3-u25	72.9043	86.7288	0.8406	-15.94
+Positive lookups (%)	A	E4-64m4	86.8712	86.7288	1.0016	0.16
+Positive lookups (%)	A	E5-256	86.7341	86.7288	1.0001	0.01
+Positive lookups (%)	A	E7-lz4	86.727	86.7288	1.0	-0.0
+Positive lookups (%)	B	P0-r1	83.4393	83.4393	1.0	0.0
+Positive lookups (%)	B	E2-4T	82.7034	83.4393	0.9912	-0.88
+Positive lookups (%)	B	E3-u25	66.7018	83.4393	0.7994	-20.06
+Positive lookups (%)	B	E4-64m4	83.4895	83.4393	1.0006	0.06
+Positive lookups (%)	B	E5-256	83.4348	83.4393	0.9999	-0.01
+Positive lookups (%)	B	E7-lz4	83.4778	83.4393	1.0005	0.05
+Positive lookups (%)	C	P0-r1	60.2917	60.2917	1.0	0.0
+Positive lookups (%)	C	E2-4T	62.6133	60.2917	1.0385	3.85
+Positive lookups (%)	C	E3-u25	24.0646	60.2917	0.3991	-60.09
+Positive lookups (%)	C	E4-64m4	60.2942	60.2917	1.0	0.0
+Positive lookups (%)	C	E5-256	60.2777	60.2917	0.9998	-0.02
+Positive lookups (%)	C	E7-lz4	60.3019	60.2917	1.0002	0.02
+Positive lookups (%)	D	P0-r1	91.9682	91.9682	1.0	0.0
+Positive lookups (%)	D	E2-4T	83.8455	91.9682	0.9117	-8.83
+Positive lookups (%)	D	E3-u25	85.4893	91.9682	0.9296	-7.04
+Positive lookups (%)	D	E4-64m4	91.9856	91.9682	1.0002	0.02
+Positive lookups (%)	D	E5-256	91.9552	91.9682	0.9999	-0.01
+Positive lookups (%)	D	E7-lz4	92.0696	91.9682	1.0011	0.11
+Positive lookups (%)	F	P0-r1	86.3776	86.3776	1.0	0.0
+Positive lookups (%)	F	E2-4T	85.3828	86.3776	0.9885	-1.15
+Positive lookups (%)	F	E3-u25	72.574	86.3776	0.8402	-15.98
+Positive lookups (%)	F	E4-64m4	86.47	86.3776	1.0011	0.11
+Positive lookups (%)	F	E5-256	86.3973	86.3776	1.0002	0.02
+Positive lookups (%)	F	E7-lz4	86.3765	86.3776	1.0	-0.0
+Compaction write (GB)	A	P0-r1	774.7504	774.7504	1.0	0.0
+Compaction write (GB)	A	E2-4T	824.0685	774.7504	1.0637	6.37
+Compaction write (GB)	A	E3-u25	680.1878	774.7504	0.8779	-12.21
+Compaction write (GB)	A	E4-64m4	446.7248	774.7504	0.5766	-42.34
+Compaction write (GB)	A	E5-256	732.7609	774.7504	0.9458	-5.42
+Compaction write (GB)	A	E7-lz4	799.7854	774.7504	1.0323	3.23
+Compaction write (GB)	B	P0-r1	152.7935	152.7935	1.0	0.0
+Compaction write (GB)	B	E2-4T	181.9024	152.7935	1.1905	19.05
+Compaction write (GB)	B	E3-u25	162.2232	152.7935	1.0617	6.17
+Compaction write (GB)	B	E4-64m4	72.7606	152.7935	0.4762	-52.38
+Compaction write (GB)	B	E5-256	141.8679	152.7935	0.9285	-7.15
+Compaction write (GB)	B	E7-lz4	268.3656	152.7935	1.7564	75.64
+Compaction write (GB)	F	P0-r1	678.563	678.563	1.0	0.0
+Compaction write (GB)	F	E2-4T	759.5925	678.563	1.1194	11.94
+Compaction write (GB)	F	E3-u25	678.2418	678.563	0.9995	-0.05
+Compaction write (GB)	F	E4-64m4	363.4051	678.563	0.5356	-46.44
+Compaction write (GB)	F	E5-256	671.6301	678.563	0.9898	-1.02
+Compaction write (GB)	F	E7-lz4	744.0093	678.563	1.0964	9.64

@@ -1,0 +1,25 @@
+{
+  "definitions": {
+    "filter_checks_per_get": "(rocksdb.bloom.filter.useful + rocksdb.bloom.filter.full.positive) / rocksdb.number.keys.read. Includes the Get in RMW. Undefined for E, which performs scans/inserts.",
+    "positive_lookups": "Key-found Get calls: memtable.hit + l0.hit + l1.hit + l2andup.hit; includes the Get in RMW.",
+    "positive_lookups_pct": "100 * positive_lookups / total_lookup_requests, where total_lookup_requests = rocksdb.number.keys.read. The denominator is all Get requests, including the Get in RMW. E has no Get requests and is N/A.",
+    "compaction_read_bytes": "rocksdb.compact.read.bytes; separate from logical rocksdb.bytes.read and device read bytes.",
+    "compaction_write_bytes": "rocksdb.compact.write.bytes; excludes flush bytes.",
+    "device_io": "md0 /proc/diskstats end minus start: read completed field 1, write completed field 5; sectors read field 3 and sectors written field 7 times 512 bytes. Fields are numbered after device name. These are device requests, not application Get calls or physical per-disk operations.",
+    "latency": "Aggregate db_bench mean operation latency in microseconds.",
+    "windows": "Engine tickers cover statistics-object lifetime, including open/background work. Device deltas cover the whole recorded process window including open/close and any concurrent host I/O. Totals are not divided by operation count or forced to exactly 300 s."
+  },
+  "load_completion": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/fillseq_sparse_260913_run2/full_completed.json",
+  "scope": "Only full 300-second A/C cells; pilot rows excluded.",
+  "comparison": "Online 300-second compaction counters; not fixed-write-volume plus compaction drain.",
+  "legacy_filter": "Some chapter-3 tables label filter_cache_accesses/operations as filter_checks_per_lookup. This export records that separately as filter_cache_accesses_per_op. filter_checks_per_get uses the actual filter tickers divided by Get requests, matching the fidelity plots.",
+  "loading": "Insertion plus flush/compaction drain excludes key extraction; preparation_sec includes the original reused extraction time. Interrupted attempts are excluded.",
+  "sources": {
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/fillseq_sparse_260913_run2/full_completed.json": "961c896bdb0a939eb779921e7060aee79a68c673490347b08a64abcc3f9469d6",
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_260913_run2_full_measure/full/workloada/fillseq_sparse/raw/diskstats.end": "e5af6fb52e172984f71596b38e3a3c944d8b4c00ac9883b2b4a6ba3159da2b54",
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_260913_run2_full_measure/full/workloada/fillseq_sparse/raw/diskstats.start": "384929b216ffe8a517340573e86653933d3b9c5190733db777991e31b46f095f",
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_260913_run2_full_measure/full/workloadc/fillseq_sparse/raw/diskstats.end": "16fd426d8db28b5876562529f5e534b9dea687c4aa70374a45cef4864dec9aa0",
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_260913_run2_full_measure/full/workloadc/fillseq_sparse/raw/diskstats.start": "11e58670877aa2ed025a625115b739510bd9de8e8d2edf46c9494588502c63be",
+    "/home/smrc/virtual_compaction/vcomp/experiments/results/fillseq_sparse_260913_run2_full_measure/results.json": "e0b934732be358c2cad74f668da2711f400d7d3eafeaa0a715333f3b2f49e643"
+  }
+}

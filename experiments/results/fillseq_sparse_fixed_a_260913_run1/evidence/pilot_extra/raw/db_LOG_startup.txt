@@ -1,0 +1,1262 @@
+2026/09/13-07:48:36.377519 2945070 RocksDB version: 10.10.1
+2026/09/13-07:48:36.377562 2945070 Git sha ad345abd4e2e48aed3505789a65c999cd0fe40a4
+2026/09/13-07:48:36.377564 2945070 Compile date 2026-09-08 01:32:01
+2026/09/13-07:48:36.377566 2945070 DB SUMMARY
+2026/09/13-07:48:36.377568 2945070 Host name (Env):  dskbi001
+2026/09/13-07:48:36.377569 2945070 DB Session ID:  MD1XGHZJK4MYZKZZLBMA
+2026/09/13-07:48:36.382361 2945070 CURRENT file:  CURRENT
+2026/09/13-07:48:36.382364 2945070 IDENTITY file:  IDENTITY
+2026/09/13-07:48:36.382370 2945070 MANIFEST file:  MANIFEST-000005 size: 7882897 Bytes
+2026/09/13-07:48:36.382372 2945070 SST files in /work/vcomp/exp/fillseq_sparse_fixed_a_260913_run1/pilot_extra/fixed_a/fillseq_sparse dir, Total Num: 10264, files: 000008.sst 000009.sst 000010.sst 000011.sst 000012.sst 000013.sst 000014.sst 000015.sst 000016.sst 
+2026/09/13-07:48:36.382373 2945070 Write Ahead Log file in /work/vcomp/exp/fillseq_sparse_fixed_a_260913_run1/pilot_extra/fixed_a/fillseq_sparse: 000004.log size: 0 ; 
+2026/09/13-07:48:36.382382 2945070                         Options.error_if_exists: 0
+2026/09/13-07:48:36.382383 2945070                       Options.create_if_missing: 1
+2026/09/13-07:48:36.382384 2945070                         Options.paranoid_checks: 1
+2026/09/13-07:48:36.382385 2945070             Options.flush_verify_memtable_count: 1
+2026/09/13-07:48:36.382386 2945070          Options.compaction_verify_record_count: 1
+2026/09/13-07:48:36.382387 2945070                               Options.track_and_verify_wals_in_manifest: 0
+2026/09/13-07:48:36.382388 2945070                               Options.track_and_verify_wals: 0
+2026/09/13-07:48:36.382389 2945070        Options.verify_sst_unique_id_in_manifest: 1
+2026/09/13-07:48:36.382390 2945070                                     Options.env: 0x7fde1c441000
+2026/09/13-07:48:36.382391 2945070                                      Options.fs: PosixFileSystem
+2026/09/13-07:48:36.382392 2945070                                Options.info_log: 0x7fde1c44f190
+2026/09/13-07:48:36.382393 2945070                Options.max_file_opening_threads: 16
+2026/09/13-07:48:36.382394 2945070                              Options.statistics: 0x7fde1c501010
+2026/09/13-07:48:36.382395 2945070                              Options.statistics stats level: 3
+2026/09/13-07:48:36.382396 2945070                               Options.use_fsync: 0
+2026/09/13-07:48:36.382397 2945070                       Options.max_log_file_size: 0
+2026/09/13-07:48:36.382398 2945070                   Options.log_file_time_to_roll: 0
+2026/09/13-07:48:36.382398 2945070                       Options.keep_log_file_num: 1000
+2026/09/13-07:48:36.382399 2945070                    Options.recycle_log_file_num: 0
+2026/09/13-07:48:36.382400 2945070                         Options.allow_fallocate: 1
+2026/09/13-07:48:36.382401 2945070                        Options.allow_mmap_reads: 0
+2026/09/13-07:48:36.382402 2945070                       Options.allow_mmap_writes: 0
+2026/09/13-07:48:36.382403 2945070                        Options.use_direct_reads: 1
+2026/09/13-07:48:36.382404 2945070                        Options.use_direct_io_for_flush_and_compaction: 1
+2026/09/13-07:48:36.382405 2945070          Options.create_missing_column_families: 1
+2026/09/13-07:48:36.382405 2945070                              Options.db_log_dir: 
+2026/09/13-07:48:36.382406 2945070                                 Options.wal_dir: 
+2026/09/13-07:48:36.382407 2945070                Options.table_cache_numshardbits: 4
+2026/09/13-07:48:36.382408 2945070                         Options.WAL_ttl_seconds: 0
+2026/09/13-07:48:36.382409 2945070                       Options.WAL_size_limit_MB: 0
+2026/09/13-07:48:36.382410 2945070                        Options.max_write_batch_group_size_bytes: 1048576
+2026/09/13-07:48:36.382411 2945070                     Options.is_fd_close_on_exec: 1
+2026/09/13-07:48:36.382412 2945070                   Options.advise_random_on_open: 1
+2026/09/13-07:48:36.382412 2945070                    Options.db_write_buffer_size: 0
+2026/09/13-07:48:36.382413 2945070                    Options.write_buffer_manager: 0x7fde1c41f280
+2026/09/13-07:48:36.382414 2945070                      Options.use_adaptive_mutex: 0
+2026/09/13-07:48:36.382415 2945070                            Options.rate_limiter: (nil)
+2026/09/13-07:48:36.382417 2945070     Options.sst_file_manager.rate_bytes_per_sec: 0
+2026/09/13-07:48:36.382418 2945070                       Options.wal_recovery_mode: 2
+2026/09/13-07:48:36.382419 2945070                  Options.enable_thread_tracking: 0
+2026/09/13-07:48:36.382420 2945070                  Options.enable_pipelined_write: 1
+2026/09/13-07:48:36.382421 2945070                  Options.unordered_write: 0
+2026/09/13-07:48:36.382422 2945070         Options.allow_concurrent_memtable_write: 1
+2026/09/13-07:48:36.382422 2945070      Options.enable_write_thread_adaptive_yield: 1
+2026/09/13-07:48:36.382423 2945070             Options.write_thread_max_yield_usec: 100
+2026/09/13-07:48:36.382424 2945070            Options.write_thread_slow_yield_usec: 3
+2026/09/13-07:48:36.382425 2945070                               Options.row_cache: None
+2026/09/13-07:48:36.382426 2945070                              Options.wal_filter: None
+2026/09/13-07:48:36.382427 2945070             Options.avoid_flush_during_recovery: 0
+2026/09/13-07:48:36.382428 2945070             Options.allow_ingest_behind: 0
+2026/09/13-07:48:36.382429 2945070             Options.two_write_queues: 0
+2026/09/13-07:48:36.382430 2945070             Options.manual_wal_flush: 0
+2026/09/13-07:48:36.382431 2945070             Options.wal_compression: 0
+2026/09/13-07:48:36.382432 2945070             Options.background_close_inactive_wals: 0
+2026/09/13-07:48:36.382433 2945070             Options.atomic_flush: 0
+2026/09/13-07:48:36.382433 2945070             Options.avoid_unnecessary_blocking_io: 0
+2026/09/13-07:48:36.382434 2945070             Options.prefix_seek_opt_in_only: 0
+2026/09/13-07:48:36.382435 2945070                 Options.persist_stats_to_disk: 0
+2026/09/13-07:48:36.382436 2945070                 Options.write_dbid_to_manifest: 1
+2026/09/13-07:48:36.382437 2945070                 Options.write_identity_file: 1
+2026/09/13-07:48:36.382438 2945070                 Options.log_readahead_size: 0
+2026/09/13-07:48:36.382439 2945070                 Options.file_checksum_gen_factory: Unknown
+2026/09/13-07:48:36.382440 2945070                 Options.best_efforts_recovery: 0
+2026/09/13-07:48:36.382440 2945070                Options.max_bgerror_resume_count: 2147483647
+2026/09/13-07:48:36.382441 2945070            Options.bgerror_resume_retry_interval: 1000000
+2026/09/13-07:48:36.382442 2945070             Options.allow_data_in_errors: 0
+2026/09/13-07:48:36.382443 2945070             Options.db_host_id: __hostname__
+2026/09/13-07:48:36.382444 2945070             Options.enforce_single_del_contracts: true
+2026/09/13-07:48:36.382445 2945070             Options.metadata_write_temperature: kUnknown
+2026/09/13-07:48:36.382446 2945070             Options.wal_write_temperature: kUnknown
+2026/09/13-07:48:36.382447 2945070             Options.max_background_jobs: 48
+2026/09/13-07:48:36.382448 2945070             Options.max_background_compactions: -1
+2026/09/13-07:48:36.382449 2945070             Options.max_subcompactions: 1
+2026/09/13-07:48:36.382450 2945070             Options.avoid_flush_during_shutdown: 0
+2026/09/13-07:48:36.382451 2945070           Options.writable_file_max_buffer_size: 1048576
+2026/09/13-07:48:36.382452 2945070             Options.delayed_write_rate : 8388608
+2026/09/13-07:48:36.382452 2945070             Options.max_total_wal_size: 0
+2026/09/13-07:48:36.382453 2945070             Options.delete_obsolete_files_period_micros: 21600000000
+2026/09/13-07:48:36.382454 2945070                   Options.stats_dump_period_sec: 600
+2026/09/13-07:48:36.382455 2945070                 Options.stats_persist_period_sec: 600
+2026/09/13-07:48:36.382456 2945070                 Options.stats_history_buffer_size: 1048576
+2026/09/13-07:48:36.382457 2945070                          Options.max_open_files: -1
+2026/09/13-07:48:36.382458 2945070                          Options.bytes_per_sync: 0
+2026/09/13-07:48:36.382459 2945070                      Options.wal_bytes_per_sync: 0
+2026/09/13-07:48:36.382460 2945070                   Options.strict_bytes_per_sync: 0
+2026/09/13-07:48:36.382461 2945070       Options.compaction_readahead_size: 2097152
+2026/09/13-07:48:36.382462 2945070                  Options.max_background_flushes: -1
+2026/09/13-07:48:36.382463 2945070                  Options.max_manifest_file_size: 1073741824
+2026/09/13-07:48:36.382464 2945070                  Options.max_manifest_space_amp_pct: 500
+2026/09/13-07:48:36.382465 2945070             Options.manifest_preallocation_size: 4194304
+2026/09/13-07:48:36.382466 2945070 Options.daily_offpeak_time_utc: 
+2026/09/13-07:48:36.382466 2945070 Compression algorithms supported:
+2026/09/13-07:48:36.382467 2945070 	kCustomCompressionFE supported: 0
+2026/09/13-07:48:36.382469 2945070 	kCustomCompressionFC supported: 0
+2026/09/13-07:48:36.382470 2945070 	kCustomCompressionF8 supported: 0
+2026/09/13-07:48:36.382471 2945070 	kCustomCompressionF7 supported: 0
+2026/09/13-07:48:36.382472 2945070 	kCustomCompressionB2 supported: 0
+2026/09/13-07:48:36.382472 2945070 	kLZ4Compression supported: 0
+2026/09/13-07:48:36.382473 2945070 	kCustomCompression88 supported: 0
+2026/09/13-07:48:36.382474 2945070 	kCustomCompressionD8 supported: 0
+2026/09/13-07:48:36.382475 2945070 	kCustomCompression9F supported: 0
+2026/09/13-07:48:36.382476 2945070 	kCustomCompressionD6 supported: 0
+2026/09/13-07:48:36.382477 2945070 	kCustomCompressionA9 supported: 0
+2026/09/13-07:48:36.382477 2945070 	kCustomCompressionEC supported: 0
+2026/09/13-07:48:36.382478 2945070 	kCustomCompressionA3 supported: 0
+2026/09/13-07:48:36.382479 2945070 	kCustomCompressionCB supported: 0
+2026/09/13-07:48:36.382480 2945070 	kCustomCompression90 supported: 0
+2026/09/13-07:48:36.382480 2945070 	kCustomCompressionA0 supported: 0
+2026/09/13-07:48:36.382481 2945070 	kCustomCompressionC6 supported: 0
+2026/09/13-07:48:36.382482 2945070 	kCustomCompression9D supported: 0
+2026/09/13-07:48:36.382483 2945070 	kCustomCompression8B supported: 0
+2026/09/13-07:48:36.382484 2945070 	kCustomCompressionA8 supported: 0
+2026/09/13-07:48:36.382484 2945070 	kCustomCompression8D supported: 0
+2026/09/13-07:48:36.382485 2945070 	kCustomCompression97 supported: 0
+2026/09/13-07:48:36.382486 2945070 	kCustomCompression98 supported: 0
+2026/09/13-07:48:36.382487 2945070 	kCustomCompressionAC supported: 0
+2026/09/13-07:48:36.382487 2945070 	kCustomCompressionE9 supported: 0
+2026/09/13-07:48:36.382488 2945070 	kCustomCompression96 supported: 0
+2026/09/13-07:48:36.382489 2945070 	kCustomCompressionB1 supported: 0
+2026/09/13-07:48:36.382490 2945070 	kCustomCompression95 supported: 0
+2026/09/13-07:48:36.382490 2945070 	kCustomCompression84 supported: 0
+2026/09/13-07:48:36.382491 2945070 	kCustomCompression91 supported: 0
+2026/09/13-07:48:36.382492 2945070 	kCustomCompressionAB supported: 0
+2026/09/13-07:48:36.382493 2945070 	kCustomCompressionB3 supported: 0
+2026/09/13-07:48:36.382493 2945070 	kCustomCompression81 supported: 0
+2026/09/13-07:48:36.382494 2945070 	kCustomCompressionDC supported: 0
+2026/09/13-07:48:36.382495 2945070 	kBZip2Compression supported: 0
+2026/09/13-07:48:36.382496 2945070 	kCustomCompressionBB supported: 0
+2026/09/13-07:48:36.382497 2945070 	kCustomCompression9C supported: 0
+2026/09/13-07:48:36.382497 2945070 	kCustomCompressionC9 supported: 0
+2026/09/13-07:48:36.382498 2945070 	kCustomCompressionCC supported: 0
+2026/09/13-07:48:36.382499 2945070 	kCustomCompression92 supported: 0
+2026/09/13-07:48:36.382500 2945070 	kCustomCompressionB9 supported: 0
+2026/09/13-07:48:36.382500 2945070 	kCustomCompression8F supported: 0
+2026/09/13-07:48:36.382501 2945070 	kCustomCompression8A supported: 0
+2026/09/13-07:48:36.382502 2945070 	kCustomCompression9B supported: 0
+2026/09/13-07:48:36.382503 2945070 	kZSTD supported: 0
+2026/09/13-07:48:36.382504 2945070 	kCustomCompressionAA supported: 0
+2026/09/13-07:48:36.382504 2945070 	kCustomCompressionA2 supported: 0
+2026/09/13-07:48:36.382505 2945070 	kZlibCompression supported: 1
+2026/09/13-07:48:36.382506 2945070 	kXpressCompression supported: 0
+2026/09/13-07:48:36.382507 2945070 	kCustomCompressionFD supported: 0
+2026/09/13-07:48:36.382508 2945070 	kCustomCompressionE2 supported: 0
+2026/09/13-07:48:36.382508 2945070 	kLZ4HCCompression supported: 0
+2026/09/13-07:48:36.382509 2945070 	kCustomCompressionA6 supported: 0
+2026/09/13-07:48:36.382510 2945070 	kCustomCompression85 supported: 0
+2026/09/13-07:48:36.382510 2945070 	kCustomCompressionA4 supported: 0
+2026/09/13-07:48:36.382511 2945070 	kCustomCompression86 supported: 0
+2026/09/13-07:48:36.382512 2945070 	kCustomCompression83 supported: 0
+2026/09/13-07:48:36.382513 2945070 	kCustomCompression87 supported: 0
+2026/09/13-07:48:36.382513 2945070 	kCustomCompression89 supported: 0
+2026/09/13-07:48:36.382514 2945070 	kCustomCompression8C supported: 0
+2026/09/13-07:48:36.382515 2945070 	kCustomCompressionDB supported: 0
+2026/09/13-07:48:36.382516 2945070 	kCustomCompressionF3 supported: 0
+2026/09/13-07:48:36.382516 2945070 	kCustomCompressionE6 supported: 0
+2026/09/13-07:48:36.382517 2945070 	kCustomCompression8E supported: 0
+2026/09/13-07:48:36.382518 2945070 	kCustomCompressionDA supported: 0
+2026/09/13-07:48:36.382519 2945070 	kCustomCompression93 supported: 0
+2026/09/13-07:48:36.382519 2945070 	kCustomCompression94 supported: 0
+2026/09/13-07:48:36.382520 2945070 	kCustomCompression9E supported: 0
+2026/09/13-07:48:36.382521 2945070 	kCustomCompressionB4 supported: 0
+2026/09/13-07:48:36.382522 2945070 	kCustomCompressionFB supported: 0
+2026/09/13-07:48:36.382522 2945070 	kCustomCompressionB5 supported: 0
+2026/09/13-07:48:36.382523 2945070 	kCustomCompressionD5 supported: 0
+2026/09/13-07:48:36.382524 2945070 	kCustomCompressionB8 supported: 0
+2026/09/13-07:48:36.382525 2945070 	kCustomCompressionD1 supported: 0
+2026/09/13-07:48:36.382525 2945070 	kCustomCompressionBA supported: 0
+2026/09/13-07:48:36.382526 2945070 	kCustomCompressionBC supported: 0
+2026/09/13-07:48:36.382527 2945070 	kCustomCompressionCE supported: 0
+2026/09/13-07:48:36.382528 2945070 	kCustomCompressionBD supported: 0
+2026/09/13-07:48:36.382528 2945070 	kCustomCompressionC4 supported: 0
+2026/09/13-07:48:36.382529 2945070 	kCustomCompression9A supported: 0
+2026/09/13-07:48:36.382530 2945070 	kCustomCompression99 supported: 0
+2026/09/13-07:48:36.382531 2945070 	kCustomCompressionBE supported: 0
+2026/09/13-07:48:36.382531 2945070 	kCustomCompressionE5 supported: 0
+2026/09/13-07:48:36.382532 2945070 	kCustomCompressionD9 supported: 0
+2026/09/13-07:48:36.382533 2945070 	kCustomCompressionC1 supported: 0
+2026/09/13-07:48:36.382533 2945070 	kCustomCompressionC5 supported: 0
+2026/09/13-07:48:36.382534 2945070 	kCustomCompressionC2 supported: 0
+2026/09/13-07:48:36.382535 2945070 	kCustomCompressionA5 supported: 0
+2026/09/13-07:48:36.382536 2945070 	kCustomCompressionC7 supported: 0
+2026/09/13-07:48:36.382536 2945070 	kCustomCompressionBF supported: 0
+2026/09/13-07:48:36.382537 2945070 	kCustomCompressionE8 supported: 0
+2026/09/13-07:48:36.382538 2945070 	kCustomCompressionC8 supported: 0
+2026/09/13-07:48:36.382539 2945070 	kCustomCompressionAF supported: 0
+2026/09/13-07:48:36.382539 2945070 	kCustomCompressionCA supported: 0
+2026/09/13-07:48:36.382540 2945070 	kCustomCompressionCD supported: 0
+2026/09/13-07:48:36.382541 2945070 	kCustomCompressionC0 supported: 0
+2026/09/13-07:48:36.382541 2945070 	kCustomCompressionCF supported: 0
+2026/09/13-07:48:36.382542 2945070 	kCustomCompressionF9 supported: 0
+2026/09/13-07:48:36.382543 2945070 	kCustomCompressionD0 supported: 0
+2026/09/13-07:48:36.382544 2945070 	kCustomCompressionD2 supported: 0
+2026/09/13-07:48:36.382544 2945070 	kCustomCompressionAD supported: 0
+2026/09/13-07:48:36.382545 2945070 	kCustomCompressionD3 supported: 0
+2026/09/13-07:48:36.382546 2945070 	kCustomCompressionD4 supported: 0
+2026/09/13-07:48:36.382547 2945070 	kCustomCompressionD7 supported: 0
+2026/09/13-07:48:36.382547 2945070 	kCustomCompression82 supported: 0
+2026/09/13-07:48:36.382548 2945070 	kCustomCompressionDD supported: 0
+2026/09/13-07:48:36.382549 2945070 	kCustomCompressionC3 supported: 0
+2026/09/13-07:48:36.382550 2945070 	kCustomCompressionEE supported: 0
+2026/09/13-07:48:36.382550 2945070 	kCustomCompressionDE supported: 0
+2026/09/13-07:48:36.382551 2945070 	kCustomCompressionDF supported: 0
+2026/09/13-07:48:36.382552 2945070 	kCustomCompressionA7 supported: 0
+2026/09/13-07:48:36.382553 2945070 	kCustomCompressionE0 supported: 0
+2026/09/13-07:48:36.382553 2945070 	kCustomCompressionF1 supported: 0
+2026/09/13-07:48:36.382554 2945070 	kCustomCompressionE1 supported: 0
+2026/09/13-07:48:36.382555 2945070 	kCustomCompressionF5 supported: 0
+2026/09/13-07:48:36.382555 2945070 	kCustomCompression80 supported: 0
+2026/09/13-07:48:36.382556 2945070 	kCustomCompressionE3 supported: 0
+2026/09/13-07:48:36.382557 2945070 	kCustomCompressionE4 supported: 0
+2026/09/13-07:48:36.382558 2945070 	kCustomCompressionB0 supported: 0
+2026/09/13-07:48:36.382558 2945070 	kCustomCompressionEA supported: 0
+2026/09/13-07:48:36.382559 2945070 	kCustomCompressionFA supported: 0
+2026/09/13-07:48:36.382560 2945070 	kCustomCompressionE7 supported: 0
+2026/09/13-07:48:36.382561 2945070 	kCustomCompressionAE supported: 0
+2026/09/13-07:48:36.382561 2945070 	kCustomCompressionEB supported: 0
+2026/09/13-07:48:36.382562 2945070 	kCustomCompressionED supported: 0
+2026/09/13-07:48:36.382563 2945070 	kCustomCompressionB6 supported: 0
+2026/09/13-07:48:36.382564 2945070 	kCustomCompressionEF supported: 0
+2026/09/13-07:48:36.382564 2945070 	kCustomCompressionF0 supported: 0
+2026/09/13-07:48:36.382565 2945070 	kCustomCompressionB7 supported: 0
+2026/09/13-07:48:36.382566 2945070 	kCustomCompressionF2 supported: 0
+2026/09/13-07:48:36.382567 2945070 	kCustomCompressionA1 supported: 0
+2026/09/13-07:48:36.382567 2945070 	kCustomCompressionF4 supported: 0
+2026/09/13-07:48:36.382568 2945070 	kSnappyCompression supported: 1
+2026/09/13-07:48:36.382569 2945070 	kCustomCompressionF6 supported: 0
+2026/09/13-07:48:36.382570 2945070 Fast CRC32 supported: Supported on x86
+2026/09/13-07:48:36.382571 2945070 DMutex implementation: pthread_mutex_t
+2026/09/13-07:48:36.382572 2945070 Jemalloc supported: 1
+2026/09/13-07:48:36.382703 2945070 [/version_set.cc:6478] Recovering from manifest file: /work/vcomp/exp/fillseq_sparse_fixed_a_260913_run1/pilot_extra/fixed_a/fillseq_sparse/MANIFEST-000005
+2026/09/13-07:48:36.382980 2945070 [/column_family.cc:691] --------------- Options for column family [default]:
+2026/09/13-07:48:36.382983 2945070               Options.comparator: leveldb.BytewiseComparator
+2026/09/13-07:48:36.382984 2945070           Options.merge_operator: None
+2026/09/13-07:48:36.382985 2945070        Options.compaction_filter: None
+2026/09/13-07:48:36.382986 2945070        Options.compaction_filter_factory: None
+2026/09/13-07:48:36.382986 2945070  Options.sst_partitioner_factory: None
+2026/09/13-07:48:36.382987 2945070         Options.memtable_factory: SkipListFactory
+2026/09/13-07:48:36.382988 2945070            Options.table_factory: BlockBasedTable
+2026/09/13-07:48:36.383007 2945070            table_factory options:   flush_block_policy_factory: FlushBlockBySizePolicyFactory (0x7fde1c5006c0)
+  cache_index_and_filter_blocks: 1
+  cache_index_and_filter_blocks_with_high_priority: 1
+  pin_l0_filter_and_index_blocks_in_cache: 0
+  pin_top_level_index_and_filter: 0
+  index_type: 0
+  data_block_index_type: 0
+  index_shortening: 2
+  data_block_hash_table_util_ratio: 0.750000
+  checksum: 4
+  no_block_cache: 0
+  block_cache: 0x7fde1c453750
+  block_cache_name: LRUCache
+  block_cache_options:
+    capacity : 53687091200
+    num_shard_bits : 6
+    strict_capacity_limit : 0
+    memory_allocator : None
+    high_pri_pool_ratio: 0.000
+    low_pri_pool_ratio: 0.000
+  persistent_cache: (nil)
+  block_size: 4096
+  block_size_deviation: 10
+  block_restart_interval: 16
+  index_block_restart_interval: 1
+  metadata_block_size: 4096
+  partition_filters: 0
+  use_delta_encoding: 1
+  filter_policy: bloomfilter
+  user_defined_index_factory: nullptr
+  fail_if_no_udi_on_open: 0
+  whole_key_filtering: 1
+  verify_compression: 0
+  read_amp_bytes_per_bit: 0
+  format_version: 7
+  enable_index_compression: 0
+  block_align: 0
+  super_block_alignment_size: 0
+  super_block_alignment_space_overhead_ratio: 128
+  max_auto_readahead_size: 262144
+  prepopulate_block_cache: 0
+  initial_auto_readahead_size: 8192
+  num_file_reads_for_auto_readahead: 2
+2026/09/13-07:48:36.383010 2945070        Options.write_buffer_size: 67108864
+2026/09/13-07:48:36.383011 2945070  Options.max_write_buffer_number: 16
+2026/09/13-07:48:36.383013 2945070          Options.compression: NoCompression
+2026/09/13-07:48:36.383014 2945070                  Options.bottommost_compression: Disabled
+2026/09/13-07:48:36.383015 2945070       Options.prefix_extractor: nullptr
+2026/09/13-07:48:36.383015 2945070   Options.memtable_insert_with_hint_prefix_extractor: nullptr
+2026/09/13-07:48:36.383016 2945070             Options.num_levels: 7
+2026/09/13-07:48:36.383017 2945070        Options.min_write_buffer_number_to_merge: 1
+2026/09/13-07:48:36.383018 2945070     Options.max_write_buffer_size_to_maintain: 0
+2026/09/13-07:48:36.383019 2945070            Options.bottommost_compression_opts.window_bits: -14
+2026/09/13-07:48:36.383020 2945070                  Options.bottommost_compression_opts.level: 32767
+2026/09/13-07:48:36.383021 2945070               Options.bottommost_compression_opts.strategy: 0
+2026/09/13-07:48:36.383022 2945070         Options.bottommost_compression_opts.max_dict_bytes: 0
+2026/09/13-07:48:36.383023 2945070         Options.bottommost_compression_opts.zstd_max_train_bytes: 0
+2026/09/13-07:48:36.383024 2945070         Options.bottommost_compression_opts.parallel_threads: 1
+2026/09/13-07:48:36.383024 2945070                  Options.bottommost_compression_opts.enabled: false
+2026/09/13-07:48:36.383025 2945070         Options.bottommost_compression_opts.max_dict_buffer_bytes: 0
+2026/09/13-07:48:36.383026 2945070         Options.bottommost_compression_opts.use_zstd_dict_trainer: true
+2026/09/13-07:48:36.383027 2945070            Options.compression_opts.window_bits: -14
+2026/09/13-07:48:36.383028 2945070                  Options.compression_opts.level: 32767
+2026/09/13-07:48:36.383029 2945070               Options.compression_opts.strategy: 0
+2026/09/13-07:48:36.383030 2945070         Options.compression_opts.max_dict_bytes: 0
+2026/09/13-07:48:36.383031 2945070         Options.compression_opts.zstd_max_train_bytes: 0
+2026/09/13-07:48:36.383032 2945070         Options.compression_opts.use_zstd_dict_trainer: true
+2026/09/13-07:48:36.383032 2945070         Options.compression_opts.parallel_threads: 1
+2026/09/13-07:48:36.383033 2945070                  Options.compression_opts.enabled: false
+2026/09/13-07:48:36.383034 2945070         Options.compression_opts.max_dict_buffer_bytes: 0
+2026/09/13-07:48:36.383035 2945070      Options.level0_file_num_compaction_trigger: 4
+2026/09/13-07:48:36.383036 2945070          Options.level0_slowdown_writes_trigger: 20
+2026/09/13-07:48:36.383037 2945070              Options.level0_stop_writes_trigger: 36
+2026/09/13-07:48:36.383038 2945070                   Options.target_file_size_base: 67108864
+2026/09/13-07:48:36.383039 2945070             Options.target_file_size_multiplier: 1
+2026/09/13-07:48:36.383039 2945070            Options.target_file_size_is_upper_bound: 0
+2026/09/13-07:48:36.383040 2945070                Options.max_bytes_for_level_base: 268435456
+2026/09/13-07:48:36.383041 2945070 Options.level_compaction_dynamic_level_bytes: 0
+2026/09/13-07:48:36.383042 2945070          Options.max_bytes_for_level_multiplier: 10.000000
+2026/09/13-07:48:36.383044 2945070 Options.max_bytes_for_level_multiplier_addtl[0]: 1
+2026/09/13-07:48:36.383045 2945070 Options.max_bytes_for_level_multiplier_addtl[1]: 1
+2026/09/13-07:48:36.383046 2945070 Options.max_bytes_for_level_multiplier_addtl[2]: 1
+2026/09/13-07:48:36.383047 2945070 Options.max_bytes_for_level_multiplier_addtl[3]: 1
+2026/09/13-07:48:36.383047 2945070 Options.max_bytes_for_level_multiplier_addtl[4]: 1
+2026/09/13-07:48:36.383048 2945070 Options.max_bytes_for_level_multiplier_addtl[5]: 1
+2026/09/13-07:48:36.383049 2945070 Options.max_bytes_for_level_multiplier_addtl[6]: 1
+2026/09/13-07:48:36.383050 2945070       Options.max_sequential_skip_in_iterations: 8
+2026/09/13-07:48:36.383051 2945070          Options.memtable_op_scan_flush_trigger: 0
+2026/09/13-07:48:36.383052 2945070      Options.memtable_avg_op_scan_flush_trigger: 0
+2026/09/13-07:48:36.383053 2945070                    Options.max_compaction_bytes: 1677721600
+2026/09/13-07:48:36.383054 2945070                        Options.arena_block_size: 1048576
+2026/09/13-07:48:36.383055 2945070   Options.soft_pending_compaction_bytes_limit: 68719476736
+2026/09/13-07:48:36.383056 2945070   Options.hard_pending_compaction_bytes_limit: 137438953472
+2026/09/13-07:48:36.383056 2945070                Options.disable_auto_compactions: 0
+2026/09/13-07:48:36.383057 2945070                        Options.compaction_style: kCompactionStyleLevel
+2026/09/13-07:48:36.383058 2945070                          Options.compaction_pri: kMinOverlappingRatio
+2026/09/13-07:48:36.383059 2945070 Options.compaction_options_universal.size_ratio: 1
+2026/09/13-07:48:36.383060 2945070 Options.compaction_options_universal.min_merge_width: 2
+2026/09/13-07:48:36.383061 2945070 Options.compaction_options_universal.max_merge_width: 4294967295
+2026/09/13-07:48:36.383061 2945070 Options.compaction_options_universal.max_size_amplification_percent: 200
+2026/09/13-07:48:36.383062 2945070 Options.compaction_options_universal.compression_size_percent: -1
+2026/09/13-07:48:36.383063 2945070 Options.compaction_options_universal.stop_style: kCompactionStopStyleTotalSize
+2026/09/13-07:48:36.383064 2945070 Options.compaction_options_universal.max_read_amp: -1
+2026/09/13-07:48:36.383065 2945070 Options.compaction_options_universal.reduce_file_locking: 0
+2026/09/13-07:48:36.383065 2945070 Options.compaction_options_fifo.max_table_files_size: 0
+2026/09/13-07:48:36.383066 2945070 Options.compaction_options_fifo.allow_compaction: 1
+2026/09/13-07:48:36.383068 2945070                   Options.table_properties_collectors: 
+2026/09/13-07:48:36.383069 2945070                   Options.inplace_update_support: 0
+2026/09/13-07:48:36.383070 2945070                 Options.inplace_update_num_locks: 10000
+2026/09/13-07:48:36.383071 2945070               Options.memtable_prefix_bloom_size_ratio: 0.000000
+2026/09/13-07:48:36.383072 2945070               Options.memtable_whole_key_filtering: 0
+2026/09/13-07:48:36.383073 2945070   Options.memtable_huge_page_size: 0
+2026/09/13-07:48:36.383073 2945070                           Options.bloom_locality: 0
+2026/09/13-07:48:36.383074 2945070                    Options.max_successive_merges: 0
+2026/09/13-07:48:36.383075 2945070             Options.strict_max_successive_merges: 0
+2026/09/13-07:48:36.383076 2945070                Options.optimize_filters_for_hits: 0
+2026/09/13-07:48:36.383076 2945070                Options.paranoid_file_checks: 0
+2026/09/13-07:48:36.383077 2945070                Options.force_consistency_checks: 1
+2026/09/13-07:48:36.383078 2945070                Options.report_bg_io_stats: 0
+2026/09/13-07:48:36.383079 2945070                Options.disallow_memtable_writes: 0
+2026/09/13-07:48:36.383079 2945070                               Options.ttl: 315360000
+2026/09/13-07:48:36.383080 2945070          Options.periodic_compaction_seconds: 0
+2026/09/13-07:48:36.383081 2945070                        Options.default_temperature: kUnknown
+2026/09/13-07:48:36.383082 2945070  Options.preclude_last_level_data_seconds: 0
+2026/09/13-07:48:36.383082 2945070    Options.preserve_internal_time_seconds: 0
+2026/09/13-07:48:36.383083 2945070                       Options.enable_blob_files: false
+2026/09/13-07:48:36.383084 2945070                           Options.min_blob_size: 0
+2026/09/13-07:48:36.383085 2945070                          Options.blob_file_size: 268435456
+2026/09/13-07:48:36.383085 2945070                   Options.blob_compression_type: NoCompression
+2026/09/13-07:48:36.383086 2945070          Options.enable_blob_garbage_collection: false
+2026/09/13-07:48:36.383087 2945070      Options.blob_garbage_collection_age_cutoff: 0.250000
+2026/09/13-07:48:36.383088 2945070 Options.blob_garbage_collection_force_threshold: 1.000000
+2026/09/13-07:48:36.383089 2945070          Options.blob_compaction_readahead_size: 0
+2026/09/13-07:48:36.383090 2945070                Options.blob_file_starting_level: 0
+2026/09/13-07:48:36.383091 2945070         Options.experimental_mempurge_threshold: 0.000000
+2026/09/13-07:48:36.383092 2945070            Options.memtable_max_range_deletions: 0
+2026/09/13-07:48:36.383093 2945070                  Options.cf_allow_ingest_behind: false
+2026/09/13-07:48:36.766928 2945070 [/version_set.cc:6528] Recovered from manifest file:/work/vcomp/exp/fillseq_sparse_fixed_a_260913_run1/pilot_extra/fixed_a/fillseq_sparse/MANIFEST-000005 succeeded,manifest_file_number is 5, next_file_number is 10276, last_sequence is 662840067, log_number is 4,prev_log_number is 0,max_column_family is 0,min_log_number_to_keep is 4
+2026/09/13-07:48:36.766936 2945070 [/version_set.cc:6543] Column family [default] (ID 0), log number is 4
+2026/09/13-07:48:36.767012 2945070 [/db_impl/db_impl_open.cc:686] DB ID: 2d7a09b8-b390-4292-82ef-6fdb0b99faa4
+2026/09/13-07:48:36.773378 2945070 EVENT_LOG_v1 {"time_micros": 1789285716773371, "job": 1, "event": "recovery_started", "wal_files": [4]}
+2026/09/13-07:48:36.773383 2945070 [/db_impl/db_impl_open.cc:1368] Recovering log #4 mode 2
+2026/09/13-07:48:36.773398 2945070 [/db_impl/db_impl_open.cc:1342] Recovered to log #4 next seq #72057594037927935
+2026/09/13-07:48:36.773435 2945070 EVENT_LOG_v1 {"time_micros": 1789285716773433, "job": 1, "event": "recovery_finished", "status": "OK"}
+2026/09/13-07:48:36.787236 2945070 [/version_set.cc:6088] Created manifest 10278, compacted+appended from 7882897 to 1285085
+2026/09/13-07:48:36.790993 2945070 [/db_impl/db_impl_open.cc:2626] SstFileManager instance 0x7fde1c3e2000
+2026/09/13-07:48:36.815235 2945070 [le/delete_scheduler.cc:71] Deleted file /work/vcomp/exp/fillseq_sparse_fixed_a_260913_run1/pilot_extra/fixed_a/fillseq_sparse/000004.log immediately, rate_bytes_per_sec 0, total_trash_size 0, total_size 689530007679, max_trash_db_ratio 0.250000
+2026/09/13-07:48:36.816688 2945070 DB pointer 0x7fde1c531000
+2026/09/13-07:48:36.817185 2945134 [/db_impl/db_impl.cc:1116] ------- DUMPING STATS -------
+2026/09/13-07:48:36.817213 2945134 [/db_impl/db_impl.cc:1118] 
+** DB Stats **
+Uptime(secs): 0.4 total, 0.4 interval
+Cumulative writes: 0 writes, 0 keys, 0 commit groups, 0.0 writes per commit group, ingest: 0.00 GB, 0.00 MB/s
+Cumulative WAL: 0 writes, 0 syncs, 0.00 writes per sync, written: 0.00 GB, 0.00 MB/s
+Cumulative stall: 00:00:0.000 H:M:S, 0.0 percent
+Interval writes: 0 writes, 0 keys, 0 commit groups, 0.0 writes per commit group, ingest: 0.00 MB, 0.00 MB/s
+Interval WAL: 0 writes, 0 syncs, 0.00 writes per sync, written: 0.00 GB, 0.00 MB/s
+Interval stall: 00:00:0.000 H:M:S, 0.0 percent
+Write Stall (count): write-buffer-manager-limit-stops: 0
+
+** Compaction Stats [default] **
+Level    Files   Size     Score Read(GB)  Rn(GB) Rnp1(GB) Write(GB) WPreComp(GB) Wnew(GB) Moved(GB) W-Amp Rd(MB/s) Wr(MB/s) Comp(sec) CompMergeCPU(sec) Comp(cnt) Avg(sec) KeyIn KeyDrop Rblob(GB) Wblob(GB)
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  L1      4/0    249.30 MB   1.0      0.0     0.0      0.0       0.0       0.0      0.0       0.0   0.0      0.0      0.0      0.00              0.00         0    0.000       0      0       0.0       0.0
+  L2     36/0      2.25 GB   0.9      0.0     0.0      0.0       0.0       0.0      0.0       0.0   0.0      0.0      0.0      0.00              0.00         0    0.000       0      0       0.0       0.0
+  L3    396/0     24.78 GB   1.0      0.0     0.0      0.0       0.0       0.0      0.0       0.0   0.0      0.0      0.0      0.00              0.00         0    0.000       0      0       0.0       0.0
+  L4   3992/0    249.77 GB   1.0      0.0     0.0      0.0       0.0       0.0      0.0       0.0   0.0      0.0      0.0      0.00              0.00         0    0.000       0      0       0.0       0.0
+  L5   5836/0    365.14 GB   0.1      0.0     0.0      0.0       0.0       0.0      0.0       0.0   0.0      0.0      0.0      0.00              0.00         0    0.000       0      0       0.0       0.0
+ Sum  10264/0    642.17 GB   0.0      0.0     0.0      0.0       0.0       0.0      0.0       0.0   0.0      0.0      0.0      0.00              0.00         0    0.000       0      0       0.0       0.0
+ Int      0/0      0.00 KB   0.0      0.0     0.0      0.0       0.0       0.0      0.0       0.0   0.0      0.0      0.0      0.00              0.00         0    0.000       0      0       0.0       0.0
+
+** Compaction Stats [default] **
+Priority    Files   Size     Score Read(GB)  Rn(GB) Rnp1(GB) Write(GB) WPreComp(GB) Wnew(GB) Moved(GB) W-Amp Rd(MB/s) Wr(MB/s) Comp(sec) CompMergeCPU(sec) Comp(cnt) Avg(sec) KeyIn KeyDrop Rblob(GB) Wblob(GB)
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Blob file count: 0, total size: 0.0 GB, garbage size: 0.0 GB, space amp: 0.0
+
+Uptime(secs): 0.4 total, 0.4 interval
+Flush(GB): cumulative 0.000, interval 0.000
+AddFile(GB): cumulative 0.000, interval 0.000
+AddFile(Total Files): cumulative 0, interval 0
+AddFile(L0 Files): cumulative 0, interval 0
+AddFile(Keys): cumulative 0, interval 0
+Cumulative compaction: 0.00 GB write, 0.00 MB/s write, 0.00 GB read, 0.00 MB/s read, 0.0 seconds
+Interval compaction: 0.00 GB write, 0.00 MB/s write, 0.00 GB read, 0.00 MB/s read, 0.0 seconds
+Estimated pending compaction bytes: 0
+Write Stall (count): cf-l0-file-count-limit-delays-with-ongoing-compaction: 0, cf-l0-file-count-limit-stops-with-ongoing-compaction: 0, l0-file-count-limit-delays: 0, l0-file-count-limit-stops: 0, memtable-limit-delays: 0, memtable-limit-stops: 0, pending-compaction-bytes-delays: 0, pending-compaction-bytes-stops: 0, total-delays: 0, total-stops: 0
+Block cache LRUCache@0x7fde1c453750#2945070 capacity: 50.00 GB seed: 87654321 usage: 0.09 KB table_size: 1024 occupancy: 1 collections: 1 last_copies: 0 last_secs: 5.9e-05 secs_since: 0
+Block cache entry stats(count,size,portion): Misc(1,0.00 KB,0%)
+
+** File Read Latency Histogram By Level [default] **
+** Level 1 read latency histogram (micros):
+Count: 4 Average: 329.5000  StdDev: 65.12
+Min: 248  Median: 315.0000  Max: 425
+Percentiles: P50: 315.00 P75: 380.00 P99: 425.00 P99.9: 425.00 P99.99: 425.00
+------------------------------------------------------
+(     170,     250 ]        1  25.000%  25.000% #####
+(     250,     380 ]        2  50.000%  75.000% ##########
+(     380,     580 ]        1  25.000% 100.000% #####
+
+** Level 2 read latency histogram (micros):
+Count: 36 Average: 289.7222  StdDev: 94.52
+Min: 146  Median: 287.1429  Max: 459
+Percentiles: P50: 287.14 P75: 370.71 P99: 459.00 P99.9: 459.00 P99.99: 459.00
+------------------------------------------------------
+(     110,     170 ]        7  19.444%  19.444% ####
+(     170,     250 ]        7  19.444%  38.889% ####
+(     250,     380 ]       14  38.889%  77.778% ########
+(     380,     580 ]        8  22.222% 100.000% ####
+
+** Level 3 read latency histogram (micros):
+Count: 396 Average: 216.9571  StdDev: 55.32
+Min: 145  Median: 200.4478  Max: 379
+Percentiles: P50: 200.45 P75: 268.09 P99: 375.52 P99.9: 379.00 P99.99: 379.00
+------------------------------------------------------
+(     110,     170 ]      147  37.121%  37.121% #######
+(     170,     250 ]      134  33.838%  70.960% #######
+(     250,     380 ]      115  29.040% 100.000% ######
+
+** Level 4 read latency histogram (micros):
+Count: 3991 Average: 207.5345  StdDev: 47.49
+Min: 139  Median: 196.1055  Max: 412
+Percentiles: P50: 196.11 P75: 234.72 P99: 372.21 P99.9: 380.36 P99.99: 412.00
+------------------------------------------------------
+(     110,     170 ]     1321  33.099%  33.099% #######
+(     170,     250 ]     2067  51.792%  84.891% ##########
+(     250,     380 ]      599  15.009%  99.900% ###
+(     380,     580 ]        5   0.125% 100.025% 
+
+** Level 5 read latency histogram (micros):
+Count: 5829 Average: 188.8091  StdDev: 45.69
+Min: 138  Median: 173.9434  Max: 644
+Percentiles: P50: 173.94 P75: 219.73 P99: 367.03 P99.9: 444.17 P99.99: 524.88
+------------------------------------------------------
+(     110,     170 ]     2789  47.847%  47.847% ##########
+(     170,     250 ]     2546  43.678%  91.525% #########
+(     250,     380 ]      484   8.303%  99.828% ##
+(     380,     580 ]       13   0.223% 100.051% 
+(     580,     870 ]        3   0.051% 100.103% 
+
+2026/09/13-07:48:36.846245 2945134 [/db_impl/db_impl.cc:1123] ------- Malloc STATS -------
+2026/09/13-07:48:36.848362 2945134 [/db_impl/db_impl.cc:1125] ___ Begin jemalloc statistics ___
+Version: "5.3.0-186-g21bcc0a8d49ab2944ae53c7e43f5c84fc8a34322"
+Build-time option settings
+  config.cache_oblivious: true
+  config.debug: false
+  config.fill: true
+  config.lazy_lock: false
+  config.malloc_conf: ""
+  config.opt_safety_checks: false
+  config.prof: false
+  config.prof_libgcc: false
+  config.prof_libunwind: false
+  config.stats: true
+  config.utrace: false
+  config.xmalloc: false
+Run-time option settings
+  Global variable malloc_conf: ""
+  Symbolic link malloc.conf: ""
+  Environment variable MALLOC_CONF: ""
+  opt.abort: false
+  opt.abort_conf: false
+  opt.cache_oblivious: true
+  opt.confirm_conf: false
+  opt.retain: true
+  opt.dss: "secondary"
+  opt.narenas: 192
+  opt.percpu_arena: "disabled"
+  opt.oversize_threshold: 8388608
+  opt.hpa: false
+  opt.hpa_slab_max_alloc: 65536
+  opt.hpa_hugification_threshold: 1992294
+  opt.hpa_hugify_delay_ms: 10000
+  opt.hpa_min_purge_interval_ms: 5000
+  opt.hpa_strict_min_purge_interval: false
+  opt.hpa_dirty_mult: "0.25"
+  opt.hpa_sec_nshards: 4
+  opt.hpa_sec_max_alloc: 32768
+  opt.hpa_sec_max_bytes: 262144
+  opt.hpa_sec_bytes_after_flush: 131072
+  opt.hpa_sec_batch_fill_extra: 0
+  opt.metadata_thp: "disabled"
+  opt.mutex_max_spin: 600
+  opt.background_thread: false (background_thread: false)
+  opt.dirty_decay_ms: 10000 (arenas.dirty_decay_ms: 10000)
+  opt.muzzy_decay_ms: 0 (arenas.muzzy_decay_ms: 0)
+  opt.lg_extent_max_active_fit: 6
+  opt.junk: "false"
+  opt.zero: false
+  opt.experimental_infallible_new: false
+  opt.max_batched_size: 0
+  opt.remote_free_max: 16
+  opt.remote_free_max_batch: 4
+  opt.tcache: true
+  opt.tcache_max: 32768
+  opt.tcache_nslots_small_min: 20
+  opt.tcache_nslots_small_max: 200
+  opt.tcache_nslots_large: 20
+  opt.lg_tcache_nslots_mul: 1
+  opt.tcache_gc_incr_bytes: 65536
+  opt.tcache_gc_delay_bytes: 0
+  opt.lg_tcache_flush_small_div: 1
+  opt.lg_tcache_flush_large_div: 1
+  opt.debug_double_free_max_scan: 0
+  opt.thp: "default"
+  opt.stats_print: false
+  opt.stats_print_opts: ""
+  opt.stats_print: false
+  opt.stats_print_opts: ""
+  opt.stats_interval: -1
+  opt.stats_interval_opts: ""
+  opt.zero_realloc: "free"
+Arenas: 193
+Quantum size: 16
+Page size: 4096
+Hugepage size: 2097152
+Maximum thread-cached size class: 32768
+Number of bin size classes: 36
+Number of thread-cache bin size classes: 41
+Number of large size classes: 196
+Allocated: 72420288, active: 76460032, metadata: 20428592 (n_thp 0, edata 917120, rtree 4456448), resident: 112279552, mapped: 237940736, retained: 128536576
+Count of realloc(non-null-ptr, 0) calls: 0
+Background threads: 0, num_runs: 0, run_interval: 0 ns
+                           n_lock_ops (#/sec)       n_waiting (#/sec)      n_spin_acq (#/sec)  n_owner_switch (#/sec)   total_wait_ns   (#/sec)     max_wait_ns  max_n_thds
+background_thread                 130     130               0       0               0       0              64      64               0         0               0           0
+max_per_bg_thd                      0       0               0       0               0       0               0       0               0         0               0           0
+ctl                                 2       2               0       0               0       0               1       1               0         0               0           0
+prof                                0       0               0       0               0       0               0       0               0         0               0           0
+prof_thds_data                      0       0               0       0               0       0               0       0               0         0               0           0
+prof_dump                           0       0               0       0               0       0               0       0               0         0               0           0
+prof_recent_alloc                   0       0               0       0               0       0               0       0               0         0               0           0
+prof_recent_dump                    0       0               0       0               0       0               0       0               0         0               0           0
+prof_stats                          0       0               0       0               0       0               0       0               0         0               0           0
+Merged arenas stats:
+assigned threads: 50
+uptime: 456000595
+dss allocation precedence: "N/A"
+decaying:  time       npages       sweeps     madvises       purged
+   dirty:   N/A         4096           23          136         2915
+   muzzy:   N/A            0            0            0            0
+                            allocated         nmalloc   (#/sec)         ndalloc   (#/sec)       nrequests   (#/sec)           nfill   (#/sec)          nflush   (#/sec)
+small:                       61516736          927115    927115          365005    365005         3579329   3579329           36215     36215            5718      5718
+large:                       10903552           10520     10520           10451     10451           10549     10549           10520     10520             175       175
+total:                       72420288          937635    937635          375456    375456         3589878   3589878           46735     46735            5893      5893
+                                     
+active:                      76460032
+mapped:                     237940736
+retained:                   128536576
+base:                        18929456
+internal:                     1499136
+metadata_edata:                917120
+metadata_rtree:               4456448
+metadata_thp:                       0
+tcache_bytes:                 1126800
+tcache_stashed_bytes:               0
+resident:                   112279552
+abandoned_vm:                       0
+extent_avail:                     345
+                           n_lock_ops (#/sec)       n_waiting (#/sec)      n_spin_acq (#/sec)  n_owner_switch (#/sec)   total_wait_ns   (#/sec)     max_wait_ns  max_n_thds
+large                             128     128               0       0               0       0              64      64               0         0               0           0
+extent_avail                    10110   10110               0       0               0       0             206     206               0         0               0           0
+extents_dirty                   32713   32713               0       0               4       4             297     297               0         0               0           0
+extents_muzzy                     128     128               0       0               0       0              64      64               0         0               0           0
+extents_retained                 3808    3808               0       0               0       0             163     163               0         0               0           0
+decay_dirty                       575     575               0       0               0       0              95      95               0         0               0           0
+decay_muzzy                       128     128               0       0               0       0              64      64               0         0               0           0
+base                             7758    7758               0       0               1       1             200     200               0         0               0           0
+tcache_list                       208     208               0       0               0       0             127     127               0         0               0           0
+hpa_shard                           0       0               0       0               0       0               0       0               0         0               0           0
+hpa_shard_grow                      0       0               0       0               0       0               0       0               0         0               0           0
+hpa_sec                             0       0               0       0               0       0               0       0               0         0               0           0
+bins:           size ind    allocated      nmalloc (#/sec)      ndalloc (#/sec)    nrequests   (#/sec)  nshards      curregs     curslabs  nonfull_slabs regs pgs   util       nfills (#/sec)     nflushes (#/sec)       nslabs     nreslabs (#/sec)      pops (#/sec)  failed_push (#/sec)   push (#/sec)   push_elem (#/sec)      n_lock_ops (#/sec)       n_waiting (#/sec)      n_spin_acq (#/sec)  n_owner_switch (#/sec)   total_wait_ns   (#/sec)     max_wait_ns  max_n_thds
+                   8   0           96         1619    1619         1607    1607        10359     10359        1           12            1              0  512   1  0.023           28      28           86      86           16            0       0         0       0            0       0      0       0           0       0             273     273               0       0               0       0              79      79               0         0               0           0
+                  16   1        95520        64068   64068        58098   58098        78211     78211        1         5970           56              3  256   1  0.416        10806   10806          649     649          289           37      37         0       0            0       0      0       0           0       0           11887   11887               0       0               0       0             127     127               0         0               0           0
+                  32   2      2368160       167598  167598        93593   93593      1238597   1238597        1        74005          596             29  128   1  0.970         2712    2712          943     943         1297          145     145         0       0            0       0      0       0           0       0            5095    5095               0       0               0       0              79      79               0         0               0           0
+                  48   3     11440704       342913  342913       104565  104565      1252606   1252606        1       238348          941              6  256   3  0.989         8344    8344         1058    1058         1333          102     102         0       0            0       0      0       0           0       0           10893   10893               0       0               1       1              95      95               0         0               0           0
+                  64   4      3331200        53302   53302         1252    1252       411141    411141        1        52050          830             28   64   1  0.979         3452    3452           30      30          831           35      35         0       0            0       0      0       0           0       0            4456    4456               0       0               0       0              79      79               0         0               0           0
+                  80   5       826320        14291   14291         3962    3962        21349     21349        1        10329           49              2  256   5  0.823          316     316          275     275           50            4       4         0       0            0       0      0       0           0       0             799     799               0       0               1       1              95      95               0         0               0           0
+                  96   6      7910592       144846  144846        62444   62444       206319    206319        1        82402          654              4  128   3  0.984         5503    5503          646     646         1133           33      33         0       0            0       0      0       0           0       0            7425    7425               0       0               0       0              79      79               0         0               0           0
+                 112   7      4030992        61853   61853        25862   25862        61791     61791        1        35991          217             82  256   7  0.647         1602    1602          403     403          266           44      44         0       0            0       0      0       0           0       0            2414    2414               0       0               0       0             127     127               0         0               0           0
+                 128   8        17152          655     655          521     521        10472     10472        1          134            5              0   32   1  0.837           26      26           71      71           20            0       0         0       0            0       0      0       0           0       0             275     275               0       0               0       0              96      96               0         0               0           0
+                 160   9         1120         1609    1609         1602    1602        10288     10288        1            7            1              0  128   5  0.054           20      20           84      84           16            0       0         0       0            0       0      0       0           0       0             263     263               0       0               0       0              79      79               0         0               0           0
+                 192  10      1990272        14443   14443         4077    4077        41248     41248        1        10366          170             15   64   3  0.952          321     321          203     203          249           84      84         0       0            0       0      0       0           0       0             916     916               0       0               0       0              79      79               0         0               0           0
+                 224  11      2322656        13991   13991         3622    3622        30825     30825        1        10369           88              1  128   7  0.920          270     270          271     271           97           10      10         0       0            0       0      0       0           0       0             781     781               0       0               0       0              79      79               0         0               0           0
+                 256  12       137984          804     804          265     265        10872     10872        1          539           34              0   16   1  0.990           61      61           68      68           49            0       0         0       0            0       0      0       0           0       0             336     336               0       0               0       0             105     105               0         0               0           0
+                 320  13      3302400        11337   11337         1017    1017        88949     88949        1        10320          162              0   64   5  0.995          183     183           70      70          177            2       2         0       0            0       0      0       0           0       0             573     573               0       0               0       0              79      79               0         0               0           0
+                 384  14        14592           72      72           34      34          114       114        1           38            2              0   32   3  0.593            5       5           22      22            2            0       0         0       0            0       0      0       0           0       0             172     172               0       0               0       0              79      79               0         0               0           0
+                 448  15            0           64      64           64      64           11        11        1            0            0              0   64   7      1            1       1           19      19            1            0       0         0       0            0       0      0       0           0       0             164     164               0       0               0       0              79      79               0         0               0           0
+                 512  16      5281792        10450   10450          134     134        30916     30916        1        10316         1299             19    8   1  0.992         1056    1056           28      28         1309           35      35         0       0            0       0      0       0           0       0            2550    2550               0       0               0       0              96      96               0         0               0           0
+                 640  17        22400          550     550          515     515        32150     32150        1           35            2              0   32   5  0.546           22      22           70      70           17            0       0         0       0            0       0      0       0           0       0             252     252               0       0               0       0              79      79               0         0               0           0
+                 768  18      7898880        10420   10420          135     135        10269     10269        1        10285          650              0   16   3  0.988          657     657           20      20          651            0       0         0       0            0       0      0       0           0       0            1471    1471               0       0               0       0              79      79               0         0               0           0
+                 896  19      9200128        10870   10870          602     602        10277     10277        1        10268          328              1   32   7  0.978          510     510          187     187          340           13      13         0       0            0       0      0       0           0       0            1180    1180               0       0               0       0              79      79               0         0               0           0
+                1024  20         5120          140     140          135     135           72        72        1            5            2              0    4   1  0.625           24      24           62      62           40           15      15         0       0            0       0      0       0           0       0             284     284               0       0               0       0             106     106               0         0               0           0
+                1280  21        69120          312     312          258     258        21914     21914        1           54            4              0   16   5  0.843           24      24           53      53           19            0       0         0       0            0       0      0       0           0       0             239     239               0       0               0       0              79      79               0         0               0           0
+                1536  22        15360           22      22           12      12            7         7        1           10            2              0    8   3  0.625            3       3           18      18            5            1       1         0       0            0       0      0       0           0       0             169     169               0       0               0       0              79      79               0         0               0           0
+                1792  23         1792           24      24           23      23            9         9        1            1            1              0   16   7  0.062            3       3           21      21            1            0       0         0       0            0       0      0       0           0       0             168     168               0       0               0       0              79      79               0         0               0           0
+                2048  24         6144          108     108          105     105           46        46        1            3            2              0    2   1  0.750           16      16           53      53           53           15      15         0       0            0       0      0       0           0       0             281     281               0       0               0       0             106     106               0         0               0           0
+                2560  25        30720           33      33           21      21           24        24        1           12            3              0    8   5  0.500           11      11           24      24            5            2       2         0       0            0       0      0       0           0       0             183     183               0       0               0       0              79      79               0         0               0           0
+                3072  26        43008           24      24           10      10            8         8        1           14            5              1    4   3  0.700            4       4           20      20            8            3       3         0       0            0       0      0       0           0       0             175     175               0       0               0       0              79      79               0         0               0           0
+                3584  27         3584           13      13           12      12            7         7        1            1            1              0    8   7  0.125            3       3           20      20            2            1       1         0       0            0       0      0       0           0       0             168     168               0       0               0       0              79      79               0         0               0           0
+                4096  28       679936          442     442          276     276          370       370        1          166          166              0    1   1      1          179     179           74      74          442            0       0         0       0            0       0      0       0           0       0             854     854               0       0               0       0             107     107               0         0               0           0
+                5120  29        66560           35      35           22      22           27        27        1           13            4              0    4   5  0.812           13      13           27      27           11            8       8         0       0            0       0      0       0           0       0             194     194               0       0               0       0              79      79               0         0               0           0
+                6144  30        86016           26      26           12      12            6         6        1           14            8              1    2   3  0.875            5       5           19      19           12            5       5         0       0            0       0      0       0           0       0             179     179               0       0               0       0              79      79               0         0               0           0
+                7168  31        21504           15      15           12      12           10        10        1            3            1              0    4   7  0.750            4       4           21      21            4            3       3         0       0            0       0      0       0           0       0             172     172               0       0               0       0              79      79               0         0               0           0
+                8192  32       131072          118     118          102     102           40        40        1           16           16              0    1   2      1           16      16           42      42          118            0       0         0       0            0       0      0       0           0       0             319     319               0       0               0       0              79      79               0         0               0           0
+               10240  33        40960           28      28           24      24           21        21        1            4            2              0    2   5      1           13      13           28      28           17            2       2         0       0            0       0      0       0           0       0             201     201               0       0               0       0              79      79               0         0               0           0
+               12288  34       122880           10      10            0       0            0         0        1           10           10              0    1   3      1            1       1           15      15           10            0       0         0       0            0       0      0       0           0       0             169     169               0       0               0       0              78      78               0         0               0           0
+               14336  35            0           10      10           10      10            4         4        1            0            0              0    2   7      1            1       1           18      18            5            1       1         0       0            0       0      0       0           0       0             167     167               0       0               0       0              79      79               0         0               0           0
+large:          size ind    allocated      nmalloc (#/sec)      ndalloc (#/sec)    nrequests (#/sec)  curlextents
+               16384  36        32768            9       9            7       7           22      22            2
+               20480  37            0           16      16           16      16           18      18            0
+                     ---
+               28672  39      1433600           67      67           17      17           69      69           50
+               32768  40        98304           12      12            9       9           24      24            3
+               40960  41            0           23      23           23      23           23      23            0
+               49152  42        49152            3       3            2       2            3       3            1
+               57344  43            0            3       3            3       3            3       3            0
+               65536  44       131072           22      22           20      20           22      22            2
+               81920  45       245760            6       6            3       3            6       6            3
+               98304  46       196608           17      17           15      15           17      17            2
+              114688  47            0            3       3            3       3            3       3            0
+              131072  48            0           15      15           15      15           15      15            0
+              163840  49            0            2       2            2       2            2       2            0
+              196608  50            0            2       2            2       2            2       2            0
+              229376  51            0            3       3            3       3            3       3            0
+              262144  52       262144           14      14           13      13           14      14            1
+              327680  53       327680            4       4            3       3            4       4            1
+              393216  54            0            1       1            1       1            1       1            0
+              458752  55            0        10265   10265        10265   10265        10265   10265            0
+              524288  56       524288           12      12           11      11           12      12            1
+              655360  57            0            3       3            3       3            3       3            0
+              786432  58            0            2       2            2       2            2       2            0
+              917504  59            0            2       2            2       2            2       2            0
+             1048576  60      1048576            3       3            2       2            3       3            1
+             1310720  61      1310720            2       2            1       1            2       2            1
+                     ---
+             1835008  63            0            3       3            3       3            3       3            0
+             2097152  64            0            1       1            1       1            1       1            0
+             2621440  65            0            2       2            2       2            2       2            0
+                     ---
+             3670016  67            0            1       1            1       1            1       1            0
+                     ---
+             5242880  69      5242880            2       2            1       1            2       2            1
+                     ---
+extents:        size ind       ndirty        dirty       nmuzzy        muzzy    nretained     retained       ntotal        total
+                4096   0           98       401408            0            0           22        90112          120       491520
+                8192   1            2        16384            0            0           11        90112           13       106496
+               12288   2          131      1609728            0            0            8        98304          139      1708032
+               16384   3            1        16384            0            0            1        16384            2        32768
+               20480   4            1        20480            0            0           29       593920           30       614400
+                     ---
+               28672   6            3        86016            0            0           10       286720           13       372736
+                     ---
+               40960   8            0            0            0            0            1        36864            1        36864
+               49152   9            1        49152            0            0           14       630784           15       679936
+               57344  10            2       110592            0            0            5       286720            7       397312
+               65536  11            0            0            0            0            1        61440            1        61440
+               81920  12            1        69632            0            0            2       139264            3       208896
+               98304  13            1        86016            0            0            0            0            1        86016
+              114688  14            1       114688            0            0            0            0            1       114688
+                     ---
+              163840  16            0            0            0            0            4       598016            4       598016
+              196608  17            1       172032            0            0            1       176128            2       348160
+              229376  18            3       630784            0            0            0            0            3       630784
+              262144  19            0            0            0            0            2       471040            2       471040
+              327680  20            0            0            0            0            2       593920            2       593920
+                     ---
+              524288  23            0            0            0            0           15      7073792           15      7073792
+                     ---
+              786432  25            0            0            0            0            9      6606848            9      6606848
+              917504  26            1       913408            0            0            1       917504            2      1830912
+             1048576  27            0            0            0            0            1       929792            1       929792
+                     ---
+             2097152  31            0            0            0            0           49    101171200           49    101171200
+             2621440  32            1      2101248            0            0            0            0            1      2101248
+                     ---
+             3670016  34            1      3411968            0            0            0            0            1      3411968
+                     ---
+             7340032  38            1      6967296            0            0            0            0            1      6967296
+             8388608  39            0            0            0            0            1      7667712            1      7667712
+                     ---
+Bytes in small extent cache: 0
+HPA shard stats:
+  Purge passes: 0 (0 / sec)
+  Purges: 0 (0 / sec)
+  Hugeifies: 0 (0 / sec)
+  Dehugifies: 0 (0 / sec)
+
+  In full slabs:
+      npageslabs: 0 huge, 0 nonhuge
+      nactive: 0 huge, 0 nonhuge 
+      ndirty: 0 huge, 0 nonhuge 
+      nretained: 0 huge, 0 nonhuge 
+  In empty slabs:
+      npageslabs: 0 huge, 0 nonhuge
+      nactive: 0 huge, 0 nonhuge 
+      ndirty: 0 huge, 0 nonhuge 
+      nretained: 0 huge, 0 nonhuge 
+  In nonfull slabs:
+                size ind npageslabs_huge    nactive_huge     ndirty_huge  npageslabs_nonhuge     nactive_nonhuge      ndirty_nonhuge   nretained_nonhuge
+                     ---
+arenas[0]:
+name: "auto_0"
+assigned threads: 1
+uptime: 456000595
+dss allocation precedence: "secondary"
+decaying:  time       npages       sweeps     madvises       purged
+   dirty: 10000         4075            0            0            0
+   muzzy:     0            0            0            0            0
+                            allocated         nmalloc   (#/sec)         ndalloc   (#/sec)       nrequests   (#/sec)           nfill   (#/sec)          nflush   (#/sec)
+small:                       11176464          437763    437763          337381    337381         1515673   1515673           28787     28787            3742      3742
+large:                        9854976             921       921             853       853             950       950             921       921              25        25
+total:                       21031440          438684    438684          338234    338234         1516623   1516623           29708     29708            3767      3767
+                                     
+active:                      22827008
+mapped:                      52101120
+retained:                     7667712
+base:                        12422400
+internal:                     1499136
+metadata_edata:                229248
+metadata_rtree:               4456448
+metadata_thp:                       0
+tcache_bytes:                   65776
+tcache_stashed_bytes:               0
+resident:                    51945472
+abandoned_vm:                       0
+extent_avail:                     283
+                           n_lock_ops (#/sec)       n_waiting (#/sec)      n_spin_acq (#/sec)  n_owner_switch (#/sec)   total_wait_ns   (#/sec)     max_wait_ns  max_n_thds
+large                               2       2               0       0               0       0               1       1               0         0               0           0
+extent_avail                     3110    3110               0       0               0       0              81      81               0         0               0           0
+extents_dirty                    7134    7134               0       0               2       2              89      89               0         0               0           0
+extents_muzzy                       2       2               0       0               0       0               1       1               0         0               0           0
+extents_retained                 1381    1381               0       0               0       0              38      38               0         0               0           0
+decay_dirty                       356     356               0       0               0       0              18      18               0         0               0           0
+decay_muzzy                         2       2               0       0               0       0               1       1               0         0               0           0
+base                             2006    2006               0       0               1       1              75      75               0         0               0           0
+tcache_list                         3       3               0       0               0       0               2       2               0         0               0           0
+hpa_shard                           0       0               0       0               0       0               0       0               0         0               0           0
+hpa_shard_grow                      0       0               0       0               0       0               0       0               0         0               0           0
+hpa_sec                             0       0               0       0               0       0               0       0               0         0               0           0
+bins:           size ind    allocated      nmalloc (#/sec)      ndalloc (#/sec)    nrequests   (#/sec)  nshards      curregs     curslabs  nonfull_slabs regs pgs   util       nfills (#/sec)     nflushes (#/sec)       nslabs     nreslabs (#/sec)      pops (#/sec)  failed_push (#/sec)   push (#/sec)   push_elem (#/sec)      n_lock_ops (#/sec)       n_waiting (#/sec)      n_spin_acq (#/sec)  n_owner_switch (#/sec)   total_wait_ns   (#/sec)     max_wait_ns  max_n_thds
+                   8   0           96          119     119          107     107          761       761        1           12            1              0  512   1  0.023           13      13           11      11            1            0       0         0       0            0       0      0       0           0       0              27      27               0       0               0       0               2       2               0         0               0           0
+                  16   1        17120        57668   57668        56598   56598        59016     59016        1         1070            7              3  256   1  0.597        10742   10742          574     574          225           37      37         0       0            0       0      0       0           0       0           11543   11543               0       0               0       0               2       2               0         0               0           0
+                  32   2       522272       108398  108398        92077   92077       317263    317263        1        16321          134             10  128   1  0.951         2120    2120          928     928          825          129     129         0       0            0       0      0       0           0       0            3875    3875               0       0               0       0               2       2               0         0               0           0
+                  48   3      1756896       140313  140313       103711  103711       820560    820560        1        36602          145              3  256   3  0.986         6318    6318         1043    1043          534           98      98         0       0            0       0      0       0           0       0            7912    7912               0       0               1       1              18      18               0         0               0           0
+                  64   4       870208        13750   13750          153     153        46454     46454        1        13597          213              0   64   1  0.997         2834    2834           15      15          214            4       4         0       0            0       0      0       0           0       0            3065    3065               0       0               0       0               2       2               0         0               0           0
+                  80   5        58480         1241    1241          510     510         2154      2154        1          731            4              2  256   5  0.713           70      70           28      28            5            4       4         0       0            0       0      0       0           0       0             120     120               0       0               1       1              18      18               0         0               0           0
+                  96   6       530496        67446   67446        61920   61920       100752    100752        1         5526           46              4  128   3  0.938         4729    4729          631     631          524           32      32         0       0            0       0      0       0           0       0            5886    5886               0       0               0       0               2       2               0         0               0           0
+                 112   7      1331904        32753   32753        20861   20861        32995     32995        1        11892           87             82  256   7  0.533         1234    1234          231     231          128           36      36         0       0            0       0      0       0           0       0            1595    1595               0       0               0       0               2       2               0         0               0           0
+                 128   8        17152          175     175           41      41          875       875        1          134            5              0   32   1  0.837           11      11           11      11            5            0       0         0       0            0       0      0       0           0       0              44      44               0       0               0       0              19      19               0         0               0           0
+                 160   9         1120          109     109          102     102          691       691        1            7            1              0  128   5  0.054            5       5            9       9            1            0       0         0       0            0       0      0       0           0       0              17      17               0       0               0       0               2       2               0         0               0           0
+                 192  10       135360          971     971          266     266        22054     22054        1          705           12              1   64   3  0.917           28      28           23      23           16            8       8         0       0            0       0      0       0           0       0              69      69               0       0               0       0               2       2               0         0               0           0
+                 224  11       150528          941     941          269     269         2034      2034        1          672            6              0  128   7  0.875           25      25           25      25            7            3       3         0       0            0       0      0       0           0       0              59      59               0       0               0       0               2       2               0         0               0           0
+                 256  12       129792          532     532           25      25         1259      1259        1          507           32              0   16   1  0.990           44      44           15      15           32            0       0         0       0            0       0      0       0           0       0              93      93               0       0               0       0               2       2               0         0               0           0
+                 320  13      3302400        10377   10377           57      57        79352     79352        1        10320          162              0   64   5  0.995          168     168           10      10          162            2       2         0       0            0       0      0       0           0       0             342     342               0       0               0       0               2       2               0         0               0           0
+                 384  14         2304           40      40           34      34          114       114        1            6            1              0   32   3  0.187            4       4            7       7            1            0       0         0       0            0       0      0       0           0       0              14      14               0       0               0       0               2       2               0         0               0           0
+                 448  15            0           64      64           64      64           11        11        1            0            0              0   64   7      1            1       1            4       4            1            0       0         0       0            0       0      0       0           0       0               8       8               0       0               0       0               2       2               0         0               0           0
+                 512  16       357888          740     740           41      41         2113      2113        1          699           88              3    8   1  0.992           85      85           13      13           90           17      17         0       0            0       0      0       0           0       0             193     193               0       0               0       0               6       6               0         0               0           0
+                 640  17         1920           38      38           35      35        12956     12956        1            3            1              0   32   5  0.093            6       6           10      10            1            0       0         0       0            0       0      0       0           0       0              19      19               0       0               0       0               2       2               0         0               0           0
+                 768  18       516096          692     692           20      20          672       672        1          672           42              0   16   3      1           49      49            5       5           43            0       0         0       0            0       0      0       0           0       0              99      99               0       0               0       0               2       2               0         0               0           0
+                 896  19       601216          742     742           71      71          680       680        1          671           21              1   32   7  0.998           42      42           19      19           25            5       5         0       0            0       0      0       0           0       0              88      88               0       0               0       0               2       2               0         0               0           0
+                1024  20         5120           40      40           35      35           57        57        1            5            2              0    4   1  0.625           14      14           14      14           10            5       5         0       0            0       0      0       0           0       0              41      41               0       0               0       0               4       4               0         0               0           0
+                1280  21        48640           56      56           18      18        12317     12317        1           38            3              0   16   5  0.791            8       8            8       8            3            0       0         0       0            0       0      0       0           0       0              21      21               0       0               0       0               2       2               0         0               0           0
+                1536  22            0           12      12           12      12            7         7        1            0            0              0    8   3      1            2       2            3       3            3            1       1         0       0            0       0      0       0           0       0              10      10               0       0               0       0               2       2               0         0               0           0
+                1792  23         1792           24      24           23      23            9         9        1            1            1              0   16   7  0.062            3       3            6       6            1            0       0         0       0            0       0      0       0           0       0              12      12               0       0               0       0               2       2               0         0               0           0
+                2048  24         6144           18      18           15      15           30        30        1            3            2              0    2   1  0.750            7       7            8       8            8            2       2         0       0            0       0      0       0           0       0              25      25               0       0               0       0               2       2               0         0               0           0
+                2560  25         5120           23      23           21      21           24        24        1            2            1              0    8   5  0.250           10      10            9       9            3            2       2         0       0            0       0      0       0           0       0              24      24               0       0               0       0               2       2               0         0               0           0
+                3072  26        12288           14      14           10      10            8         8        1            4            2              1    4   3  0.500            3       3            5       5            5            3       3         0       0            0       0      0       0           0       0              15      15               0       0               0       0               2       2               0         0               0           0
+                3584  27         3584           13      13           12      12            7         7        1            1            1              0    8   7  0.125            3       3            5       5            2            1       1         0       0            0       0      0       0           0       0              12      12               0       0               0       0               2       2               0         0               0           0
+                4096  28       679936          342     342          176     176          355       355        1          166          166              0    1   1      1          169     169           26      26          342            0       0         0       0            0       0      0       0           0       0             540     540               0       0               0       0               4       4               0         0               0           0
+                5120  29        15360           25      25           22      22           27        27        1            3            1              0    4   5  0.750           12      12           12      12            8            8       8         0       0            0       0      0       0           0       0              34      34               0       0               0       0               2       2               0         0               0           0
+                6144  30        24576           16      16           12      12            6         6        1            4            3              1    2   3  0.666            4       4            4       4            7            5       5         0       0            0       0      0       0           0       0              17      17               0       0               0       0               2       2               0         0               0           0
+                7168  31        21504           15      15           12      12           10        10        1            3            1              0    4   7  0.750            4       4            6       6            4            3       3         0       0            0       0      0       0           0       0              16      16               0       0               0       0               2       2               0         0               0           0
+                8192  32         8192           18      18           17      17           25        25        1            1            1              0    1   2      1            6       6            8       8           18            0       0         0       0            0       0      0       0           0       0              34      34               0       0               0       0               2       2               0         0               0           0
+               10240  33        40960           28      28           24      24           21        21        1            4            2              0    2   5      1           13      13           13      13           17            2       2         0       0            0       0      0       0           0       0              45      45               0       0               0       0               2       2               0         0               0           0
+                     ---
+               14336  35            0           10      10           10      10            4         4        1            0            0              0    2   7      1            1       1            3       3            5            1       1         0       0            0       0      0       0           0       0              11      11               0       0               0       0               2       2               0         0               0           0
+large:          size ind    allocated      nmalloc (#/sec)      ndalloc (#/sec)    nrequests (#/sec)  curlextents
+               16384  36        32768            9       9            7       7           22      22            2
+               20480  37            0           16      16           16      16           18      18            0
+                     ---
+               28672  39      1433600           67      67           17      17           69      69           50
+               32768  40        98304           12      12            9       9           24      24            3
+               40960  41            0           23      23           23      23           23      23            0
+               49152  42        49152            3       3            2       2            3       3            1
+               57344  43            0            3       3            3       3            3       3            0
+               65536  44       131072           21      21           19      19           21      21            2
+               81920  45       245760            6       6            3       3            6       6            3
+               98304  46       196608           17      17           15      15           17      17            2
+              114688  47            0            3       3            3       3            3       3            0
+              131072  48            0           15      15           15      15           15      15            0
+              163840  49            0            2       2            2       2            2       2            0
+              196608  50            0            2       2            2       2            2       2            0
+              229376  51            0            3       3            3       3            3       3            0
+              262144  52       262144           14      14           13      13           14      14            1
+              327680  53       327680            4       4            3       3            4       4            1
+                     ---
+              458752  55            0          669     669          669     669          669     669            0
+              524288  56       524288           12      12           11      11           12      12            1
+              655360  57            0            3       3            3       3            3       3            0
+              786432  58            0            2       2            2       2            2       2            0
+              917504  59            0            2       2            2       2            2       2            0
+             1048576  60            0            2       2            2       2            2       2            0
+             1310720  61      1310720            2       2            1       1            2       2            1
+                     ---
+             1835008  63            0            3       3            3       3            3       3            0
+             2097152  64            0            1       1            1       1            1       1            0
+             2621440  65            0            2       2            2       2            2       2            0
+                     ---
+             3670016  67            0            1       1            1       1            1       1            0
+                     ---
+             5242880  69      5242880            2       2            1       1            2       2            1
+                     ---
+extents:        size ind       ndirty        dirty       nmuzzy        muzzy    nretained     retained       ntotal        total
+                4096   0           94       385024            0            0            0            0           94       385024
+                8192   1            2        16384            0            0            0            0            2        16384
+               12288   2          131      1609728            0            0            0            0          131      1609728
+               16384   3            1        16384            0            0            0            0            1        16384
+               20480   4            1        20480            0            0            0            0            1        20480
+                     ---
+               28672   6            3        86016            0            0            0            0            3        86016
+                     ---
+               49152   9            1        49152            0            0            0            0            1        49152
+               57344  10            2       110592            0            0            0            0            2       110592
+                     ---
+               98304  13            1        86016            0            0            0            0            1        86016
+              114688  14            1       114688            0            0            0            0            1       114688
+                     ---
+              196608  17            1       172032            0            0            0            0            1       172032
+              229376  18            3       630784            0            0            0            0            3       630784
+                     ---
+              917504  26            1       913408            0            0            0            0            1       913408
+                     ---
+             2621440  32            1      2101248            0            0            0            0            1      2101248
+                     ---
+             3670016  34            1      3411968            0            0            0            0            1      3411968
+                     ---
+             7340032  38            1      6967296            0            0            0            0            1      6967296
+             8388608  39            0            0            0            0            1      7667712            1      7667712
+                     ---
+Bytes in small extent cache: 0
+HPA shard stats:
+  Purge passes: 0 (0 / sec)
+  Purges: 0 (0 / sec)
+  Hugeifies: 0 (0 / sec)
+  Dehugifies: 0 (0 / sec)
+
+  In full slabs:
+      npageslabs: 0 huge, 0 nonhuge
+      nactive: 0 huge, 0 nonhuge 
+      ndirty: 0 huge, 0 nonhuge 
+      nretained: 0 huge, 0 nonhuge 
+  In empty slabs:
+      npageslabs: 0 huge, 0 nonhuge
+      nactive: 0 huge, 0 nonhuge 
+      ndirty: 0 huge, 0 nonhuge 
+      nretained: 0 huge, 0 nonhuge 
+  In nonfull slabs:
+                size ind npageslabs_huge    nactive_huge     ndirty_huge  npageslabs_nonhuge     nactive_nonhuge      ndirty_nonhuge   nretained_nonhuge
+                     ---
+arenas[1]:
+name: "auto_1"
+assigned threads: 1
+uptime: 444000579
+dss allocation precedence: "secondary"
+decaying:  time       npages       sweeps     madvises       purged
+   dirty: 10000            0            0            0            0
+   muzzy:     0            0            0            0            0
+                            allocated         nmalloc   (#/sec)         ndalloc   (#/sec)       nrequests   (#/sec)           nfill   (#/sec)          nflush   (#/sec)
+small:                          12800             200       200               0         0               0         0               2         2               0         0
+large:                              0               0         0               0         0               0         0               0         0               0         0
+total:                          12800             200       200               0         0               0         0               2         2               0         0
+                                     
+active:                         32768
+mapped:                       2129920
+retained:                     2064384
+base:                           92752
+internal:                           0
+metadata_edata:                   384
+metadata_rtree:                     0
+metadata_thp:                       0
+tcache_bytes:                   12576
+tcache_stashed_bytes:               0
+resident:                      126976
+abandoned_vm:                       0
+extent_avail:                       0
+                           n_lock_ops (#/sec)       n_waiting (#/sec)      n_spin_acq (#/sec)  n_owner_switch (#/sec)   total_wait_ns   (#/sec)     max_wait_ns  max_n_thds
+large                               2       2               0       0               0       0               1       1               0         0               0           0
+extent_avail                        5       5               0       0               0       0               2       2               0         0               0           0
+extents_dirty                       4       4               0       0               0       0               2       2               0         0               0           0
+extents_muzzy                       2       2               0       0               0       0               1       1               0         0               0           0
+extents_retained                    5       5               0       0               0       0               2       2               0         0               0           0
+decay_dirty                         2       2               0       0               0       0               1       1               0         0               0           0
+decay_muzzy                         2       2               0       0               0       0               1       1               0         0               0           0
+base                                9       9               0       0               0       0               2       2               0         0               0           0
+tcache_list                         3       3               0       0               0       0               2       2               0         0               0           0
+hpa_shard                           0       0               0       0               0       0               0       0               0         0               0           0
+hpa_shard_grow                      0       0               0       0               0       0               0       0               0         0               0           0
+hpa_sec                             0       0               0       0               0       0               0       0               0         0               0           0
+bins:           size ind    allocated      nmalloc (#/sec)      ndalloc (#/sec)    nrequests   (#/sec)  nshards      curregs     curslabs  nonfull_slabs regs pgs   util       nfills (#/sec)     nflushes (#/sec)       nslabs     nreslabs (#/sec)      pops (#/sec)  failed_push (#/sec)   push (#/sec)   push_elem (#/sec)      n_lock_ops (#/sec)       n_waiting (#/sec)      n_spin_acq (#/sec)  n_owner_switch (#/sec)   total_wait_ns   (#/sec)     max_wait_ns  max_n_thds
+                     ---
+                  16   1         1600          100     100            0       0            0         0        1          100            1              0  256   1  0.390            1       1            0      
+2026/09/13-07:48:36.854303 2945134 [/db_impl/db_impl.cc:766] STATISTICS:
+ rocksdb.block.cache.miss COUNT : 27
+rocksdb.block.cache.hit COUNT : 1
+rocksdb.block.cache.add COUNT : 27
+rocksdb.block.cache.add.failures COUNT : 0
+rocksdb.block.cache.index.miss COUNT : 7
+rocksdb.block.cache.index.hit COUNT : 0
+rocksdb.block.cache.index.add COUNT : 7
+rocksdb.block.cache.index.bytes.insert COUNT : 2294320
+rocksdb.block.cache.filter.miss COUNT : 13
+rocksdb.block.cache.filter.hit COUNT : 1
+rocksdb.block.cache.filter.add COUNT : 13
+rocksdb.block.cache.filter.bytes.insert COUNT : 1065376
+rocksdb.block.cache.data.miss COUNT : 7
+rocksdb.block.cache.data.hit COUNT : 0
+rocksdb.block.cache.data.add COUNT : 7
+rocksdb.block.cache.data.bytes.insert COUNT : 36400
+rocksdb.block.cache.bytes.read COUNT : 81952
+rocksdb.block.cache.bytes.write COUNT : 3396096
+rocksdb.block.cache.compression.dict.miss COUNT : 0
+rocksdb.block.cache.compression.dict.hit COUNT : 0
+rocksdb.block.cache.compression.dict.add COUNT : 0
+rocksdb.block.cache.compression.dict.bytes.insert COUNT : 0
+rocksdb.block.cache.add.redundant COUNT : 0
+rocksdb.block.cache.index.add.redundant COUNT : 0
+rocksdb.block.cache.filter.add.redundant COUNT : 0
+rocksdb.block.cache.data.add.redundant COUNT : 0
+rocksdb.block.cache.compression.dict.add.redundant COUNT : 0
+rocksdb.secondary.cache.hits COUNT : 0
+rocksdb.secondary.cache.filter.hits COUNT : 0
+rocksdb.secondary.cache.index.hits COUNT : 0
+rocksdb.secondary.cache.data.hits COUNT : 0
+rocksdb.compressed.secondary.cache.dummy.hits COUNT : 0
+rocksdb.compressed.secondary.cache.hits COUNT : 0
+rocksdb.compressed.secondary.cache.promotions COUNT : 0
+rocksdb.compressed.secondary.cache.promotion.skips COUNT : 0
+rocksdb.bloom.filter.useful COUNT : 7
+rocksdb.bloom.filter.full.positive COUNT : 12
+rocksdb.bloom.filter.full.true.positive COUNT : 8
+rocksdb.bloom.filter.prefix.checked COUNT : 0
+rocksdb.bloom.filter.prefix.useful COUNT : 0
+rocksdb.bloom.filter.prefix.true.positive COUNT : 0
+rocksdb.persistent.cache.hit COUNT : 0
+rocksdb.persistent.cache.miss COUNT : 0
+rocksdb.sim.block.cache.hit COUNT : 0
+rocksdb.sim.block.cache.miss COUNT : 0
+rocksdb.memtable.hit COUNT : 0
+rocksdb.memtable.miss COUNT : 15
+rocksdb.l0.hit COUNT : 0
+rocksdb.l1.hit COUNT : 0
+rocksdb.l2andup.hit COUNT : 8
+rocksdb.l2.hit COUNT : 0
+rocksdb.l3.hit COUNT : 0
+rocksdb.l4.hit COUNT : 1
+rocksdb.l5.hit COUNT : 7
+rocksdb.l6.hit COUNT : 0
+rocksdb.compaction.key.drop.new COUNT : 0
+rocksdb.compaction.key.drop.obsolete COUNT : 0
+rocksdb.compaction.key.drop.range_del COUNT : 0
+rocksdb.compaction.key.drop.user COUNT : 0
+rocksdb.compaction.range_del.drop.obsolete COUNT : 0
+rocksdb.compaction.optimized.del.drop.obsolete COUNT : 0
+rocksdb.compaction.cancelled COUNT : 0
+rocksdb.number.keys.written COUNT : 16
+rocksdb.number.keys.read COUNT : 15
+rocksdb.number.keys.updated COUNT : 0
+rocksdb.bytes.written COUNT : 16640
+rocksdb.bytes.read COUNT : 8000
+rocksdb.number.db.seek COUNT : 0
+rocksdb.number.db.next COUNT : 0
+rocksdb.number.db.prev COUNT : 0
+rocksdb.number.db.seek.found COUNT : 0
+rocksdb.number.db.next.found COUNT : 0
+rocksdb.number.db.prev.found COUNT : 0
+rocksdb.db.iter.bytes.read COUNT : 0
+rocksdb.number.iter.skip COUNT : 0
+rocksdb.number.reseeks.iteration COUNT : 0
+rocksdb.num.iterator.created COUNT : 0
+rocksdb.num.iterator.deleted COUNT : 0
+rocksdb.no.file.opens COUNT : 10264
+rocksdb.no.file.errors COUNT : 0
+rocksdb.stall.micros COUNT : 0
+rocksdb.db.mutex.wait.micros COUNT : 0
+rocksdb.number.multiget.get COUNT : 0
+rocksdb.number.multiget.keys.read COUNT : 0
+rocksdb.number.multiget.bytes.read COUNT : 0
+rocksdb.number.multiget.keys.found COUNT : 0
+rocksdb.number.merge.failures COUNT : 0
+rocksdb.getupdatessince.calls COUNT : 0
+rocksdb.wal.synced COUNT : 0
+rocksdb.wal.bytes COUNT : 0
+rocksdb.write.self COUNT : 0
+rocksdb.write.other COUNT : 0
+rocksdb.write.wal COUNT : 0
+rocksdb.compact.read.bytes COUNT : 0
+rocksdb.compact.write.bytes COUNT : 0
+rocksdb.flush.write.bytes COUNT : 0
+rocksdb.compact.read.marked.bytes COUNT : 0
+rocksdb.compact.read.periodic.bytes COUNT : 0
+rocksdb.compact.read.ttl.bytes COUNT : 0
+rocksdb.compact.write.marked.bytes COUNT : 0
+rocksdb.compact.write.periodic.bytes COUNT : 0
+rocksdb.compact.write.ttl.bytes COUNT : 0
+rocksdb.number.direct.load.table.properties COUNT : 0
+rocksdb.number.superversion_acquires COUNT : 6
+rocksdb.number.superversion_releases COUNT : 0
+rocksdb.number.superversion_cleanups COUNT : 0
+rocksdb.number.block.compressed COUNT : 0
+rocksdb.number.block.decompressed COUNT : 0
+rocksdb.bytes.compressed.from COUNT : 0
+rocksdb.bytes.compressed.to COUNT : 0
+rocksdb.bytes.compression_bypassed COUNT : 0
+rocksdb.bytes.compression.rejected COUNT : 0
+rocksdb.number.block_compression_bypassed COUNT : 0
+rocksdb.number.block_compression_rejected COUNT : 0
+rocksdb.bytes.decompressed.from COUNT : 0
+rocksdb.bytes.decompressed.to COUNT : 0
+rocksdb.merge.operation.time.nanos COUNT : 0
+rocksdb.filter.operation.time.nanos COUNT : 0
+rocksdb.compaction.total.time.cpu_micros COUNT : 0
+rocksdb.row.cache.hit COUNT : 0
+rocksdb.row.cache.miss COUNT : 0
+rocksdb.read.amp.estimate.useful.bytes COUNT : 0
+rocksdb.read.amp.total.read.bytes COUNT : 0
+rocksdb.number.rate_limiter.drains COUNT : 0
+rocksdb.blobdb.num.put COUNT : 0
+rocksdb.blobdb.num.write COUNT : 0
+rocksdb.blobdb.num.get COUNT : 0
+rocksdb.blobdb.num.multiget COUNT : 0
+rocksdb.blobdb.num.seek COUNT : 0
+rocksdb.blobdb.num.next COUNT : 0
+rocksdb.blobdb.num.prev COUNT : 0
+rocksdb.blobdb.num.keys.written COUNT : 0
+rocksdb.blobdb.num.keys.read COUNT : 0
+rocksdb.blobdb.bytes.written COUNT : 0
+rocksdb.blobdb.bytes.read COUNT : 0
+rocksdb.blobdb.write.inlined COUNT : 0
+rocksdb.blobdb.write.inlined.ttl COUNT : 0
+rocksdb.blobdb.write.blob COUNT : 0
+rocksdb.blobdb.write.blob.ttl COUNT : 0
+rocksdb.blobdb.blob.file.bytes.written COUNT : 0
+rocksdb.blobdb.blob.file.bytes.read COUNT : 0
+rocksdb.blobdb.blob.file.synced COUNT : 0
+rocksdb.blobdb.blob.index.expired.count COUNT : 0
+rocksdb.blobdb.blob.index.expired.size COUNT : 0
+rocksdb.blobdb.blob.index.evicted.count COUNT : 0
+rocksdb.blobdb.blob.index.evicted.size COUNT : 0
+rocksdb.blobdb.gc.num.files COUNT : 0
+rocksdb.blobdb.gc.num.new.files COUNT : 0
+rocksdb.blobdb.gc.failures COUNT : 0
+rocksdb.blobdb.gc.num.keys.relocated COUNT : 0
+rocksdb.blobdb.gc.bytes.relocated COUNT : 0
+rocksdb.blobdb.fifo.num.files.evicted COUNT : 0
+rocksdb.blobdb.fifo.num.keys.evicted COUNT : 0
+rocksdb.blobdb.fifo.bytes.evicted COUNT : 0
+rocksdb.blobdb.cache.miss COUNT : 0
+rocksdb.blobdb.cache.hit COUNT : 0
+rocksdb.blobdb.cache.add COUNT : 0
+rocksdb.blobdb.cache.add.failures COUNT : 0
+rocksdb.blobdb.cache.bytes.read COUNT : 0
+rocksdb.blobdb.cache.bytes.write COUNT : 0
+rocksdb.txn.overhead.mutex.prepare COUNT : 0
+rocksdb.txn.overhead.mutex.old.commit.map COUNT : 0
+rocksdb.txn.overhead.duplicate.key COUNT : 0
+rocksdb.txn.overhead.mutex.snapshot COUNT : 0
+rocksdb.txn.get.tryagain COUNT : 0
+rocksdb.files.marked.trash COUNT : 0
+rocksdb.files.marked.trash.deleted COUNT : 0
+rocksdb.files.deleted.immediately COUNT : 1
+rocksdb.error.handler.bg.error.count COUNT : 0
+rocksdb.error.handler.bg.io.error.count COUNT : 0
+rocksdb.error.handler.bg.retryable.io.error.count COUNT : 0
+rocksdb.error.handler.autoresume.count COUNT : 0
+rocksdb.error.handler.autoresume.retry.total.count COUNT : 0
+rocksdb.error.handler.autoresume.success.count COUNT : 0
+rocksdb.memtable.payload.bytes.at.flush COUNT : 0
+rocksdb.memtable.garbage.bytes.at.flush COUNT : 0
+rocksdb.verify_checksum.read.bytes COUNT : 0
+rocksdb.backup.read.bytes COUNT : 0
+rocksdb.backup.write.bytes COUNT : 0
+rocksdb.remote.compact.read.bytes COUNT : 0
+rocksdb.remote.compact.write.bytes COUNT : 0
+rocksdb.remote.compact.resumed.bytes COUNT : 0
+rocksdb.hot.file.read.bytes COUNT : 0
+rocksdb.warm.file.read.bytes COUNT : 0
+rocksdb.cool.file.read.bytes COUNT : 0
+rocksdb.cold.file.read.bytes COUNT : 0
+rocksdb.ice.file.read.bytes COUNT : 0
+rocksdb.hot.file.read.count COUNT : 0
+rocksdb.warm.file.read.count COUNT : 0
+rocksdb.cool.file.read.count COUNT : 0
+rocksdb.cold.file.read.count COUNT : 0
+rocksdb.ice.file.read.count COUNT : 0
+rocksdb.last.level.read.bytes COUNT : 0
+rocksdb.last.level.read.count COUNT : 0
+rocksdb.non.last.level.read.bytes COUNT : 4186486129
+rocksdb.non.last.level.read.count COUNT : 10302
+rocksdb.last.level.seek.filtered COUNT : 0
+rocksdb.last.level.seek.filter.match COUNT : 0
+rocksdb.last.level.seek.data COUNT : 0
+rocksdb.last.level.seek.data.useful.no.filter COUNT : 0
+rocksdb.last.level.seek.data.useful.filter.match COUNT : 0
+rocksdb.non.last.level.seek.filtered COUNT : 0
+rocksdb.non.last.level.seek.filter.match COUNT : 0
+rocksdb.non.last.level.seek.data COUNT : 0
+rocksdb.non.last.level.seek.data.useful.no.filter COUNT : 0
+rocksdb.non.last.level.seek.data.useful.filter.match COUNT : 0
+rocksdb.block.checksum.compute.count COUNT : 10302
+rocksdb.block.checksum.mismatch.count COUNT : 0
+rocksdb.multiget.coroutine.count COUNT : 0
+rocksdb.read.async.micros COUNT : 0
+rocksdb.async.read.error.count COUNT : 0
+rocksdb.table.open.prefetch.tail.miss COUNT : 0
+rocksdb.table.open.prefetch.tail.hit COUNT : 30792
+rocksdb.timestamp.filter.table.checked COUNT : 0
+rocksdb.timestamp.filter.table.filtered COUNT : 0
+rocksdb.readahead.trimmed COUNT : 0
+rocksdb.fifo.max.size.compactions COUNT : 0
+rocksdb.fifo.ttl.compactions COUNT : 0
+rocksdb.fifo.change_temperature.compactions COUNT : 0
+rocksdb.prefetch.bytes COUNT : 0
+rocksdb.prefetch.bytes.useful COUNT : 0
+rocksdb.prefetch.hits COUNT : 0
+rocksdb.footer.corruption.count COUNT : 0
+rocksdb.file.read.corruption.retry.count COUNT : 0
+rocksdb.file.read.corruption.retry.success.count COUNT : 0
+rocksdb.number.wbwi.ingest COUNT : 0
+rocksdb.sst.user.defined.index.load.fail.count COUNT : 0
+rocksdb.db.get.micros P50 : 480.000000 P95 : 4722.000000 P99 : 4722.000000 P100 : 4722.000000 COUNT : 15 SUM : 12243
+rocksdb.db.write.micros P50 : 4.333333 P95 : 81.100000 P99 : 86.000000 P100 : 86.000000 COUNT : 17 SUM : 193
+rocksdb.compaction.times.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.compaction.times.cpu_micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.subcompaction.setup.times.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.table.sync.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.compaction.outfile.sync.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.wal.file.sync.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.manifest.file.sync.micros P50 : 851.000000 P95 : 851.000000 P99 : 851.000000 P100 : 851.000000 COUNT : 1 SUM : 851
+rocksdb.table.open.io.micros P50 : 208.517991 P95 : 352.594270 P99 : 377.258226 P100 : 815.000000 COUNT : 10264 SUM : 2222247
+rocksdb.db.multiget.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.read.block.compaction.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.read.block.get.micros P50 : 145.000000 P95 : 1570.000000 P99 : 4500.000000 P100 : 4500.000000 COUNT : 51 SUM : 17711
+rocksdb.write.raw.block.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.numfiles.in.singlecompaction P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.db.seek.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.db.write.stall P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.sst.read.micros P50 : 184.154752 P95 : 328.197942 P99 : 372.378683 P100 : 644.000000 COUNT : 10323 SUM : 2036192
+rocksdb.file.read.flush.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.file.read.compaction.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.file.read.db.open.micros P50 : 184.586751 P95 : 328.257002 P99 : 372.221417 P100 : 644.000000 COUNT : 10264 SUM : 2028263
+rocksdb.file.read.get.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.file.read.multiget.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.file.read.db.iterator.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.file.read.verify.db.checksum.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.file.read.verify.file.checksums.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.sst.write.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.file.write.flush.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.file.write.compaction.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.file.write.db.open.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.num.subcompactions.scheduled P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.bytes.per.read P50 : 917.777778 P95 : 1000.000000 P99 : 1000.000000 P100 : 1000.000000 COUNT : 32 SUM : 18000
+rocksdb.bytes.per.write P50 : 1040.000000 P95 : 1040.000000 P99 : 1040.000000 P100 : 1040.000000 COUNT : 32 SUM : 33280
+rocksdb.bytes.per.multiget P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.compression.times.nanos P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.decompression.times.nanos P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.read.num.merge_operands P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.key.size P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.value.size P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.write.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.get.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.multiget.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.seek.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.next.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.prev.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.blob.file.write.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.blob.file.read.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.blob.file.sync.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.compression.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.blobdb.decompression.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.db.flush.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.sst.batch.size P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.multiget.io.batch.size P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.num.index.and.filter.blocks.read.per.level P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.num.sst.read.per.level P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.num.level.read.per.multiget P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.error.handler.autoresume.retry.count P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.async.read.bytes P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.poll.wait.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.compaction.prefetch.bytes P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.prefetched.bytes.discarded P50 : 171.000000 P95 : 171.000000 P99 : 171.000000 P100 : 171.000000 COUNT : 10264 SUM : 1755144
+rocksdb.async.prefetch.abort.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.table.open.prefetch.tail.read.bytes P50 : 413696.000000 P95 : 413696.000000 P99 : 413696.000000 P100 : 413696.000000 COUNT : 10264 SUM : 4204072960
+rocksdb.num.op.per.transaction P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+rocksdb.multiscan.op.prepare.iterators.micros P50 : 0.000000 P95 : 0.000000 P99 : 0.000000 P100 : 0.000000 COUNT : 0 SUM : 0
+2026/09/13-07:48:37.816922 2945134 [/db_impl/db_impl.cc:934] ------- PERSISTING STATS -------
+2026/09/13-07:48:37.816930 2945134 [/db_impl/db_impl.cc:1003] [Pre-GC] In-memory stats history size: 48 bytes, slice count: 0
+2026/09/13-07:48:37.816932 2945134 [/db_impl/db_impl.cc:1012] [Post-GC] In-memory stats history size: 48 bytes, slice count: 0
+2026/09/13-07:48:42.049252 2945070 [/db_impl/db_impl.cc:466] Shutdown: canceling all background work
+2026/09/13-07:48:42.050146 2945070 [/db_impl/db_impl_write.cc:2587] [default] New memtable created with log file: #10277. Immutable memtables: 0.
+2026/09/13-07:48:42.050333 2945107 (Original Log Time 2026/09/13-07:48:42.050296) [/db_impl/db_impl_compaction_flush.cc:3378] Calling FlushMemTableToOutputFile with column family [default], flush slots available 12, compaction slots available 1, flush slots scheduled 1, compaction slots scheduled 0
+2026/09/13-07:48:42.050340 2945107 [/flush_job.cc:965] [default] [JOB 3] Flushing memtable id 1 with next log file: 10277, marked_for_flush: 0
+2026/09/13-07:48:42.050360 2945107 EVENT_LOG_v1 {"time_micros": 1789285722050349, "job": 3, "event": "flush_started", "num_memtables": 1, "total_num_input_entries": 23944, "num_deletes": 0, "total_data_size": 24782040, "memory_usage": 25298848, "num_range_deletes": 0, "flush_reason": "Shut down"}
+2026/09/13-07:48:42.050362 2945107 [/flush_job.cc:1012] [default] [JOB 3] Level-0 flush table #10281: started
+2026/09/13-07:48:42.073972 2945107 EVENT_LOG_v1 {"time_micros": 1789285722073949, "cf_name": "default", "job": 3, "event": "table_file_creation", "file_number": 10281, "file_size": 17957801, "file_checksum": "", "file_checksum_func_name": "Unknown", "smallest_seqno": 662840068, "largest_seqno": 662864011, "table_properties": {"data_size": 17853261, "index_size": 78776, "index_partitions": 0, "top_level_index_size": 0, "index_key_is_user_key": 1, "index_value_is_delta_encoded": 1, "filter_size": 24517, "raw_key_size": 551872, "raw_average_key_size": 32, "raw_value_size": 17246000, "raw_average_value_size": 1000, "num_data_blocks": 4312, "num_entries": 17246, "num_filter_entries": 17246, "num_deletions": 0, "num_merge_operands": 0, "num_range_deletions": 0, "format_version": 7, "fixed_key_len": 0, "filter_policy": "bloomfilter", "column_family_name": "default", "column_family_id": 0, "comparator": "leveldb.BytewiseComparator", "user_defined_timestamps_persisted": 1, "key_largest_seqno": 662864011, "key_smallest_seqno": 662840068, "merge_operator": "nullptr", "prefix_extractor_name": "nullptr", "property_collectors": "[]", "compression": ";;", "compression_options": "window_bits=-14; level=32767; strategy=0; max_dict_bytes=0; zstd_max_train_bytes=0; enabled=0; max_dict_buffer_bytes=0; use_zstd_dict_trainer=1; max_compressed_bytes_per_kb=896; checksum=0; ", "creation_time": 1789285716, "oldest_key_time": 1789285722, "newest_key_time": 1789285716, "file_creation_time": 1789285722, "slow_compression_estimated_data_size": 0, "fast_compression_estimated_data_size": 0, "db_id": "2d7a09b8-b390-4292-82ef-6fdb0b99faa4", "db_session_id": "MD1XGHZJK4MYZKZZLBMA", "orig_file_number": 10281, "seqno_to_time_mapping": "N/A"}, "status": "OK"}
+2026/09/13-07:48:42.074013 2945107 [/flush_job.cc:1179] [default] [JOB 3] Flush lasted 23682 microseconds, and 16452 cpu microseconds.
+2026/09/13-07:48:42.078477 2945107 [/flush_job.cc:167] VCOMP_PERF_FLUSH_BREAKDOWN job=3 cf=default reason=2 memtables=1 input_entries=23944 input_bytes=24782040 output_files=1 output_bytes=17957801 status=ok mempurge=0 total_tracked_us=28148 sort_us=0 write_us=7892 compress_us=0 sst_build_us=15801 other_us=4455 compression=NoCompression
+2026/09/13-07:48:42.078758 2945107 (Original Log Time 2026/09/13-07:48:42.073991) [/flush_job.cc:1125] [default] [JOB 3] Level-0 flush table #10281: 17957801 bytes OK  
+2026/09/13-07:48:42.078760 2945107 (Original Log Time 2026/09/13-07:48:42.074017) [/memtable_list.cc:585] [default] Level-0 commit flush result of table #10281 started
+2026/09/13-07:48:42.078762 2945107 (Original Log Time 2026/09/13-07:48:42.078462) [/memtable_list.cc:790] [default] Level-0 commit flush result of table #10281: memtable #1 done
+2026/09/13-07:48:42.078763 2945107 (Original Log Time 2026/09/13-07:48:42.078484) EVENT_LOG_v1 {"time_micros": 1789285722078472, "job": 3, "event": "flush_finished", "output_compression": "NoCompression", "lsm_state": [1, 4, 36, 396, 3992, 5836, 0], "immutable_memtables": 0}
+2026/09/13-07:48:42.078764 2945107 (Original Log Time 2026/09/13-07:48:42.078738) [/db_impl/db_impl_compaction_flush.cc:314] [default] Level summary: files[1 4 36 396 3992 5836 0] max score 1.00, estimated pending compaction bytes 0
+2026/09/13-07:48:42.131266 2945070 [/db_impl/db_impl.cc:681] Shutdown complete

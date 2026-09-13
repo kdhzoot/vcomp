@@ -1,0 +1,70 @@
+{
+  "avg_latency_us": 12.831,
+  "binary_sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+  "bloom_full_positive": 7132376,
+  "bloom_full_true_positive": 7092863,
+  "bloom_positive_per_op": 0.63549235498093,
+  "bloom_true_positive_per_op": 0.6319717596810802,
+  "bloom_useful": 4090862,
+  "clone_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1_pilot_measure/full_extra/uniform_read/fillseq_sparse",
+  "data_cache_hit": 6966611,
+  "data_cache_miss": 165781,
+  "ended_epoch": 1789280987.8656294,
+  "exit_code": 0,
+  "filter_cache_hit": 11223223,
+  "filter_cache_miss": 15,
+  "filter_positive_pct": 63.55007351710799,
+  "filter_probes": 11223238,
+  "filter_probes_per_op": 0.9999868132486934,
+  "final_levels": {
+    "0": {
+      "files": 0,
+      "size_mib": 0
+    },
+    "1": {
+      "files": 3,
+      "size_mib": 147
+    },
+    "2": {
+      "files": 8,
+      "size_mib": 511
+    },
+    "3": {
+      "files": 0,
+      "size_mib": 0
+    },
+    "4": {
+      "files": 0,
+      "size_mib": 0
+    },
+    "5": {
+      "files": 0,
+      "size_mib": 0
+    },
+    "6": {
+      "files": 0,
+      "size_mib": 0
+    }
+  },
+  "index_cache_hit": 7132346,
+  "index_cache_miss": 30,
+  "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_260913_run1_pilot_measure/full_extra/uniform_read/fillseq_sparse",
+  "measured_seconds": 3.005,
+  "operations": 11223386,
+  "p50_latency_us": 5.351332,
+  "p95_latency_us": 45.424261,
+  "p99_latency_us": 93.410135,
+  "peak_rss_kb": 903120,
+  "phase": "full_extra",
+  "process_elapsed_sec": 3.1733343601226807,
+  "source_db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1/pilot_sparse",
+  "started_epoch": 1789280984.6922944,
+  "status": "ok",
+  "successful_gets": 7092863,
+  "successful_lookup_pct": 63.19717596810802,
+  "swap_pages_in": 0,
+  "system": "fillseq_sparse",
+  "throughput_ops_sec": 3735282.0,
+  "timed_out": false,
+  "workload": "uniform_read"
+}

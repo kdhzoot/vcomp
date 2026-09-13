@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Selected fidelity metrics for the completed September 10-11 YCSB repeats.
+"""Selected fidelity metrics for completed YCSB repeat campaigns.
 
 Use the existing campaign exclusion policy, retain all individual observations,
 and distinguish copied source states from newly materialized F2Load states.
@@ -11,6 +11,7 @@ import hashlib
 import html
 import json
 from pathlib import Path
+import re
 import statistics as stats
 
 import matplotlib
@@ -26,15 +27,20 @@ from plot_baseline_band import ORDER, EXCLUDE
 from plot_ycsb_raw_metrics import DEFINITIONS, GROUPS, GIB, format_value, get_metrics, style
 
 RUNS = EXP / "artifacts/log_runs"
+DIRECT_LOAD_RUNS = {"ycsb_f2band_f%02d_260912" % n for n in range(6,11)}
 
 
 def select_runs():
     candidates = [("base"+str(i+1), "baseline", tag, "ycsb_band_"+tag+"_260910", "byte copy")
                   for i,tag in enumerate(ORDER)]
     candidates.append(("F2-copy", "f2load", "copy", "ycsb_band_f2_260910", "byte copy"))
-    for path in sorted(RUNS.glob("ycsb_f2band_*_260911")):
+    f2_paths = [path for path in RUNS.glob("ycsb_f2band_f*_*")
+                if path.is_dir() and re.fullmatch(r"ycsb_f2band_f\d+_\d{6}",path.name)]
+    for path in sorted(f2_paths,key=lambda p:(int(p.name.split("_")[2][1:]),p.name)):
         tag = path.name.split("_")[2]
-        candidates.append(("F2-"+tag, "f2load", tag, path.name, "fresh load; no byte copy"))
+        protocol = ("fresh load with in-process waitforcompaction; no separate clean settle or byte copy"
+                    if path.name in DIRECT_LOAD_RUNS else "fresh load; no byte copy")
+        candidates.append(("F2-"+tag, "f2load", tag, path.name, protocol))
     selected, omitted, snapshots = [], [], {}
     for label,system,tag,run,protocol in candidates:
         state_path = RUNS / run / "status.json"
@@ -51,6 +57,7 @@ def select_runs():
         selected.append(dict(label=label,system=system,tag=tag,run_id=run,protocol=protocol,cells=cells))
     assert len([s for s in selected if s["system"] == "baseline"]) == 10
     assert any(s["system"] == "f2load" for s in selected)
+    assert len({s["label"] for s in selected}) == len(selected), "Duplicate repeat labels across campaigns"
     return selected, omitted, snapshots
 
 
@@ -64,9 +71,23 @@ def main():
     created = datetime.now(timezone.utc).isoformat()
     out = args.output_dir
     out.mkdir(parents=True,exist_ok=True)
-    data, records, sources, refs = {}, [], set(), {}
+    data, records, sources, refs, loading_evidence = {}, [], set(), {}, {}
     for sample in selected:
         label, run = sample["label"], sample["run_id"]
+        if run in DIRECT_LOAD_RUNS:
+            load_dir = EXP / "artifacts/log_loads/f2band_260912" / sample["tag"]
+            loading = json.loads((load_dir/"validated.json").read_text())
+            recorded_head = RUNS/run/"provenance/vcomp.commit"
+            assert loading["db_dir"] == sample["cells"]["a"]["source_db_dir"]
+            loading_evidence[label] = dict(
+                loading_binary_sha256=loading["binary_sha256"],
+                recorded_vcomp_head=recorded_head.read_text().strip(),
+                recorded_head_note="Recorded working-tree HEAD; not proof of a clean build.",
+                source_db_dir=loading["db_dir"],protocol=sample["protocol"],
+                command_file=str(load_dir/"raw/command.sh"))
+            sources.update([load_dir/"validated.json",load_dir/"raw/binary.json",
+                            load_dir/"raw/command.sh",recorded_head,
+                            RUNS/run/"provenance/ch23_common.py"])
         data[label] = {}
         for w,row in sample["cells"].items():
             opts = command_options(row)
@@ -188,7 +209,10 @@ def main():
                  if points else "1000 GiB input | 50 GiB cache | 48 threads | 300 s per workload. Compaction bars stack read + write.")
     fig.text(0.075,0.080,mark_note,fontsize=12,color="#52697a")
     fig.text(0.075,0.050,"Positive lookups = found Get / all Get requests; E: N/A. Every workload starts on a fresh clone.",fontsize=12,color="#52697a")
-    fig.text(0.075,0.020,"Baseline and F2-copy: byte copies. Other F2 states: fresh loads without byte recopy. f01 excluded by existing analysis policy.",fontsize=12,color="#52697a")
+    prep_footer = ("F2-f02–f05: separate clean settle; F2-f06–f10: in-process waitforcompaction. f01 excluded (server interference)."
+                   if loading_evidence else
+                   "Baseline and F2-copy: byte copies. Other F2 states: fresh loads without byte recopy. f01 excluded by existing analysis policy.")
+    fig.text(0.075,0.020,prep_footer,fontsize=12,color="#52697a")
     fig.savefig(out/"fidelity.png",dpi=180)
     fig.savefig(out/"fidelity.pdf")
 
@@ -217,10 +241,20 @@ def main():
             "Every workload uses a fresh hardlink SST clone with private metadata and a page-cache reset. "
             "YCSB options and executable are identical across included cells. Observations are per loaded DB, not repeated reads of one shared mutable DB. "
             "This is state-performance comparison, not proof of identical key membership. Loading metadata in source bundles is not used here.")
+    if loading_evidence:
+        note += (" F2-f02–f05 were materialized and then settled in a separate clean RocksDB process; "
+                 "F2-f06–f10 used fillvirtual,flush,compact0,waitforcompaction within one F2Load process. "
+                 "The new loader binary and recorded source revision also differ; YCSB options and executable still match. "
+                 "The /work filesystem was 76–79% used for f06–f10, compared with 64% in the checked f02/f05 records. "
+                 "f06's interrupted initial campaign was restarted in full; its final A–F cells have reused_full=0. "
+                 "Summary means pool these individually labeled preparation groups; they do not isolate causes of performance differences.")
+        sources.update([EXP/"scripts/paper/run_f2load_band_chain.py",
+                        EXP/"artifacts/log_loads/f2band_260912_keep.log"])
     manifest = dict(created_utc=created,selected=manifest_rows,omitted=omitted,status_snapshots=snapshots,
                     validated_cells=len(records),settings=dict(dataset_gib=1000,key_bytes=24,value_bytes=1000,
                     cache_size_bytes=50*GIB,threads=48,duration_sec=300,binary_sha256=records[0]["binary_sha256"]),
-                    metric_definitions=DEFINITIONS,protocol=note,panel_audit=panel_audit,plot_kind=args.plot_kind,
+                    metric_definitions=DEFINITIONS,protocol=note,loading_evidence=loading_evidence,
+                    panel_audit=panel_audit,plot_kind=args.plot_kind,
                     reproduce_argv=["python3","experiments/analysis/plot_ycsb_repeat_fidelity.py",
                                     "--plot-kind",args.plot_kind,"--output-dir",str(out)])
     for name in ["plot_ycsb_repeat_fidelity.py","plot_ycsb_raw_metrics.py","compare_five_baseline_ycsb.py","plot_baseline_band.py"]:

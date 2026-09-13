@@ -600,6 +600,63 @@ external-SST global sequence override without an SST rewrite. This fixes
 duplicate iterator output while retaining the independently generated keys
 and chosen levels; it does not correct cardinality or key-distribution errors.
 
+### Exact membership (`--vcomp_exact_membership`)
+
+Global-unique materialization keeps two files from emitting the same key id,
+but it does not say *which* ids the DB should hold. For a synthetic load that
+turned out to be the dominant fidelity error: at 1 TB the PLR-materialized key
+set overlapped a baseline DB's by 63.18%, exactly what two independent draws of
+that size predict. 244 M of baseline's keys were missing and 244 M keys it never
+wrote were present. Tree shape hid it - DB size, SST count and level layout all
+matched - and only YCSB C exposed it, as a positive lookup rate of 63.21% against
+baseline's 60.29%, spread over 61-67% across fifteen loadings.
+
+The root cause was ingestion, not materialization. Phase 1 draws each batch from
+its own stream so that batches stay independent, which preserves the key
+distribution but not the realization db_bench's write path would have produced.
+
+This opt-in mode makes the load hold the key ids that write path actually emits:
+
+- `BaselineKeyStream` replays it: `Random64(*seed_base + thread_seed)`, two draws
+  per operation - the first picks the key generator, the second is the key. One
+  thread runs the draw because `std::mt19937_64` cannot be split; the Phase 1
+  shards consume whole batches, in batch order, so the tree stays deterministic.
+  Requires `--threads=1`, since the stream is defined per writer thread.
+- Two bitmaps over the key domain, 250 MiB at 1 TB: one records the ingested
+  ids, one records which id a shallower level has already taken. Budget is
+  `--vcomp_exact_membership_max_mb` (default 1024, covering both), checked
+  before Phase 1. Shards mark the first after sort and dedup, so the bitmap is
+  touched in ascending order and once per distinct id.
+- Phase 2 materializes shallowest level first. A file spends its entry budget on
+  ids no shallower level has taken - those make it the shallowest holder, which
+  is where a lookup stops - and fills the remainder with ids one already holds,
+  which is what a superseded version is. Those land in the deepest levels
+  because that is where the leftover budget is. The union over all files is then
+  the ingested key set itself, once, with the rest as stale copies.
+- Both cursors walk the range in ascending order over disjoint sets, so merging
+  them keeps a file sorted and duplicate-free. Claims are buffered and applied
+  after the file is written, or the stale cursor would see the file's own fresh
+  keys.
+
+Measured at 1 TB (2026-09-13), against a scanned baseline DB:
+
+| | overlap | missing | invented | Jaccard |
+|---|---|---|---|---|
+| PLR | 63.1756% | 244,086,622 | 243,709,950 | 0.4619 |
+| exact membership | 99.5242% | 3,153,668 | 0 | 0.9952 |
+
+YCSB C positive lookup 60.042% against baseline's 60.292%, filter checks 3.227
+inside baseline's 3.318-4.025 band, throughput 1,654,876 ops/s. `fillvirtual`
+took 51.8 s against 55.9 s without the mode: Phase 1 grows from 9.2 s to 19.1 s
+behind the serial draw, but the keygen the shards no longer do and the virtual
+compaction that now overlaps it more than pay for it.
+
+The residual 0.48% of ids that no file takes is a per-file budget limit: in the
+deepest levels a file's entry count can be smaller than the unclaimed ids in its
+range, and nothing deeper picks them up. It only ever loses keys, never invents
+them, and it accounts for the whole remaining positive lookup gap
+(60.292 x 0.995242 = 60.006 predicted, 60.042 measured).
+
 ### Global-unique materialization (`--vcomp_global_unique_keys`)
 
 Every VirtualSST generates keys from its own model, so two files can produce

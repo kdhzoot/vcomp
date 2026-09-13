@@ -1,0 +1,86 @@
+[
+  {
+    "bytes": 821227846343,
+    "found": 3443660,
+    "found_pct": 55.6787,
+    "keys_written": 789427968,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 243
+      },
+      "2": {
+        "files": 46,
+        "size_mib": 2555
+      },
+      "3": {
+        "files": 441,
+        "size_mib": 25571
+      },
+      "4": {
+        "files": 3997,
+        "size_mib": 255816
+      },
+      "5": {
+        "files": 8687,
+        "size_mib": 498999
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "load_sec": 55.077,
+    "mode": "bitmap",
+    "read_ops_sec": 984193.0,
+    "reads": 6184876,
+    "ssts": 13174,
+    "wall_sec": 61.0
+  },
+  {
+    "bytes": 822369550380,
+    "found": 3469819,
+    "found_pct": 63.1824,
+    "keys_written": 790526460,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 4,
+        "size_mib": 250
+      },
+      "2": {
+        "files": 45,
+        "size_mib": 2499
+      },
+      "3": {
+        "files": 438,
+        "size_mib": 25534
+      },
+      "4": {
+        "files": 4067,
+        "size_mib": 255816
+      },
+      "5": {
+        "files": 8570,
+        "size_mib": 500174
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "load_sec": 55.309,
+    "mode": "plr",
+    "read_ops_sec": 878508.0,
+    "reads": 5491746,
+    "ssts": 13124,
+    "wall_sec": 61.1
+  }
+]

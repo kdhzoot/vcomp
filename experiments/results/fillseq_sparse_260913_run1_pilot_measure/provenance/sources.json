@@ -1,0 +1,141 @@
+{
+  "baseline": {
+    "benchmark": {
+      "avg_latency_us": 1.022,
+      "measured_seconds": 1.072,
+      "operations": 1048576,
+      "throughput_ops_sec": 978307.0
+    },
+    "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+    "case_id": "baseline_1kb",
+    "compaction_read_bytes": 2030326736,
+    "compaction_sst_write_bytes": 1654321152,
+    "dataset_gib": 1.0,
+    "db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1/pilot_baseline",
+    "distinct_keys": 662704,
+    "elapsed_sec": 11.234378576278687,
+    "final_sst_bytes": 689393206,
+    "final_sst_count": 11,
+    "flush_sst_write_bytes": 1058519591,
+    "key_bytes": 24,
+    "key_domain": 1048576,
+    "key_uniqueness": 0.6320037841796875,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 142
+      },
+      "2": {
+        "files": 8,
+        "size_mib": 515
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "load_insertions": 1048576,
+    "load_protocol": "fillrandom_flush_compact0_drain",
+    "loading_min": 0.1872396429379781,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/fillseq_sparse_260913_run1/pilot/baseline_load",
+    "logical_input_bytes": 1073741824,
+    "num_keys": 1048576,
+    "peak_rss_kb": 278872,
+    "reference_input_bytes": 1073741824,
+    "repetitions": 1,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/fillseq_sparse_260913_run1/pilot/baseline_load/db_identity.json",
+    "status": "validated",
+    "swap_pages_in": 0,
+    "system": "baseline",
+    "unique_count": 662704,
+    "value_bytes": 1000
+  },
+  "fillseq_sparse": {
+    "benchmark": {
+      "avg_latency_us": 1.056,
+      "measured_seconds": 0.7,
+      "operations": 662704,
+      "throughput_ops_sec": 946592.0
+    },
+    "binary_sha256": "642383b01e60d16ba33438b86f8924e453b850032c7dfae4b0724b45e60c9774",
+    "case_id": "fillseq_sparse_1kb",
+    "compaction_read_bytes": 87402740,
+    "compaction_sst_write_bytes": 86876160,
+    "dataset_gib": 1.0,
+    "db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run1/pilot_sparse",
+    "distinct_keys": 662704,
+    "elapsed_sec": 6.0270750522613525,
+    "exact_membership_verified": true,
+    "extraction_sec": 0.6492340564727783,
+    "final_sst_bytes": 689388954,
+    "final_sst_count": 11,
+    "flush_sst_write_bytes": 689415819,
+    "key_bytes": 24,
+    "key_domain": 1048576,
+    "key_file": "/work/vcomp/exp/fillseq_sparse_260913_run1/pilot_sorted_unique_keys.u64le",
+    "key_uniqueness": 0.6320037841796875,
+    "keys_sha256": "d1b077fd7792fb3669924ae1ad7fb0faf5c7dc75a7b9c63bb952408cc59de94c",
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 147
+      },
+      "2": {
+        "files": 8,
+        "size_mib": 511
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "load_insertions": 662704,
+    "load_protocol": "fillseq_sparse_flush_compact0_drain",
+    "loading_min": 0.10045125087102254,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/fillseq_sparse_260913_run1/pilot/sparse_load",
+    "logical_input_bytes": 678608896,
+    "num_keys": 1048576,
+    "peak_rss_kb": 219808,
+    "preparation_sec": 6.676309108734131,
+    "reference_input_bytes": 1073741824,
+    "repetitions": 1,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/fillseq_sparse_260913_run1/pilot/sparse_load/db_identity.json",
+    "status": "validated",
+    "swap_pages_in": 0,
+    "system": "fillseq_sparse",
+    "unique_count": 662704,
+    "value_bytes": 1000
+  }
+}

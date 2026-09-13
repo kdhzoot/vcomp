@@ -1,0 +1,2 @@
+system	loading_min	elapsed_sec	extraction_sec	preparation_sec	unique_count	num_keys	final_sst_bytes	final_sst_count	db_dir
+fillseq_sparse	10.128907068570454	607.7344241142273	760.975255727768	1368.7096798419952	662840067	1048576000	689530007679	10264	/work/vcomp/exp/fillseq_sparse_260913_run2/full_sparse

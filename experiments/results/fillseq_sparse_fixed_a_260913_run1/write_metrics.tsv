@@ -1,0 +1,2 @@
+system	workload	operations	keys_written	measured_sec	throughput_ops_sec	avg_latency_us	process_elapsed_sec	flush_write_bytes	compaction_read_bytes	compaction_write_bytes	pending_bytes_end
+fillseq_sparse	A	210000000	105003686	280.405	748917.0	64.033	296.4168109893799	74514684665	475482779406	439699681280	0

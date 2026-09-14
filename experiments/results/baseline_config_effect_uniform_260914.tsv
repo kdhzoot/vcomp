@@ -1,0 +1,6 @@
+config	label	ops_per_sec	filter_checks_per_lookup	positive_lookup_pct	p99_us	mean_latency_us
+P0-r1_baseline	P0	787509	3.4084	63.21	109.83	60.9
+E2-4T_baseline	dataset 4 TB	718609	4.2254	63.21	115.14	66.8
+E7-lz4_baseline	LZ4	827650	2.8022	63.21	141.87	58.0
+E3-u25_baseline	uniqueness 25%	1934925	2.5349	25.00	109.7	24.8
+E4-256m4_baseline	level 256M x4	759549	4.3846	63.21	109.8	63.2

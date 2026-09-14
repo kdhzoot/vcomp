@@ -1,0 +1,6 @@
+config	db_tb	sst_count	avg_sst_mb	levels	bottom_level	bottom_level_files	bottom_level_gb	filter_checks_C	positive_lookup_C	ops_per_sec_C	mean_latency_us_C	p99_us_C	compaction_write_A_gb
+P0-r1	0.749	13539	58.0	5	L5	8864	490	3.408	63.21	787509	60.9	109.8	NA
+E2-4T	2.669	47740	58.6	5	L5	42938	2456	4.225	63.21	718609	66.8	115.1	NA
+E3-u25	0.268	4874	57.6	4	L4	4363	247	2.535	25.00	1934925	24.8	109.7	NA
+E4-256m4	0.676	12561	56.5	6	L6	10957	607	4.385	63.21	759549	63.2	109.8	NA
+E7-lz4	0.382	6811	58.8	5	L5	1954	114	2.802	63.21	827650	58.0	141.9	NA

@@ -210,3 +210,12 @@ run2/run3/run4와 real_input의 DB도 앞서 삭제했고, artifacts와 git 번�
    나머지 21개 DB가 남았다. 합 0.8 h
 4. **읽기 매트릭스** — 실행 스크립트가 아직 없다. point당 full 3.5 h / 축소 0.5 h이고,
    읽기가 끝난 point는 삭제해 공간을 회수한다
+
+## 2026-09-14 결정
+- F2Load 로딩은 backpressure(`--vcomp_l0_backpressure`, 기본 on) + `vcomp_exact_membership=true` 바이너리(cb43cda202 이후)로 전부 재로딩됨(`/work/vcomp/exp/fix_20260913/`). 수정 전 F2Load DB는 모두 삭제.
+- **E5-256 baseline은 r2**(`fix_20260913/E5-256-r2_baseline`)를 사용. r1은 L1 파일 1개가 도메인 78%를 덮어 block-cache 핸들 경합으로 처리량이 38% 낮게 측정된 run — 폐기(DB 삭제, 결과는 artifacts에만 보존).
+- **E1-5KB, E1-500B 축은 사용하지 않음** (DB 삭제). E1은 100B / 1KB(P0) / 10KB.
+- 진단용 DB(dbg*), 9/8 파일럿 DB, /work/background, /work/mbftest 삭제.
+- positive lookup 지표 = (memtable+L0+L1+L2+ hit) / number.keys.read. 이전 표의 found% 열은 무효(Get 수 기반 추정치).
+- (09-14 오후) **Target SST size 축 제외.** 최종 설정 13개: P0 + KV 100 B/10 KB + dataset 2/4/8 TB + uniqueness 25/50/75/100% + LZ4 + level (256M,×4)/(1G,×10).
+  E5-sst16/E5-sst256 DB(baseline·F2Load)는 삭제하지 않고 보관.

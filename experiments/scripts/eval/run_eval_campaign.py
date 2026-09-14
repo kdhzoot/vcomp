@@ -49,6 +49,7 @@ F2 = dict(use_virtual_compaction=True, plr_error_bound=8,
           vcomp_phase1_shards=8, vcomp_materialize_workers=48,
           vcomp_log_apply_timing=False, vcomp_sort_detail_timing=False)
 BENCH = 'flush,compact0,waitforcompaction,stats,levelstats'
+EXTRA_ENV = {}          # --env KEY=VAL 로 덮어쓴다 (예: VCOMP_DISCRETE_CDF_ENABLED=0)
 RUNTIME_ENV = dict(VCOMP_KMV_ENABLED='1', VCOMP_BG_COMMIT_BATCH_MAX='16',
                    VCOMP_BG_COMMIT_DELAY_US='100')
 LIVE_FRACTION = 0.70   # DB bytes / logical input, with headroom for the guard
@@ -171,6 +172,7 @@ class Campaign:
         save(log / 'argv.json', argv)
         env = {k: v for k, v in os.environ.items() if not k.startswith('VCOMP_')}
         env.update(RUNTIME_ENV)
+        env.update(EXTRA_ENV)
         self.event('LOAD_STARTED', label)
         start = time.time()
         with (log / 'stdout_stderr.log').open('wb') as out:
@@ -224,11 +226,14 @@ def main():
     p.add_argument('--run-id', required=True)
     p.add_argument('--db-root', default=None)
     p.add_argument('--execute', action='store_true')
+    p.add_argument('--env', action='append', default=[],
+                   help='로딩 프로세스 환경변수 KEY=VAL (반복 가능)')
     p.add_argument('--queue-file', help='JSON list of [point, mode, gib, key, value, seed, overrides]')
     a = p.parse_args()
     dbroot = Path(a.db_root or f'/work/vcomp/exp/{a.run_id}')
     if str(dbroot) == '/' or not str(dbroot).startswith('/work'):
         sys.exit('db root must be under /work')
+    EXTRA_ENV.update(dict(kv.split('=', 1) for kv in a.env))
     if a.queue_file:
         global QUEUE
         QUEUE = [tuple(x) for x in json.loads(Path(a.queue_file).read_text())]

@@ -172,6 +172,34 @@ def stage_db(src, dst):
     return before
 
 
+def deep_copy_db(src, dst, workers=48):
+    """stage_db의 딥카피 판: SST/blob을 실제로 복사한다(병렬). 하드링크 staging과 달리
+    복사본의 extent 배치가 원본과 무관해져(순차 쓰기 → 정렬 100%) 물리 배치 차이가 제거된다.
+    반환: (원본 identity, 복사 초)."""
+    import subprocess, time as _t
+    src, dst = Path(src), Path(dst)
+    require(not dst.exists(), 'staging destination exists: ' + str(dst))
+    require((src / 'CURRENT').is_file(), 'missing source CURRENT: ' + str(src))
+    before = db_identity(src)
+    require(before['ssts'], 'source has no SSTs')
+    dst.mkdir(parents=True)
+    big, small = [], []
+    for f in src.iterdir():
+        if f.is_file() and f.name not in ('LOG', 'LOCK') and not f.name.startswith('LOG.old.'):
+            (big if f.suffix in ('.sst', '.blob') else small).append(f)
+    for f in small:
+        shutil.copy2(str(f), str(dst / f.name))
+    t0 = _t.time()
+    lst = '\0'.join(str(f) for f in big).encode()
+    subprocess.run(['xargs', '-0', '-P', str(workers), '-I{}', 'cp', '{}', str(dst) + '/'], input=lst, check=True)
+    subprocess.run(['sync'], check=False)
+    secs = _t.time() - t0
+    want = {f.name: f.stat().st_size for f in big}
+    got = {f.name: f.stat().st_size for f in dst.iterdir() if f.suffix in ('.sst', '.blob')}
+    require(want == got, 'deep copy size/name mismatch')
+    return before, secs
+
+
 def snapshot(raw, suffix):
     for name in ('diskstats', 'stat', 'vmstat', 'meminfo'):
         (raw / (name + '.' + suffix)).write_text(Path('/proc/' + name).read_text())

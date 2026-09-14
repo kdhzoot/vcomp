@@ -136,6 +136,8 @@ class Campaign:
         trace = 'load_trace_file' in opts
         if mode == 'f2load':
             opts.update(F2, benchmarks='fillvirtual,' + BENCH)
+            # 큐의 overrides가 F2 기본값(예: vcomp_exact_membership)을 덮어쓸 수 있게 한다
+            opts.update({k: v for k, v in overrides.items() if k in F2})
             # F2Load의 flush 배치는 memtable 크기를 따라간다 (E5에서 함께 변한다)
             opts['memtable_flush_size'] = opts['write_buffer_size'] // 1024**2
         else:

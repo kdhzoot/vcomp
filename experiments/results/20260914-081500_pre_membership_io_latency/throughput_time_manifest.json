@@ -1,0 +1,574 @@
+{
+  "scope": "All original 120 full A-F cells; C figures focus on the largest between-run discrepancy.",
+  "script_sha256": "fc510f3cd5a8978527bbc9ad995db55b2bdc6304dde03c616f350e79707381cd",
+  "raw_1s_tsv": "experiments/artifacts/analysis/20260914-081500_pre_membership_io_latency/throughput_1s_all_af.tsv",
+  "methods": [
+    "Export historical throughput variation; never run a benchmark.\n\nreport.rep stores operations in nominal one-second reporter intervals, with\nrounded elapsed seconds. Its elapsed origin is reporter launch, not process\nlaunch; process UTC timestamps are recorded separately without false alignment.\n",
+    "60 s is a descriptive common cutoff for the initial ramp, not a replacement for the original 300 s measurement.",
+    "C r02 and f06 report 299 complete intervals; the unreported final fraction is not invented.",
+    "Different workloads are not mixed into hourly averages; actual process UTC spans are retained.",
+    "A persistent outside workload could produce a stable slowdown. Smooth throughput does not rule it out."
+  ],
+  "sources": [
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b01_260910/full/workloada/baseline/report.rep",
+      "sha256": "8288df52418322ffc7fadd8c2b9f7aa0802dbec48b068b38b56d599133984226"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b02_260910/full/workloada/baseline/report.rep",
+      "sha256": "ab7da02e4b649a31b095a8fcf70d1d6813e7951223fc365c964f2793b8202c26"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b03_260910/full/workloada/baseline/report.rep",
+      "sha256": "d06ff39422719f2adc5ec3024d1c46d814d8da964cd24546960d73af31bb504b"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n01_260910/full/workloada/baseline/report.rep",
+      "sha256": "69138ae6bc63df47d159ecaad652681f532c8e634c803af959ee978422711110"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n02_260910/full/workloada/baseline/report.rep",
+      "sha256": "6cd41eedbea45d6ffdd58b3587e25d83e7d4f5b8decbdbded3eac23ebc5d0b35"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n03_260910/full/workloada/baseline/report.rep",
+      "sha256": "7764bd930b28074a86900975bc6191e111334983c7e39f7301c9cc76b665444a"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n04_260910/full/workloada/baseline/report.rep",
+      "sha256": "4d10f5a0a8bb3a99a15c9c929ea8bbbc23cc25092f047d04fd23d255f6259ca7"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r01_260910/full/workloada/baseline/report.rep",
+      "sha256": "051098aeca5c17d5f2d7d8d0e7a15555ec1c76be1efdd93acab6f9450882a160"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r02_260910/full/workloada/baseline/report.rep",
+      "sha256": "68bfdcb0f947b7526a2c717a88e46281b794c3db6e50195a489033754405e20d"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_run3_260910/full/workloada/baseline/report.rep",
+      "sha256": "6d563897567060ea48b6ac5059f0fcc886adab38a111c6c4cc267aa3e5be5d80"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f01_260911/full/workloada/f2load/report.rep",
+      "sha256": "012f57b310218bec2b5651cdc9a681dc702c41e9c05860297735e6f4edacb192"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f02_260911/full/workloada/f2load/report.rep",
+      "sha256": "d472bbae2ff3d095d95ad82d118fb4c6a55a516cfb11abb22cfffe5171d1cd03"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f03_260911/full/workloada/f2load/report.rep",
+      "sha256": "555ff633f1b1ec594f3e8cf4ce4dc5f96f82b7e1e0ef79565a01eb69f96aa24c"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f04_260911/full/workloada/f2load/report.rep",
+      "sha256": "f86dd4f5ebb6ffc82b05925fd517a83c904241c20123936729e1aa1aac62a9df"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f05_260911/full/workloada/f2load/report.rep",
+      "sha256": "26b3477b3abc15724297eb6bd6693072512cfe959bf3dc8d564ddc7b220fd53d"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f06_260912/full/workloada/f2load/report.rep",
+      "sha256": "4a01a6962f4df9af888e78176b596a3d0b1444300b0274a7a456e1b8adf78bf7"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f07_260912/full/workloada/f2load/report.rep",
+      "sha256": "c1cadfc8a6ad3b8fa75532c8b6ae3d04d4d4b2d053c529a83a7921538496b9d3"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f08_260912/full/workloada/f2load/report.rep",
+      "sha256": "b258704a3655a7c60d8efa7e3bb400e53e887795f44e004924300d773c4f5d96"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f09_260912/full/workloada/f2load/report.rep",
+      "sha256": "a8d0772071ccfe5c433fdbc1304322bfa4b2d444f7c70af84d522338fe1d6402"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f10_260912/full/workloada/f2load/report.rep",
+      "sha256": "f91d23139b4c87d6e952720376b7862a1d6f45596065ad042a8a2248df9a3ff3"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b01_260910/full/workloadb/baseline/report.rep",
+      "sha256": "d9a0e6ada0643c823c4d631ea6590dedc99208be3f527faf3a15dcb409daa782"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b02_260910/full/workloadb/baseline/report.rep",
+      "sha256": "2707c93e9011cd2ac786cbe224adec0a96475b6f6b40b30fa399c9c4045f33fe"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b03_260910/full/workloadb/baseline/report.rep",
+      "sha256": "02fabce0c13f39d43a57ad8f4eb8ff05f1978cc4a451a479b07c8834126b400c"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n01_260910/full/workloadb/baseline/report.rep",
+      "sha256": "2df8ae272a521fc56d6acd1b1e2dfcb4a3c07b1c1a384949368dc90a6c333f31"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n02_260910/full/workloadb/baseline/report.rep",
+      "sha256": "ea271acd12edd329c0abfe4388cefb51f53bff566f932b378525796fae667ecf"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n03_260910/full/workloadb/baseline/report.rep",
+      "sha256": "e0236f74f5df36ab3936c54cccf9828517bd131569387f569b579deb4b7f93d9"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n04_260910/full/workloadb/baseline/report.rep",
+      "sha256": "ce5a586278dc8bc420f715ce1784b59f1415ebbfe571aad6df1392d2108290bb"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r01_260910/full/workloadb/baseline/report.rep",
+      "sha256": "07fcb4b3b2a6878b635a3171ecb0a234703f7a0ae9115b7cefb7e959c41d4fb3"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r02_260910/full/workloadb/baseline/report.rep",
+      "sha256": "4111018f44ecd1ca46947844fddd160f69f922d85e2c7ff67f0b4eaadbe9305b"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_run3_260910/full/workloadb/baseline/report.rep",
+      "sha256": "7cc67fa1f7ccafda9d259e2471b5dd2163dfe19f47f3a63d8109a97ba8342514"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f01_260911/full/workloadb/f2load/report.rep",
+      "sha256": "cdb0299423c66daf23a7786d68d01f5f8d4330d37f79f6edb863751fc704012e"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f02_260911/full/workloadb/f2load/report.rep",
+      "sha256": "40d68e463d3b3f5b68ceada1dd1cb579333709ab65e4530c0904a20e2b595f99"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f03_260911/full/workloadb/f2load/report.rep",
+      "sha256": "c49c90bbc09caadef2f59fe0312d910ef1d1b5873e14f8edf941b1a4955921b4"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f04_260911/full/workloadb/f2load/report.rep",
+      "sha256": "70b0f1039277716f77cd699f01c85e3e41957aec16740446c4868b5bfb76a693"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f05_260911/full/workloadb/f2load/report.rep",
+      "sha256": "54f3d6eea7abe9788d3f7356424b17fbaec9d18ffafb37869522bc23ed25f336"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f06_260912/full/workloadb/f2load/report.rep",
+      "sha256": "a7a1fa13bfc4e70f869d9acdf68a192b363b6a2d177cc116ea88c97223523271"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f07_260912/full/workloadb/f2load/report.rep",
+      "sha256": "1fe4bc9455d14d5152d7adc551aee2bf1bea08d6065bb42d20137246a1dd887f"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f08_260912/full/workloadb/f2load/report.rep",
+      "sha256": "838c1454156ea93e811e1bf4575380a341edc13205fa12b2a55e6248b3ba096d"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f09_260912/full/workloadb/f2load/report.rep",
+      "sha256": "d95f0cc7fae4147b16c81c89da12be18e4a686a277aa7d492d19469c1372b397"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f10_260912/full/workloadb/f2load/report.rep",
+      "sha256": "b0754b3281b6579fbc65858ec8f6a0392ba91a4fb6eb861375268a0d313bf4c7"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b01_260910/full/workloadc/baseline/report.rep",
+      "sha256": "59c0ff6aa057bcf6b733e80111d6c215980699618523897c062479e0004f19ed"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b01_260910/full/workloadc/baseline/raw/monitor.jsonl",
+      "sha256": "d3e2a84f134a9dcb04de15a85fe73a3e6cc737c10d7d21b92bf234bf27ee5b1a"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b02_260910/full/workloadc/baseline/report.rep",
+      "sha256": "d0fa6c9cc7185f9c3bb8c301e1bc76d3c6f2e74b7f6dad898e3a221768831610"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b02_260910/full/workloadc/baseline/raw/monitor.jsonl",
+      "sha256": "71d5a2806a9ec6259de7a3d08e4221945a69ddb657b08c23115f5933e48dd958"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b03_260910/full/workloadc/baseline/report.rep",
+      "sha256": "5e08b6b8be2413cdd782e056154372dca5cf1f15956ad2da8e56dae7c113e6bc"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b03_260910/full/workloadc/baseline/raw/monitor.jsonl",
+      "sha256": "c2801687096a0c533d3452ed110c293b9b4b4976212671fb394bcc3a7c44aab0"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n01_260910/full/workloadc/baseline/report.rep",
+      "sha256": "f3ec7cd83f9de7b288955c056b81f3f3d602c9e6724c4b6fb58ba354718bc4a4"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n01_260910/full/workloadc/baseline/raw/monitor.jsonl",
+      "sha256": "1293ada988c1a466fcd6d81934cfa2a85f91dfa4754cdc097d3b7058ee7827a8"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n02_260910/full/workloadc/baseline/report.rep",
+      "sha256": "22d333dc464701d561560d431fe32ecbefafddc6162d022ff5b1f5a5054fe436"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n02_260910/full/workloadc/baseline/raw/monitor.jsonl",
+      "sha256": "369b7fc564c10712b4f54fe9580a949850b1843a061fc22f65e726ce2a309381"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n03_260910/full/workloadc/baseline/report.rep",
+      "sha256": "9c6d30798c46ad7e6e6b1acd8939f63e95cb42a2d19837b7cd4ca372e554d22b"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n03_260910/full/workloadc/baseline/raw/monitor.jsonl",
+      "sha256": "4800f3aa07f5396f9a53f5848763550448b8fcf9ed8739e72c87b496db59ebce"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n04_260910/full/workloadc/baseline/report.rep",
+      "sha256": "10767b409fc3e41d83990a3462adcd54b21b785e176de5cab1e40f168c34c09c"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n04_260910/full/workloadc/baseline/raw/monitor.jsonl",
+      "sha256": "a6b89e15673b92e5814134f5e99f728d5687de051b2a4c24e1ddf46b30e4566b"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r01_260910/full/workloadc/baseline/report.rep",
+      "sha256": "f9987c64887788d60d8a5381e38f206a6811ee8d2a68dcc60e1e2fc92a477c1b"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r01_260910/full/workloadc/baseline/raw/monitor.jsonl",
+      "sha256": "d9a903c4ff78d6d0b2802bbf68c777affa15f2237bb27998c15947ef55f7909f"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r02_260910/full/workloadc/baseline/report.rep",
+      "sha256": "8bb5d81fc962a6efb51f8d188a9f3c1a1aa4e6d5c3a50a9fc857d89cdcf251ee"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r02_260910/full/workloadc/baseline/raw/monitor.jsonl",
+      "sha256": "74631cd3bf0fdc59c0bc7d79e7832701aeb230eeac5555c4ac67900d5654507e"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_run3_260910/full/workloadc/baseline/report.rep",
+      "sha256": "35977ef8a19d405f21a309df5bcc4aa479a71ea564b902ed0ff7d5f189a95874"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_run3_260910/full/workloadc/baseline/raw/monitor.jsonl",
+      "sha256": "59ac4aa808868104819e300becadf92d2cd351052d2ad046af19a10988342a3c"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f01_260911/full/workloadc/f2load/report.rep",
+      "sha256": "c297ace629d8798fc5ef746ab6304a00a0ff97e843122a73384bb21d9a856b7d"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f01_260911/full/workloadc/f2load/raw/monitor.jsonl",
+      "sha256": "e35d7fa5581491c3414e20997f5f3947a0f1bdb3e2de46bca99cd8fcd008d7b9"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f02_260911/full/workloadc/f2load/report.rep",
+      "sha256": "3aa2e257fed0d6d71027b0f10e47b7d4a0c312fee46bd84ba3033edf581a8eae"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f02_260911/full/workloadc/f2load/raw/monitor.jsonl",
+      "sha256": "aac585556f8b91832b6fb0bac62f878bbf74b8e0defa9b0f456308498aa39327"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f03_260911/full/workloadc/f2load/report.rep",
+      "sha256": "567c795d827bd4e1fb5b5e84fc17da6b1c07c8462778aee1d3d9f7f1f756e93c"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f03_260911/full/workloadc/f2load/raw/monitor.jsonl",
+      "sha256": "a044f06e3f18464afe5189d84e7090a1cfd0d982973d66d648cb09e69660114f"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f04_260911/full/workloadc/f2load/report.rep",
+      "sha256": "9fe81f0604efe5b6f5e060491eca18e00f57983a846dcc9b76df57baba38bdf0"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f04_260911/full/workloadc/f2load/raw/monitor.jsonl",
+      "sha256": "f46bc088be6e8c3ee6cd6ffbdc7d8f311590dba9508ef1fbb7d227d1653f3350"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f05_260911/full/workloadc/f2load/report.rep",
+      "sha256": "7e78164197318241de59051d96cffda69ac044042a054c6074264b1fe2a8d556"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f05_260911/full/workloadc/f2load/raw/monitor.jsonl",
+      "sha256": "bf4b408126d3a13d52e9bb818106616001f198ca788c4d98a623d214e5c015a7"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f06_260912/full/workloadc/f2load/report.rep",
+      "sha256": "406af64428e51efc4a453daa38f6ac6aed39efbf0eb2e57e9507c3e662f82dd5"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f06_260912/full/workloadc/f2load/raw/monitor.jsonl",
+      "sha256": "148e84607214b477d715dc38fdd3791adb045b829aa1d5481b9a8b1169df89c7"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f07_260912/full/workloadc/f2load/report.rep",
+      "sha256": "e1268219ec73dcc6fc2d5fd550a8ed310e08a06dde1489a244d855fa7f93c9a7"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f07_260912/full/workloadc/f2load/raw/monitor.jsonl",
+      "sha256": "41a9134989205a29f867ba3e03686e2c11425ab645a4124b0c61fa8389cf9048"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f08_260912/full/workloadc/f2load/report.rep",
+      "sha256": "c9bc590d6ad32945162a147a3626e54de165c9fcd24c15c02ed4231c32e0992d"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f08_260912/full/workloadc/f2load/raw/monitor.jsonl",
+      "sha256": "6cb67bdfbc2b6810570b91ec922212ac4ee652d9b863bc0c509cbfac013c0a67"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f09_260912/full/workloadc/f2load/report.rep",
+      "sha256": "2028992cd6d9a778a899bdf011efaa21746b86ff0c66618862bc0f21166e3a64"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f09_260912/full/workloadc/f2load/raw/monitor.jsonl",
+      "sha256": "02f5df352bcf5865da4d197f7382d73f8e3985a651963e8cb80ffcca356082c0"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f10_260912/full/workloadc/f2load/report.rep",
+      "sha256": "589d06c04aab285dbc9e6a863fd908177bad90a77cc26e5649f3f2e712625b44"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f10_260912/full/workloadc/f2load/raw/monitor.jsonl",
+      "sha256": "29da0bb7b71eeadf600c384d577d25f2752918eacc53c7d12734a01fc1282fd3"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b01_260910/full/workloadd/baseline/report.rep",
+      "sha256": "292e2b7de8f5c594af2ef238889bbc5ca73b76c0396e4dcc9b7192f854363fe8"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b02_260910/full/workloadd/baseline/report.rep",
+      "sha256": "797ae107c7eec82ec010ebcbd3526d73ef78baf0fcb804edbf1422109e00b161"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b03_260910/full/workloadd/baseline/report.rep",
+      "sha256": "007ed485eea6f09c10acda569bc38fcfecc1e0700b9fc363e0d31a7a32fea3c1"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n01_260910/full/workloadd/baseline/report.rep",
+      "sha256": "1565e2176c15d405c48268c210b13c5bbad0295e1e44b2814bf9c1c577fc272f"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n02_260910/full/workloadd/baseline/report.rep",
+      "sha256": "eb8714b14c53240430a89113f00682f2567b3612a6003b70a5740dd541fbcf61"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n03_260910/full/workloadd/baseline/report.rep",
+      "sha256": "f48ba045c136a11c15f9ab232bf60877948c5b1a412ba477037b62c031bd02f7"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n04_260910/full/workloadd/baseline/report.rep",
+      "sha256": "d858241b241e97971b3171ae8c58fb9fb3138b34fd08823275914ba65b81adc1"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r01_260910/full/workloadd/baseline/report.rep",
+      "sha256": "a1912f385f5d4345f075079a41364ff6dd9e51ef6e1a3e55eb207d821400420d"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r02_260910/full/workloadd/baseline/report.rep",
+      "sha256": "22c16369a063dc28a1392855e6aa9f5ca4b3b57105be73be4d0bcd2e9bd2e271"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_run3_260910/full/workloadd/baseline/report.rep",
+      "sha256": "87de7fba0d370254fae1e5ff977713ab1f63ebef81a956fe9323c7436d9708b9"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f01_260911/full/workloadd/f2load/report.rep",
+      "sha256": "39a30d9d140ee9cdbe67e57f8836bfc27f5b4fbebdfc5864264d0e8eba8bca8e"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f02_260911/full/workloadd/f2load/report.rep",
+      "sha256": "4f4ee99b89dc0a1b31e266b45af1644df4df69fb4d8d8f0aaed522446225843c"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f03_260911/full/workloadd/f2load/report.rep",
+      "sha256": "96731040a50735d27f111ebcc9dd384540be6c11c9d7eaba690fbd2abf4843f4"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f04_260911/full/workloadd/f2load/report.rep",
+      "sha256": "4ae337f28dbd6f70b798c01e801b1c4633acb57b9608af5115995b971347aab4"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f05_260911/full/workloadd/f2load/report.rep",
+      "sha256": "0d8e4212a8f5477fe10ab3a796acc607c274c3935de5f7634c3f017240ae2958"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f06_260912/full/workloadd/f2load/report.rep",
+      "sha256": "c8bcc15101f1cdcc6a70edbc2eb9f7abe0294a3f34cd098a6d9d9f5ce60ebc50"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f07_260912/full/workloadd/f2load/report.rep",
+      "sha256": "57ddd0243d0874ac32b03969bcdc449482729f0ef645da812b3b1ffb23d159d1"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f08_260912/full/workloadd/f2load/report.rep",
+      "sha256": "15a32b8ae2cec35afc91aa36268a2635a169332966464d5399233e9080a56dd7"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f09_260912/full/workloadd/f2load/report.rep",
+      "sha256": "c6236692d43691fd7b2bebb8ea8441e64629f7169ecfa84e174044ac4fbff3fc"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f10_260912/full/workloadd/f2load/report.rep",
+      "sha256": "a990ad0c21a7c9c27bbaab47c9ce895f94c0e9152af3b89dcdfbcd7b42d456a5"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b01_260910/full/workloade/baseline/report.rep",
+      "sha256": "ab1233203b2616009a59052f460c82c2f84db57c96fc87eff13638f52ad5336c"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b02_260910/full/workloade/baseline/report.rep",
+      "sha256": "3cdceb3a14e2ba7d2b81e9655fff9bf9c0d9a3db9271d5f2bef3b6546c117835"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b03_260910/full/workloade/baseline/report.rep",
+      "sha256": "2a600c3f3477cddf2927d66aa89b9028f02356ccc2d6fbe69430bdca8caa88fb"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n01_260910/full/workloade/baseline/report.rep",
+      "sha256": "0108136ca9591f34203d5ded396ebf7c5b6c70a2f79fbedd4637734e2e231b26"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n02_260910/full/workloade/baseline/report.rep",
+      "sha256": "f0caa4aa5bfa91bf1c6bb433c17f62b5877d9c5272dfb65e5f84a2baf9d1964e"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n03_260910/full/workloade/baseline/report.rep",
+      "sha256": "5085c4a6b389027aa819dcee035383b92abde554d363f813f2c99ddff5eae764"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n04_260910/full/workloade/baseline/report.rep",
+      "sha256": "06a2f03f6b7474fe788d1cba82d51cf5b16aa8062cdf217b39a8f7f11a4bf43c"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r01_260910/full/workloade/baseline/report.rep",
+      "sha256": "812316c527db9d08d7a49a5e57742e934905ee3a72843ee182bde4256236371c"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r02_260910/full/workloade/baseline/report.rep",
+      "sha256": "45a43ad792921ce0cecc3f065de2651626dd305dfb29357bc47920e38039c499"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_run3_260910/full/workloade/baseline/report.rep",
+      "sha256": "c7ce6cd858c850a4c3f4963a67fa13c75691c1c2c8ed15478a08a94140056151"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f01_260911/full/workloade/f2load/report.rep",
+      "sha256": "e61ed15094c5bdc339df07ee65afa4a1dce9977e88068a66249dda73a4edcf88"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f02_260911/full/workloade/f2load/report.rep",
+      "sha256": "73391656b3334620be02a6be293d5b88acd876df84e122ba8cab6ae9f8aa69a5"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f03_260911/full/workloade/f2load/report.rep",
+      "sha256": "6f1b384cdef90c50ad49e4cf644febbe88dca4c5458929cab1541e3f1f6d5ed2"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f04_260911/full/workloade/f2load/report.rep",
+      "sha256": "9211c88f359f6efb8931fe9b12aaf584206ec391e201a0fd130dafbf4c1cbcd7"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f05_260911/full/workloade/f2load/report.rep",
+      "sha256": "d294a5261c6f2fc17b33a4390de4f35ac88a1491e0299c034e8d19715a57fe86"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f06_260912/full/workloade/f2load/report.rep",
+      "sha256": "447504fe6b430590505f31c3d93a3681450b76be99ed08c6aa48f62d674e8f12"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f07_260912/full/workloade/f2load/report.rep",
+      "sha256": "dccddbdd51c843259e72a12c97f78daa5b38efa3c9f4aa603fc58928abcfdddc"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f08_260912/full/workloade/f2load/report.rep",
+      "sha256": "cf837ec8fd7062a15f765c8875fa0ee072b9cfa37316c2f346e56a66358241df"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f09_260912/full/workloade/f2load/report.rep",
+      "sha256": "9c99bbc47db23b7edf696d76626f2e410d3f926e3beb4244d41cecf53e839c51"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f10_260912/full/workloade/f2load/report.rep",
+      "sha256": "0d00aba5cfb85b15e5aeb5f474d721e767b20137f03142dbda5b729b71b98940"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b01_260910/full/workloadf/baseline/report.rep",
+      "sha256": "a99c15956bb56be0ab2fc1a3de8d3e13779b1adeeb8b47151fc9c8900dcf28a4"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b02_260910/full/workloadf/baseline/report.rep",
+      "sha256": "e8092332c025e11bdce97318504679a5f3e5661ddf2e6cbe14f54941692d3062"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b03_260910/full/workloadf/baseline/report.rep",
+      "sha256": "c8179a9fbe5a210f146326caa15c14513be0188cb2436259c88a48bbbf691e4d"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n01_260910/full/workloadf/baseline/report.rep",
+      "sha256": "f4385e01392c4d81d4dabd640c9d2114c9e34ce339b6f134e4a9f86c2a42c561"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n02_260910/full/workloadf/baseline/report.rep",
+      "sha256": "a36fd6241230c36908df655e2e3122e9de557cc32f79f7319fc2a889af951f89"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n03_260910/full/workloadf/baseline/report.rep",
+      "sha256": "6320a2c362a3568f802c337120d63e0673ad08c48e1f820563d31a03580048a2"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n04_260910/full/workloadf/baseline/report.rep",
+      "sha256": "a120d84eb0082cd96d6260f787d73532a9af1b0248d14be75a525ae77e1e8287"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r01_260910/full/workloadf/baseline/report.rep",
+      "sha256": "4d999698c3ce277fce5413f31a14a6e6d337556bcee238145ba60aa18a60904f"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r02_260910/full/workloadf/baseline/report.rep",
+      "sha256": "a8815335fa59b2c8fcd924220e399cf6076ec5d2d0d3b5e655d4281ae8dd9c87"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_run3_260910/full/workloadf/baseline/report.rep",
+      "sha256": "c77e164840ab56c07eb1893e4346a9f8b9974b9ba22c044de5c2fec9763aa6a5"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f01_260911/full/workloadf/f2load/report.rep",
+      "sha256": "f863e496f86def61399c03ebbb502478d453989e5affc403630df3ff1f6a9089"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f02_260911/full/workloadf/f2load/report.rep",
+      "sha256": "58f053184aa859ecd15e1d15dd4a58d1c8c568805ed1de5ba9f8b699b076dc1b"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f03_260911/full/workloadf/f2load/report.rep",
+      "sha256": "423cdd9601d4fc34ebe738172593b8e5304eee6b48980ef0156df0b27958ae8d"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f04_260911/full/workloadf/f2load/report.rep",
+      "sha256": "809b94b16cb2646a7c531991821b978c4837a073c570633efd7517a24c1ac450"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f05_260911/full/workloadf/f2load/report.rep",
+      "sha256": "a2e2767d328f2306131cb6262d1e46d6d92bcca0c6cfff33b80a8b95a5b22717"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f06_260912/full/workloadf/f2load/report.rep",
+      "sha256": "61746aa0d22c9af66b42b13d0c7d64ced1c931739c6fd214ab29c25933c917da"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f07_260912/full/workloadf/f2load/report.rep",
+      "sha256": "f86786dacf5f7a96c2fc135ea5b720ea5c867309705dafd3defb2b7f030f9073"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f08_260912/full/workloadf/f2load/report.rep",
+      "sha256": "af503499b45c6d8ee624840a764003f44276ec3459aac6bff29aff1811c8be0e"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f09_260912/full/workloadf/f2load/report.rep",
+      "sha256": "353c35ddad395a2e898ff2f02aef77177898bfaaf458fea665ac3639a6ce2241"
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f10_260912/full/workloadf/f2load/report.rep",
+      "sha256": "146f3e0f48e71d21a6c77458c56f37d9592acb7d70418419ba675337eeff0dd7"
+    }
+  ]
+}

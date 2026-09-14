@@ -620,3 +620,24 @@ Open follow-up:
    ingestion, which is correct there, but it has not been run against the
    claimed-bitmap materialization.
 
+## Queued after the merge-representation comparison (2026-09-14)
+
+1. **Decide the paper's merge representation.** Section 4 is written around PLR.
+   Measurements now show PLR only is not worse than the discrete CDF on either
+   distribution, so the PLR narrative can stand. What Section 4 cannot keep as
+   written is the claim that materialization inverts the PLR: it does not, and
+   the KMV witness mechanism that carries exact keys is undocumented.
+2. **Close the coverage gap** (0.48% uniform, 3.3% unique100). Same cause both
+   times: per-file entry budgets in the deepest levels. A redistribution pass
+   that gives a deep file more budget where unclaimed ids remain should close
+   it, and it only ever loses keys, so it is the whole remaining gap.
+3. **Shrink the descriptor.** The PLR segment vector is dead weight after
+   certification; `Cell` is 64 B of which 32 B is slice provenance only the
+   first and last cell of a slice need; `KMVSample` stores a key and its own
+   SplitMix64 hash, and that mixer is a bijection. Measure the cell-to-segment
+   ratio first - it decides which of these is worth doing.
+4. **Sweep `plr_error_bound`.** On uniform random input the segmentation tracks
+   sampling noise rather than density structure, so a looser bound may cost
+   little fidelity for a large memory saving. Section 5.6 already plans this
+   axis.
+

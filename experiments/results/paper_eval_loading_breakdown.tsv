@@ -1,0 +1,61 @@
+kv_size	system	scope	kind	stage	seconds	count	mean_ms	threads	note
+1KB	f2load	sequential	phase	setup	0.1485	1			wall clock; sequential phases sum to load/fillvirtual
+1KB	f2load	sequential	phase	ingestion	18.7344	1			wall clock; sequential phases sum to load/fillvirtual
+1KB	f2load	sequential	phase	drain_and_cleanup	13.0964	1			wall clock; sequential phases sum to load/fillvirtual
+1KB	f2load	sequential	phase	materialization	22.3853	1			wall clock; sequential phases sum to load/fillvirtual
+1KB	f2load	sequential	phase	final_reporting	0.0001	1			wall clock; sequential phases sum to load/fillvirtual
+1KB	f2load	total	load	fillvirtual	54.4503	1			wall clock; sequential phases sum to load/fillvirtual
+1KB	f2load	completion	completion	flush	0.0	1			wall clock; sequential phases sum to load/fillvirtual
+1KB	f2load	completion	completion	compact0	0.0148	1			wall clock; sequential phases sum to load/fillvirtual
+1KB	f2load	completion_detail	completion_stage	wake_delay	5.0001	1			wall clock; sequential phases sum to load/fillvirtual
+1KB	f2load	completion_detail	completion_stage	waitforcompact_call	0.0	1			wall clock; sequential phases sum to load/fillvirtual
+1KB	f2load	completion	completion	waitforcompaction	5.0001	1			wall clock; sequential phases sum to load/fillvirtual
+1KB	f2load	process	process	benchmark_run_and_close	59.5728	1			wall clock; sequential phases sum to load/fillvirtual
+1KB	f2load	concurrent	commit	batch_total	18.7469	6142	3.0522	48	cumulative over concurrent workers; overlaps the sequential phases
+1KB	f2load	concurrent	key_input	stream_generate	18.6867	16000	1.1679	1	cumulative over concurrent workers; overlaps the sequential phases
+1KB	f2load	concurrent	materialize	sst	0.4415	2	220.7589	48	cumulative over concurrent workers; overlaps the sequential phases
+1KB	f2load	concurrent	materialize	sst	4.5688	46	99.3214	48	cumulative over concurrent workers; overlaps the sequential phases
+1KB	f2load	concurrent	materialize	sst	33.5129	445	75.3099	48	cumulative over concurrent workers; overlaps the sequential phases
+1KB	f2load	concurrent	materialize	sst	344.4825	4061	84.827	48	cumulative over concurrent workers; overlaps the sequential phases
+1KB	f2load	concurrent	materialize	sst	658.3729	8666	75.972	48	cumulative over concurrent workers; overlaps the sequential phases
+1KB	f2load	concurrent	prepare	total	79.0326	16000	4.9395	8	cumulative over concurrent workers; overlaps the sequential phases
+1KB	f2load	concurrent	registration	refill_batch	3.998	1642	2.4348	1	cumulative over concurrent workers; overlaps the sequential phases
+1KB	f2load	concurrent	virtual_compaction	job_total	24.5624	671	36.6057	48	cumulative over concurrent workers; overlaps the sequential phases; levels 0->1
+1KB	f2load	concurrent	virtual_compaction	job_total	117.4463	11749	9.9963	48	cumulative over concurrent workers; overlaps the sequential phases; levels 1->2
+1KB	f2load	concurrent	virtual_compaction	job_total	156.8341	17942	8.7412	48	cumulative over concurrent workers; overlaps the sequential phases; levels 2->3
+1KB	f2load	concurrent	virtual_compaction	job_total	159.8428	15962	10.014	48	cumulative over concurrent workers; overlaps the sequential phases; levels 3->4
+1KB	f2load	concurrent	virtual_compaction	job_total	27.9459	1845	15.1468	48	cumulative over concurrent workers; overlaps the sequential phases; levels 4->5
+1KB	f2load	concurrent	virtual_trivial_move	job_total	13.1281	2077	6.3207	48	cumulative over concurrent workers; overlaps the sequential phases; levels 1->2
+1KB	f2load	concurrent	virtual_trivial_move	job_total	2.5691	400	6.4227	48	cumulative over concurrent workers; overlaps the sequential phases; levels 2->3
+1KB	f2load	concurrent	virtual_trivial_move	job_total	5.5596	479	11.6067	48	cumulative over concurrent workers; overlaps the sequential phases; levels 3->4
+1KB	f2load	concurrent	virtual_trivial_move	job_total	12.1131	1727	7.014	48	cumulative over concurrent workers; overlaps the sequential phases; levels 4->5
+91B	f2load	sequential	phase	setup	1.2341	1			wall clock; sequential phases sum to load/fillvirtual
+91B	f2load	sequential	phase	ingestion	210.8045	1			wall clock; sequential phases sum to load/fillvirtual
+91B	f2load	sequential	phase	drain_and_cleanup	0.9617	1			wall clock; sequential phases sum to load/fillvirtual
+91B	f2load	sequential	phase	materialization	58.4636	1			wall clock; sequential phases sum to load/fillvirtual
+91B	f2load	sequential	phase	final_reporting	0.0001	1			wall clock; sequential phases sum to load/fillvirtual
+91B	f2load	total	load	fillvirtual	271.6856	1			wall clock; sequential phases sum to load/fillvirtual
+91B	f2load	completion	completion	flush	0.0	1			wall clock; sequential phases sum to load/fillvirtual
+91B	f2load	completion	completion	compact0	0.0145	1			wall clock; sequential phases sum to load/fillvirtual
+91B	f2load	completion_detail	completion_stage	wake_delay	5.0001	1			wall clock; sequential phases sum to load/fillvirtual
+91B	f2load	completion_detail	completion_stage	waitforcompact_call	0.0	1			wall clock; sequential phases sum to load/fillvirtual
+91B	f2load	completion	completion	waitforcompaction	5.0001	1			wall clock; sequential phases sum to load/fillvirtual
+91B	f2load	process	process	benchmark_run_and_close	276.8013	1			wall clock; sequential phases sum to load/fillvirtual
+91B	f2load	concurrent	commit	batch_total	23.1959	8138	2.8503	48	cumulative over concurrent workers; overlaps the sequential phases
+91B	f2load	concurrent	key_input	stream_generate	210.7003	16001	13.1679	1	cumulative over concurrent workers; overlaps the sequential phases
+91B	f2load	concurrent	materialize	sst	6.1584	4	1539.6077	48	cumulative over concurrent workers; overlaps the sequential phases
+91B	f2load	concurrent	materialize	sst	24.7533	45	550.0732	48	cumulative over concurrent workers; overlaps the sequential phases
+91B	f2load	concurrent	materialize	sst	92.5964	444	208.5505	48	cumulative over concurrent workers; overlaps the sequential phases
+91B	f2load	concurrent	materialize	sst	808.6992	4075	198.4538	48	cumulative over concurrent workers; overlaps the sequential phases
+91B	f2load	concurrent	materialize	sst	1690.7114	9640	175.385	48	cumulative over concurrent workers; overlaps the sequential phases
+91B	f2load	concurrent	prepare	total	968.8618	16001	60.5501	8	cumulative over concurrent workers; overlaps the sequential phases
+91B	f2load	concurrent	registration	refill_batch	3.3905	1534	2.2102	1	cumulative over concurrent workers; overlaps the sequential phases
+91B	f2load	concurrent	virtual_compaction	job_total	26.5037	707	37.4875	48	cumulative over concurrent workers; overlaps the sequential phases; levels 0->1
+91B	f2load	concurrent	virtual_compaction	job_total	119.1687	12094	9.8535	48	cumulative over concurrent workers; overlaps the sequential phases; levels 1->2
+91B	f2load	concurrent	virtual_compaction	job_total	167.321	19206	8.7119	48	cumulative over concurrent workers; overlaps the sequential phases; levels 2->3
+91B	f2load	concurrent	virtual_compaction	job_total	164.6479	17206	9.5692	48	cumulative over concurrent workers; overlaps the sequential phases; levels 3->4
+91B	f2load	concurrent	virtual_compaction	job_total	32.9275	2713	12.1369	48	cumulative over concurrent workers; overlaps the sequential phases; levels 4->5
+91B	f2load	concurrent	virtual_trivial_move	job_total	13.9036	2055	6.7658	48	cumulative over concurrent workers; overlaps the sequential phases; levels 1->2
+91B	f2load	concurrent	virtual_trivial_move	job_total	3.3406	469	7.1229	48	cumulative over concurrent workers; overlaps the sequential phases; levels 2->3
+91B	f2load	concurrent	virtual_trivial_move	job_total	5.2112	524	9.945	48	cumulative over concurrent workers; overlaps the sequential phases; levels 3->4
+91B	f2load	concurrent	virtual_trivial_move	job_total	12.2123	1739	7.0226	48	cumulative over concurrent workers; overlaps the sequential phases; levels 4->5

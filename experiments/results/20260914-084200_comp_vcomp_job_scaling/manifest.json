@@ -1,0 +1,167 @@
+{
+  "analysis": "Historical RocksDB compaction vs F2Load virtual job latency",
+  "measured_builds": {
+    "1KB": {
+      "comp_binary_sha256": "4a807ef1113420b3029812b497f1bb5c7fb1f11b3f79a9838a0045da84709321",
+      "comp_source_commit": "33f5de2110084a37adc07fdc9928fd15db87ee6f",
+      "vcomp": {
+        "binary": "/home/smrc/virtual_compaction/vcomp-prof-job/db_bench",
+        "sha256": "552c55ff69046f917c86fe6fcbab8ff3c791ccecfd0d057350448572c50712da",
+        "source_commit": "a966c0b0078153c8545696c6e811083f845a52b2",
+        "gib": 1000,
+        "shards": 8,
+        "repetitions": 1,
+        "db_root": "/work/vcomp/exp/job_profile",
+        "time_unit": "seconds",
+        "capture_mode": "on",
+        "verification": "reopen"
+      }
+    },
+    "91B": {
+      "comp_binary_sha256": "4a807ef1113420b3029812b497f1bb5c7fb1f11b3f79a9838a0045da84709321",
+      "comp_source_commit": "33f5de2110084a37adc07fdc9928fd15db87ee6f",
+      "vcomp": {
+        "binary": "/home/smrc/virtual_compaction/vcomp-prof-job/db_bench",
+        "sha256": "552c55ff69046f917c86fe6fcbab8ff3c791ccecfd0d057350448572c50712da",
+        "source_commit": "c3c75f3d323f4113971ddc02ea1bd148d9baa54c",
+        "gib": 1000,
+        "shards": 8,
+        "repetitions": 1,
+        "db_root": "/work/vcomp/exp/job_profile",
+        "time_unit": "seconds",
+        "capture_mode": "on",
+        "verification": "reopen",
+        "kv_bytes": 91,
+        "key_bytes": 48,
+        "value_bytes": 43,
+        "num_records": 11799360703,
+        "logical_input_bytes": 1073741823973,
+        "exact_membership_max_mb": 4096
+      }
+    }
+  },
+  "dataset_GiB": 1000,
+  "repetitions_per_condition": 1,
+  "time_units": "Source compaction integer microseconds; virtual integer nanoseconds. Exports milliseconds.",
+  "x_axis": "Sum of input SST metadata sizes: real physical SST sizes vs virtual descriptor estimated SST sizes. Not actual VComp read I/O.",
+  "mean": "Unweighted arithmetic mean over jobs, not mean across loading repetitions.",
+  "primary_selection": "Successful inter-level rewrite jobs only. Intra-L0 and virtual trivial moves remain in raw/inventory.",
+  "bins": "Powers of two in bytes, left inclusive and right exclusive; no invented empty-bin values.",
+  "plot_filter": "Bins with fewer than 10 jobs retained in TSV but omitted from plotted mean curves. Figure zooms to input >=4 MiB; all bins remain in TSV.",
+  "comparability": "Different dates/builds. Baseline max_write_buffer_number=2; F2Load=16. Baseline tracked time excludes pre-Install DB-mutex reacquisition; virtual job includes mutex waiting. Not identical jobs or a controlled matched-run speedup.",
+  "timing": "VComp job_total includes commit_completion; queue_wait is nested within completion. commit_after_queue=completion-queue_wait. other=job_total-sum(exclusive stages). Shared batch time is never added to job latency.",
+  "raw_jobs": "experiments/artifacts/analysis/20260914-084200_comp_vcomp_job_scaling/jobs_with_breakdown.tsv",
+  "raw_shared_commits": "experiments/artifacts/analysis/20260914-084200_comp_vcomp_job_scaling/shared_commit_batches.tsv",
+  "raw_job_count": 212932,
+  "primary_job_count": 195184,
+  "analysis_script": "/home/smrc/virtual_compaction/vcomp/experiments/analysis/export_comp_vcomp_input_scaling.py",
+  "analysis_script_sha256": "6250569f9b2de467cefed02806e01b5bc9d97874a078ae2218f0d8296d0859f4",
+  "sources": [
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_run1/order1_kv1024_conventional/raw/compaction_breakdown.tsv",
+      "sha256": "85e98a4776866ef579909f9e94aa64cadd59930f4e6324aaa11ecc688a325216",
+      "bytes": 13082252
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_run1/order1_kv1024_conventional/raw/load_cmd.sh",
+      "sha256": "5161262a90e075809c0b26b9e71c482b08d2eb35aaf27843e9ae1066ff211573",
+      "bytes": 931
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_run1/provenance/db_bench.sha256",
+      "sha256": "77c548650c9eb2be14732c99ce5a7e8cc52fa5df5f6b148f2479253f34acacd0",
+      "bytes": 116
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_run1/provenance/vcomp_prof_commit.txt",
+      "sha256": "b366ec36f104eb7779f1d403e7ab6acb00fa8591b99eb025594298fe78287a29",
+      "bytes": 41
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_run1/provenance/vcomp_prof.diff",
+      "sha256": "7b51fd236634ab7256ba26a2bb65ba49f56012e4b0f32b9cf2c4eb7d098d00ed",
+      "bytes": 46821
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_run1/provenance/vcomp_compaction_profiler.h",
+      "sha256": "e0a1af3f65a6d628fa5e9406cf7e760b5d9d637e938db21c3ff5bf0d0cff9fa8",
+      "bytes": 7006
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp-prof-job/experiments/artifacts/job_profile/full_1000gib_260913_01/r1_on/events.tsv",
+      "sha256": "7277196e70b8965d3f15bb0db0731dc5ce278c33a70b5369ec237cccb637cb6c",
+      "bytes": 89124411
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp-prof-job/experiments/artifacts/job_profile/full_1000gib_260913_01/r1_on/command.json",
+      "sha256": "af098cafdf95a9e3b7584c8429810cdbad78e10f31876baa29ace1ac7af896e4",
+      "bytes": 2208
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp-prof-job/experiments/artifacts/job_profile/full_1000gib_260913_01/r1_on/validation.json",
+      "sha256": "2f015686c11466cca921daaeb97866ac5fef01c0cc9686b4f7aef0f03b58e64e",
+      "bytes": 7021
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp-prof-job/experiments/artifacts/job_profile/full_1000gib_260913_01/provenance.json",
+      "sha256": "bb17df493a7667ae628920c8fb8a703c7507cbdf966b14216ca1ffa8b44a99fd",
+      "bytes": 386
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order3_kv91_conventional/raw/compaction_breakdown.tsv",
+      "sha256": "cddbe37904367f000f9ba1820792ac40cb6184b1ad60be24b799daf997ea11b1",
+      "bytes": 15222838
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order3_kv91_conventional/raw/load_cmd.sh",
+      "sha256": "f95742017999fe69a734ed3c44462e63b7b84be41ecec8a576928111463d14f2",
+      "bytes": 932
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/provenance/db_bench.sha256",
+      "sha256": "77c548650c9eb2be14732c99ce5a7e8cc52fa5df5f6b148f2479253f34acacd0",
+      "bytes": 116
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/provenance/vcomp_prof_commit.txt",
+      "sha256": "b366ec36f104eb7779f1d403e7ab6acb00fa8591b99eb025594298fe78287a29",
+      "bytes": 41
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/provenance/vcomp_prof.diff",
+      "sha256": "7b51fd236634ab7256ba26a2bb65ba49f56012e4b0f32b9cf2c4eb7d098d00ed",
+      "bytes": 46821
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/provenance/vcomp_compaction_profiler.h",
+      "sha256": "e0a1af3f65a6d628fa5e9406cf7e760b5d9d637e938db21c3ff5bf0d0cff9fa8",
+      "bytes": 7006
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp-prof-job/experiments/artifacts/job_profile/full_1000gib_91b_260913_01/r1_on/events.tsv",
+      "sha256": "41dd3a8f623b14d58ca92925b82a7f1591e8f81903bd1d22a9d35c3085e0bf36",
+      "bytes": 95398925
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp-prof-job/experiments/artifacts/job_profile/full_1000gib_91b_260913_01/r1_on/command.json",
+      "sha256": "781f086e2e69345bd2e08544cb540ce0b17240bb266be45d6489426f67e6ff1c",
+      "bytes": 2219
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp-prof-job/experiments/artifacts/job_profile/full_1000gib_91b_260913_01/r1_on/validation.json",
+      "sha256": "e07e6bc412b3a80a455d26bf0e153b2da62fa9c2c411a3617faa7b85cf7d55cf",
+      "bytes": 7027
+    },
+    {
+      "path": "/home/smrc/virtual_compaction/vcomp-prof-job/experiments/artifacts/job_profile/full_1000gib_91b_260913_01/provenance.json",
+      "sha256": "a91782b59df08cd69f8e993981f9ba8708eb44c003e7d8ef4220414579ac0af3",
+      "bytes": 549
+    }
+  ],
+  "validation": {
+    "stage_sums_equal_job_totals": true,
+    "virtual_stage_intervals_disjoint": true,
+    "virtual_queue_wait_is_nested_in_completion": true,
+    "capture_dropped_records": 0
+  }
+}

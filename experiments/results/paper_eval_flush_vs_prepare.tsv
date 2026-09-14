@@ -1,0 +1,23 @@
+kv_size	system	unit	jobs	category	total_sec	mean_ms	median_ms	p90_ms	share	mean_input_bytes	mean_input_entries	note	source
+1KB	baseline	flush job	16237	sort	448.378	27.6146			0.2714	66839697	64579		artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order4_kv1024_nocomp/raw/flush_breakdown.tsv
+1KB	baseline	flush job	16237	sst_build	731.744	45.0665			0.4429	66839697	64579		artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order4_kv1024_nocomp/raw/flush_breakdown.tsv
+1KB	baseline	flush job	16237	write	392.437	24.1693			0.2375	66839697	64579		artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order4_kv1024_nocomp/raw/flush_breakdown.tsv
+1KB	baseline	flush job	16237	other	79.59	4.9018			0.0482	66839697	64579		artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order4_kv1024_nocomp/raw/flush_breakdown.tsv
+1KB	baseline	flush job	16237	total	1652.149	101.7521	101.066	107.671	1.0	66839697	64579		artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order4_kv1024_nocomp/raw/flush_breakdown.tsv
+1KB	f2load	vSST batch	16000	sort+dedup+bitmap	44.08	2.755			0.5577				/home/smrc/virtual_compaction/vcomp-prof-job/experiments/results/job_profile_1000gib_260913
+1KB	f2load	vSST batch	16000	kmv sketch	30.22	1.8888			0.3824				/home/smrc/virtual_compaction/vcomp-prof-job/experiments/results/job_profile_1000gib_260913
+1KB	f2load	vSST batch	16000	plr model	4.716	0.2947			0.0597				/home/smrc/virtual_compaction/vcomp-prof-job/experiments/results/job_profile_1000gib_260913
+1KB	f2load	vSST batch	16000	registration (per file share)	3.998	0.2499						1642 refill batches, LogAndApply included; divided by prepared files	/home/smrc/virtual_compaction/vcomp-prof-job/experiments/results/job_profile_1000gib_260913
+1KB	f2load	vSST batch	16000	total (prepare)	79.033	4.9395	4.9454		1.0			sort+dedup+bitmap, KMV, PLR; excludes registration and key generation	/home/smrc/virtual_compaction/vcomp-prof-job/experiments/results/job_profile_1000gib_260913
+1KB	f2load	vSST batch	16000	key generation (producer thread)	18.687	1.1679						exact-membership stream; the baseline generates keys in its writer, outside flush jobs	/home/smrc/virtual_compaction/vcomp-prof-job/experiments/results/job_profile_1000gib_260913
+91B	baseline	flush job	19347	sort	6628.208	342.5961			0.563	61597944	609881		artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order2_kv91_nocomp/raw/flush_breakdown.tsv
+91B	baseline	flush job	19347	sst_build	4598.298	237.675			0.3906	61597944	609881		artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order2_kv91_nocomp/raw/flush_breakdown.tsv
+91B	baseline	flush job	19347	write	426.561	22.0479			0.0362	61597944	609881		artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order2_kv91_nocomp/raw/flush_breakdown.tsv
+91B	baseline	flush job	19347	other	120.572	6.2321			0.0102	61597944	609881		artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order2_kv91_nocomp/raw/flush_breakdown.tsv
+91B	baseline	flush job	19347	total	11773.638	608.5511	613.908	631.843	1.0	61597944	609881		artifacts/log_loads/figure2_1tb_fourcell_260903_resume1/order2_kv91_nocomp/raw/flush_breakdown.tsv
+91B	f2load	vSST batch	16001	sort+dedup+bitmap	766.439	47.8994			0.7911				/home/smrc/virtual_compaction/vcomp-prof-job/experiments/results/job_profile_1000gib_91b_260913
+91B	f2load	vSST batch	16001	kmv sketch	165.87	10.3662			0.1712				/home/smrc/virtual_compaction/vcomp-prof-job/experiments/results/job_profile_1000gib_91b_260913
+91B	f2load	vSST batch	16001	plr model	36.527	2.2828			0.0377				/home/smrc/virtual_compaction/vcomp-prof-job/experiments/results/job_profile_1000gib_91b_260913
+91B	f2load	vSST batch	16001	registration (per file share)	3.39	0.2119						1534 refill batches, LogAndApply included; divided by prepared files	/home/smrc/virtual_compaction/vcomp-prof-job/experiments/results/job_profile_1000gib_91b_260913
+91B	f2load	vSST batch	16001	total (prepare)	968.862	60.5501	59.8563		1.0			sort+dedup+bitmap, KMV, PLR; excludes registration and key generation	/home/smrc/virtual_compaction/vcomp-prof-job/experiments/results/job_profile_1000gib_91b_260913
+91B	f2load	vSST batch	16001	key generation (producer thread)	210.7	13.1679						exact-membership stream; the baseline generates keys in its writer, outside flush jobs	/home/smrc/virtual_compaction/vcomp-prof-job/experiments/results/job_profile_1000gib_91b_260913

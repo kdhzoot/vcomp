@@ -1,0 +1,3 @@
+phase	system	workload	status	duration_sec	threads	measured_seconds	process_elapsed_sec	operations	throughput_ops_sec	avg_latency_us	successful_gets	engine_keys_read	engine_keys_written	peak_rss_kb	log_dir
+pilot	baseline	workloadc	ok	3	48	3.021	3.976334571838379	181942	60220.0	795.132	115203	181942	0	292156	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ssdprobe_cu_b02_260913/pilot/workloadc/baseline
+full	baseline	workloadc	ok	60	48	60.02	60.94927453994751	3695112	61564.0	779.532	2337433	3695112	0	293092	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ssdprobe_cu_b02_260913/full/workloadc/baseline

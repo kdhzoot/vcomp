@@ -779,3 +779,66 @@ file claims: 60.292 x 0.995242 predicts 60.006 against 60.042 measured.
 Single loading. The band for this build is not yet known, and the other five
 workloads have not been re-measured.
 
+## 10. Merge representation: PLR against the discrete CDF (2026-09-14)
+
+### 10.1 What actually runs
+
+`VCOMP_DISCRETE_CDF_ENABLED` has defaulted to true since the discrete-CDF
+commit of 2026-09-08 (`9c7ab9cfa3`), and the string has never been touched
+since, so every loading after that date used the discrete path. The PLR segment
+vector is still built, merged, sliced and stored, but after
+`CertifyVirtualSST()` attaches a `DiscreteCDF` to a fresh Phase 1 vSST, nothing
+reads it again: `Predict`, `Inverse`, `MaterializeKeys` and the materialization
+loop all take the discrete branch first. PLR's one live contribution is at
+certification, where segment boundaries become the interval edges the discrete
+CDF is built on - it decides where the key space is cut, and the certificate
+makes the counting inside those cuts exact.
+
+The other 150 lines of `NWayMergeKMVRangeAware` (the breakpoint sweep, including
+its `EstimateKMVUnionEntriesForRange` call) are unreachable under that default.
+
+### 10.2 The 2026-09-08 diagnosis does not reproduce
+
+`VIRTUAL_COMPACTION_ACCURACY.md` recorded a -19.4% (1 KB) / -19.5% (91 B)
+cardinality error for the pre-discrete implementation on unique100. Re-running
+both paths on the current build at 1 TB does not reproduce it. Two commits
+landed between that diagnosis and the discrete switch becoming load-tested:
+`42653d7406` (KMV union as a dedup ratio, 2026-09-10) and `b703f9de37`
+(calibrated SST size model). The dedup-ratio change is the likely fix; the
+discrete CDF was not the necessary condition.
+
+### 10.3 Uniform random, 1 TB, 1 KB KV (63.2% unique input)
+
+| | distinct keys | vs baseline | overlap with baseline | load |
+|---|---|---|---|---|
+| baseline (10 loadings) | 662,840,067 | - | - | 3,389-3,908 s |
+| PLR only | 663,591,443 | +0.11% | 63.285% | 90.2 s |
+| discrete CDF (e01-e10) | 659.5-660.0 M | -0.5% | 63.18% | 59-61 s |
+
+Both reproduce the cardinality; neither reproduces the key set. 63.285% is the
+overlap two independent subsets of that size would have, so the key identity
+problem is orthogonal to the merge representation. Level shape matched baseline
+in both cases and no consistency check failed.
+
+### 10.4 unique100 trace, 1 TB, 1 KB KV (100% unique input)
+
+The distribution has no duplicate slack, so every key the model reinvents is a
+key lost.
+
+| | distinct keys | of 1,048,576,000 | load | shortfall |
+|---|---|---|---|---|
+| PLR only | 862,812,696 | 82.28% | 65.3 s | - |
+| discrete CDF | 862,587,891 | 82.26% | 66.8 s | - |
+| PLR + exact membership | 1,013,789,121 | **96.68%** | 91.4 s | 848,828 entries / 515 files |
+| discrete + exact membership | 1,012,906,729 | **96.60%** | 94.7 s | **0** |
+
+Exact membership cuts the loss from 17.7% to 3.3%; the merge representation
+changes nothing (0.08 pp apart either way). The discrete path is the one that
+never leaves a file short of its planned entries, which is the feasibility
+guarantee it was built for, but that does not translate into higher coverage
+here.
+
+The residual 3.3% is the unique100 form of the 0.48% coverage gap seen on
+uniform input: in the deepest levels a file's entry budget can be smaller than
+the unclaimed ids in its range, and nothing deeper picks them up.
+

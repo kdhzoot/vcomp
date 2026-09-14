@@ -1,0 +1,4 @@
+{
+  "reason": "User requested C results and no further A runs. Stop active flush-only A; keep completed baseline/fillseq A evidence and all DBs.",
+  "scope": "A_cancelled_C_complete"
+}

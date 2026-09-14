@@ -32,7 +32,7 @@ TEMPLATE = EXP / 'results/paper_ch23_common_260907_f2_completion1/loads.json'
 CACHE = 50 * GIB
 
 
-def load_one(name, db, log, binary=F2):
+def load_one(name, db, log, binary=F2, extra=None):
     """One F2Load loading of the common 1 TB, 1 KB dataset.
 
     An arm whose load already finished is reused rather than reloaded, so a
@@ -51,6 +51,8 @@ def load_one(name, db, log, binary=F2):
     db.parent.mkdir(parents=True, exist_ok=True)
     log.parent.mkdir(parents=True, exist_ok=True)
     opts = load_options(1000, 1024, db, log, 'f2load')
+    if extra:
+        opts.update(extra)
     started = time.time()
     phase, text = measure(command(binary, opts), log, lambda *a: None)
     ident = db_identity(db)
@@ -63,7 +65,8 @@ def load_one(name, db, log, binary=F2):
                final_sst_count=len(ident['ssts']),
                binary_sha256=sha(binary), db_dir=str(db), log_dir=str(log),
                source_identity_file=str(log / 'db_identity.json'),
-               arm=name, wall_sec=round(time.time() - started, 1))
+               arm=name, wall_sec=round(time.time() - started, 1),
+               load_extra=dict(extra or {}))
     save_json(log / 'db_identity.json', ident)
     save_json(log / 'validated.json', row)
     return row
@@ -108,15 +111,20 @@ def main():
     ap.add_argument('--db-root', default='/work/vcomp/exp/f2band_260912')
     ap.add_argument('--keep-db', action='store_true')
     ap.add_argument('--load-binary', type=Path, default=F2)
+    ap.add_argument('--exact-membership', action='store_true',
+                    help='load with --vcomp_exact_membership=true, so the DB holds '
+                         'the key ids the write path emits; needs a binary that has it')
     ap.add_argument('--dry-run', action='store_true')
     args = ap.parse_args()
+    extra = dict(vcomp_exact_membership=True,
+                 vcomp_exact_membership_max_mb=1024) if args.exact_membership else {}
 
     binary = args.load_binary.resolve()
     HASHES[str(binary)] = sha(binary)
     arms = [a.strip() for a in args.arms.split(',') if a.strip()]
     root = Path(args.db_root)
     print('binary {} ({})'.format(binary, sha(binary)[:16]))
-    print('keep_db={}'.format(args.keep_db))
+    print('keep_db={} load_extra={}'.format(args.keep_db, extra or 'none'))
     for a in arms:
         print('  {:<5} load {} -> campaign ycsb_f2band_{}_{}'.format(
             a, root / a, a, args.date))
@@ -129,7 +137,7 @@ def main():
         db = root / a
         log = EXP / 'artifacts/log_loads' / ('f2band_' + args.date) / a
         print('=== {} load ==='.format(a), flush=True)
-        row = load_one(a, db, log, binary)
+        row = load_one(a, db, log, binary, extra)
         print('  {:.0f} s, {} ssts'.format(row['elapsed_sec'],
                                            row['final_sst_count']), flush=True)
         run_id = 'ycsb_f2band_{}_{}'.format(a, args.date)

@@ -1,0 +1,210 @@
+diff --git a/experiments/analysis/parse_ycsb_alternatives.py b/experiments/analysis/parse_ycsb_alternatives.py
+index 6b2731d256..b72e52b075 100644
+--- a/experiments/analysis/parse_ycsb_alternatives.py
++++ b/experiments/analysis/parse_ycsb_alternatives.py
+@@ -25,7 +25,7 @@ from typing import Any
+ 
+ NUMBER = r"(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
+ BENCHMARK_RE = re.compile(
+-    rf"^(workload[a-f])\s*:\s*({NUMBER})\s+micros/op\s+"
++    rf"^(workload[a-f]|mixgraph)\s*:\s*({NUMBER})\s+micros/op\s+"
+     rf"({NUMBER})\s+ops/sec\s+({NUMBER})\s+seconds\s+"
+     r"(\d+)\s+operations;",
+     re.MULTILINE,
+@@ -84,16 +84,24 @@ WORKLOAD_OPERATIONS = {
+     "d": {"read": "read", "write": "insert"},
+     "e": {"seek": "scan", "write": "insert"},
+     "f": {"read": "read", "update": "readmodifywrite"},
++    # db_bench mixgraph: Gets, Puts and Seeks, reported as read/write/seek.
++    "mixgraph": {"read": "read", "write": "update", "seek": "scan"},
+ }
+ 
+ 
+ def _workload_name(workload: str) -> str:
++    if workload.lower().strip() == "mixgraph":
++        return "mixgraph"
+     name = re.sub(r"^(?:workload|ycsb)", "", workload.lower().strip())
+     if name not in WORKLOAD_OPERATIONS:
+         raise ValueError(f"unsupported YCSB workload: {workload!r}")
+     return "workload" + name
+ 
+ 
++def _operations_for(name: str) -> dict[str, str]:
++    return WORKLOAD_OPERATIONS[name if name == "mixgraph" else name[-1]]
++
++
+ def _finite_float(value: str) -> float:
+     result = float(value)
+     if not math.isfinite(result):
+@@ -151,7 +159,7 @@ def parse_metrics(text: str, workload: str) -> dict[str, Any]:
+     if histograms:
+         if sum(hist["count"] for hist in histograms.values()) != operations:
+             raise ValueError("merged operation histogram counts do not match aggregate operations")
+-        mapping = WORKLOAD_OPERATIONS[name[-1]]
++        mapping = _operations_for(name)
+         unexpected = set(histograms) - mapping.keys()
+         if unexpected:
+             raise ValueError(f"unexpected operation types for default {name}: {sorted(unexpected)}")
+diff --git a/experiments/docs/PAPER_EVALUATION_PLAN.md b/experiments/docs/PAPER_EVALUATION_PLAN.md
+index 3e4eccdce3..009cbc684d 100644
+--- a/experiments/docs/PAPER_EVALUATION_PLAN.md
++++ b/experiments/docs/PAPER_EVALUATION_PLAN.md
+@@ -1,5 +1,7 @@
+ # F2Load evaluation plan
+ 
++> 2026-09-13: 새 Chapter 5 실험 설계는 [PAPER_CHAPTER5_EXPERIMENT_PLAN.md](PAPER_CHAPTER5_EXPERIMENT_PLAN.md)를 따른다. 아래는 과거 캠페인 기록이며, 새 계획과 다른 sweep 조건·normalized 표현·DB 삭제 절차를 그대로 적용하지 않는다.
++
+ ## 공통 조건
+ 
+ - 비교 대상: conventional loading (baseline) vs F2Load, 동일 설정
+diff --git a/experiments/scripts/paper/run_f2load_band_chain.py b/experiments/scripts/paper/run_f2load_band_chain.py
+index 825feecf2f..8c0de56274 100644
+--- a/experiments/scripts/paper/run_f2load_band_chain.py
++++ b/experiments/scripts/paper/run_f2load_band_chain.py
+@@ -32,7 +32,7 @@ TEMPLATE = EXP / 'results/paper_ch23_common_260907_f2_completion1/loads.json'
+ CACHE = 50 * GIB
+ 
+ 
+-def load_one(name, db, log, binary=F2):
++def load_one(name, db, log, binary=F2, extra=None):
+     """One F2Load loading of the common 1 TB, 1 KB dataset.
+ 
+     An arm whose load already finished is reused rather than reloaded, so a
+@@ -51,6 +51,8 @@ def load_one(name, db, log, binary=F2):
+     db.parent.mkdir(parents=True, exist_ok=True)
+     log.parent.mkdir(parents=True, exist_ok=True)
+     opts = load_options(1000, 1024, db, log, 'f2load')
++    if extra:
++        opts.update(extra)
+     started = time.time()
+     phase, text = measure(command(binary, opts), log, lambda *a: None)
+     ident = db_identity(db)
+@@ -63,7 +65,8 @@ def load_one(name, db, log, binary=F2):
+                final_sst_count=len(ident['ssts']),
+                binary_sha256=sha(binary), db_dir=str(db), log_dir=str(log),
+                source_identity_file=str(log / 'db_identity.json'),
+-               arm=name, wall_sec=round(time.time() - started, 1))
++               arm=name, wall_sec=round(time.time() - started, 1),
++               load_extra=dict(extra or {}))
+     save_json(log / 'db_identity.json', ident)
+     save_json(log / 'validated.json', row)
+     return row
+@@ -108,15 +111,20 @@ def main():
+     ap.add_argument('--db-root', default='/work/vcomp/exp/f2band_260912')
+     ap.add_argument('--keep-db', action='store_true')
+     ap.add_argument('--load-binary', type=Path, default=F2)
++    ap.add_argument('--exact-membership', action='store_true',
++                    help='load with --vcomp_exact_membership=true, so the DB holds '
++                         'the key ids the write path emits; needs a binary that has it')
+     ap.add_argument('--dry-run', action='store_true')
+     args = ap.parse_args()
++    extra = dict(vcomp_exact_membership=True,
++                 vcomp_exact_membership_max_mb=1024) if args.exact_membership else {}
+ 
+     binary = args.load_binary.resolve()
+     HASHES[str(binary)] = sha(binary)
+     arms = [a.strip() for a in args.arms.split(',') if a.strip()]
+     root = Path(args.db_root)
+     print('binary {} ({})'.format(binary, sha(binary)[:16]))
+-    print('keep_db={}'.format(args.keep_db))
++    print('keep_db={} load_extra={}'.format(args.keep_db, extra or 'none'))
+     for a in arms:
+         print('  {:<5} load {} -> campaign ycsb_f2band_{}_{}'.format(
+             a, root / a, a, args.date))
+@@ -129,7 +137,7 @@ def main():
+         db = root / a
+         log = EXP / 'artifacts/log_loads' / ('f2band_' + args.date) / a
+         print('=== {} load ==='.format(a), flush=True)
+-        row = load_one(a, db, log, binary)
++        row = load_one(a, db, log, binary, extra)
+         print('  {:.0f} s, {} ssts'.format(row['elapsed_sec'],
+                                            row['final_sst_count']), flush=True)
+         run_id = 'ycsb_f2band_{}_{}'.format(a, args.date)
+diff --git a/experiments/scripts/read/run_ycsb_alternatives.py b/experiments/scripts/read/run_ycsb_alternatives.py
+index a0e3eaf829..fcf714164c 100644
+--- a/experiments/scripts/read/run_ycsb_alternatives.py
++++ b/experiments/scripts/read/run_ycsb_alternatives.py
+@@ -60,6 +60,16 @@ def group_members(pgid):
+     return members
+ 
+ 
++# The RocksDB wiki's published ZippyDB fit for mixgraph (Cao et al., FAST '20),
++# with the sine rate limiter left off so a fixed duration runs at full speed.
++# The key space and key size follow the source DB, not the wiki example.
++MIXGRAPH = dict(keyrange_dist_a=14.18, keyrange_dist_b=-2.917, keyrange_dist_c=0.0164,
++                keyrange_dist_d=-0.08082, keyrange_num=30, value_k=0.2615,
++                value_sigma=25.45, iter_k=2.517, iter_sigma=14.236, mix_get_ratio=0.85,
++                mix_put_ratio=0.14, mix_seek_ratio=0.01, mix_max_value_size=1024,
++                sine_mix_rate=False)
++
++
+ def options(source, db, log, workload, duration, cache_size=1,
+             request_distribution=None):
+     result = dict(BASE, num=source['num_keys'], key_size=source['key_bytes'],
+@@ -80,6 +90,10 @@ def options(source, db, log, workload, duration, cache_size=1,
+                   ('latest' if workload == 'workloadd' else 'zipfian'),
+                   ycsb_minscanlength=1, ycsb_maxscanlength=100,
+                   ycsb_scanlengthdistribution='uniform')
++    if workload == 'mixgraph':
++        for key in [k for k in result if k.startswith('ycsb_')]:
++            del result[key]
++        result.update(MIXGRAPH)
+     return result
+ 
+ 
+@@ -114,11 +128,18 @@ class Campaign:
+         require(all(s in SYSTEMS for s in selected), 'unknown system requested')
+         self.systems = tuple(s for s in selected
+                              if not (args.exclude_flush_only and s == 'flush_only'))
+-        letters = getattr(args, 'workloads', None) or 'abcdef'
+-        require(letters and all(c in 'abcdef' for c in letters), 'unknown workload letter')
+-        self.workloads = ''.join(c for c in 'abcdef' if c in letters)
+-        self.cells = [(s, w) for s, w in order()
+-                      if s in self.systems and w[-1] in self.workloads]
++        self.benchmark = getattr(args, 'benchmark', None) or 'ycsb'
++        require(self.benchmark in ('ycsb', 'mixgraph'), 'unknown benchmark')
++        if self.benchmark == 'mixgraph':
++            # One full cell per system; the workload token names the benchmark.
++            self.workloads = ''
++            self.cells = [(s, 'mixgraph') for s in self.systems]
++        else:
++            letters = getattr(args, 'workloads', None) or 'abcdef'
++            require(letters and all(c in 'abcdef' for c in letters), 'unknown workload letter')
++            self.workloads = ''.join(c for c in 'abcdef' if c in letters)
++            self.cells = [(s, w) for s, w in order()
++                          if s in self.systems and w[-1] in self.workloads]
+         self.reused = set()
+         self.current = None
+         self.proc = None
+@@ -208,6 +229,7 @@ class Campaign:
+             profiler_commit=SOURCE_COMMIT, binary_sha256=BINARY_HASH,
+             frozen_binary=str(self.binary), repetitions=1,
+             selected_systems=self.systems, selected_workloads=self.workloads,
++            benchmark=self.benchmark,
+             request_distribution=self.request_distribution,
+             excluded_systems=[s for s in SYSTEMS if s not in self.systems],
+             full_order=self.cells, total_full=len(self.cells), pilot_seconds=[3, 5],
+@@ -555,6 +577,9 @@ def main():
+                         help='override the YCSB key distribution for every '
+                              'workload (uniform, zipfian, latest, ...); '
+                              'default keeps latest for D and zipfian elsewhere')
++    parser.add_argument('--benchmark', default='ycsb', choices=('ycsb', 'mixgraph'),
++                        help='ycsb (default) runs the selected YCSB workloads; mixgraph runs '
++                             'one mixgraph cell per system with the published parameters')
+     parser.add_argument('--workloads', default='abcdef',
+                         help='workload letters to run in the full phase (default abcdef); '
+                              'the pilot cells are unchanged')
+@@ -564,8 +589,12 @@ def main():
+                         help='block cache bytes (default 1, the cached-zero point)')
+     parser.add_argument('--reuse-run', help='Reuse revalidated successful full cells from a terminal run')
+     parser.add_argument('--dry-run', action='store_true')
++    parser.add_argument('--probe', action='store_true',
++                        help='allow a duration other than 300 s; for short device-level '
++                             'probes, not for approved campaign measurements')
+     args = parser.parse_args()
+-    require(args.duration == 300, 'this approved campaign is fixed at 300s')
++    require(args.probe or args.duration == 300,
++            'this approved campaign is fixed at 300s (pass --probe for a short probe)')
+     campaign = Campaign(args)
+     if args.dry_run:
+         print(json.dumps(dict(full_order=campaign.cells, cells=len(campaign.cells), duration=300,

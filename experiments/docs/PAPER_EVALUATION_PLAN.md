@@ -1,5 +1,7 @@
 # F2Load evaluation plan
 
+> 2026-09-13: 새 Chapter 5 실험 설계는 [PAPER_CHAPTER5_EXPERIMENT_PLAN.md](PAPER_CHAPTER5_EXPERIMENT_PLAN.md)를 따른다. 아래는 과거 캠페인 기록이며, 새 계획과 다른 sweep 조건·normalized 표현·DB 삭제 절차를 그대로 적용하지 않는다.
+
 ## 공통 조건
 
 - 비교 대상: conventional loading (baseline) vs F2Load, 동일 설정

@@ -1,0 +1,15 @@
+level	metric	baseline_n	baseline_mean	baseline_min	baseline_max	f2load_n	f2load_mean	f2load_min	f2load_max
+0	files	10	0	0	0	10	0	0	0
+0	rounded_size_mib	10	0	0	0	10	0	0	0
+1	files	10	3.9	3	5	10	3.2	1	5
+1	rounded_size_mib	10	226.6	204	253	10	185.5	62	255
+2	files	10	46.8	43	53	10	43.8	41	47
+2	rounded_size_mib	10	2527.2	2504	2553	10	2513.4	2479	2548
+3	files	10	444.4	437	450	10	441	432	454
+3	rounded_size_mib	10	25574	25556	25599	10	25541.2	25461	25582
+4	files	10	4124.6	4100	4163	10	4074.4	4032	4118
+4	rounded_size_mib	10	255951.6	255892	255996	10	255829.9	255808	255847
+5	files	10	8878	8838	8929	10	8643.5	8560	8689
+5	rounded_size_mib	10	501461.1	501309	501652	10	500890.9	499750	501670
+6	files	10	0	0	0	10	0	0	0
+6	rounded_size_mib	10	0	0	0	10	0	0	0

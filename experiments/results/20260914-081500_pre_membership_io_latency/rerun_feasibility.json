@@ -1,0 +1,256 @@
+{
+  "created_utc": "2026-09-14T08:08:26.628464+00:00",
+  "method": "Read-only path existence, recorded source identity, SST file stat metadata, and small DB metadata hashes; no SST content reads, DB open, benchmark, reload, clone, or cleanup.",
+  "f2load_sources": [
+    {
+      "arm": "f01",
+      "source_db_dir": "/work/vcomp/exp/f2band_260911/f01",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f01_260911/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f01_260911/results.json"
+    },
+    {
+      "arm": "f02",
+      "source_db_dir": "/work/vcomp/exp/f2band_260911/f02",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f02_260911/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f02_260911/results.json"
+    },
+    {
+      "arm": "f03",
+      "source_db_dir": "/work/vcomp/exp/f2band_260911/f03",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f03_260911/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f03_260911/results.json"
+    },
+    {
+      "arm": "f04",
+      "source_db_dir": "/work/vcomp/exp/f2band_260911/f04",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f04_260911/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f04_260911/results.json"
+    },
+    {
+      "arm": "f05",
+      "source_db_dir": "/work/vcomp/exp/f2band_260911/f05",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f05_260911/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f05_260911/results.json"
+    },
+    {
+      "arm": "f06",
+      "source_db_dir": "/work/vcomp/exp/f2band_260912/f06",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f06_260912/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f06_260912/results.json"
+    },
+    {
+      "arm": "f07",
+      "source_db_dir": "/work/vcomp/exp/f2band_260912/f07",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f07_260912/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f07_260912/results.json"
+    },
+    {
+      "arm": "f08",
+      "source_db_dir": "/work/vcomp/exp/f2band_260912/f08",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f08_260912/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f08_260912/results.json"
+    },
+    {
+      "arm": "f09",
+      "source_db_dir": "/work/vcomp/exp/f2band_260912/f09",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f09_260912/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f09_260912/results.json"
+    },
+    {
+      "arm": "f10",
+      "source_db_dir": "/work/vcomp/exp/f2band_260912/f10",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f10_260912/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f10_260912/results.json"
+    },
+    {
+      "arm": "f11",
+      "source_db_dir": "/work/vcomp/exp/f2band_260912/f11",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f11_260912/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f11_260912/results.json"
+    },
+    {
+      "arm": "f12",
+      "source_db_dir": "/work/vcomp/exp/f2band_260912/f12",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f12_260912/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f12_260912/results.json"
+    },
+    {
+      "arm": "f13",
+      "source_db_dir": "/work/vcomp/exp/f2band_260912/f13",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f13_260912/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f13_260912/results.json"
+    },
+    {
+      "arm": "f14",
+      "source_db_dir": "/work/vcomp/exp/f2band_260912/f14",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f14_260912/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f14_260912/results.json"
+    },
+    {
+      "arm": "f15",
+      "source_db_dir": "/work/vcomp/exp/f2band_260912/f15",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_f2band_f15_260912/full/workloadc/f2load",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_f2band_f15_260912/results.json"
+    }
+  ],
+  "baseline_cohort_sources": [
+    {
+      "arm": "b01",
+      "source_db_dir": "/work/vcomp/exp/physcopy_band_260910/b01",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_band_b01_260910/full/workloadc/baseline",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_band_b01_260910/results.json"
+    },
+    {
+      "arm": "b02",
+      "source_db_dir": "/work/vcomp/exp/physcopy_band_260910/b02",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_band_b02_260910/full/workloadc/baseline",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_band_b02_260910/results.json"
+    },
+    {
+      "arm": "b03",
+      "source_db_dir": "/work/vcomp/exp/physcopy_band_260910/b03",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_band_b03_260910/full/workloadc/baseline",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_band_b03_260910/results.json"
+    },
+    {
+      "arm": "n01",
+      "source_db_dir": "/work/vcomp/exp/physcopy_band_260910/n01",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_band_n01_260910/full/workloadc/baseline",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_band_n01_260910/results.json"
+    },
+    {
+      "arm": "n02",
+      "source_db_dir": "/work/vcomp/exp/physcopy_band_260910/n02",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_band_n02_260910/full/workloadc/baseline",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_band_n02_260910/results.json"
+    },
+    {
+      "arm": "n03",
+      "source_db_dir": "/work/vcomp/exp/physcopy_band_260910/n03",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_band_n03_260910/full/workloadc/baseline",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_band_n03_260910/results.json"
+    },
+    {
+      "arm": "n04",
+      "source_db_dir": "/work/vcomp/exp/physcopy_band_260910/n04",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_band_n04_260910/full/workloadc/baseline",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_band_n04_260910/results.json"
+    },
+    {
+      "arm": "r01",
+      "source_db_dir": "/work/vcomp/exp/physcopy_band_260910/r01",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_band_r01_260910/full/workloadc/baseline",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_band_r01_260910/results.json"
+    },
+    {
+      "arm": "r02",
+      "source_db_dir": "/work/vcomp/exp/physcopy_band_260910/r02",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_band_r02_260910/full/workloadc/baseline",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_band_r02_260910/results.json"
+    },
+    {
+      "arm": "run3",
+      "source_db_dir": "/work/vcomp/exp/physcopy_band_260910/run3",
+      "source_exists": false,
+      "C_clone_db_dir": "/work/vcomp/exp/ycsb_band_run3_260910/full/workloadc/baseline",
+      "C_clone_exists": false,
+      "historical_results_path": "/home/smrc/virtual_compaction/vcomp/experiments/results/ycsb_band_run3_260910/results.json"
+    }
+  ],
+  "retained_original_baseline_run3": {
+    "path": "/work/vcomp/exp/paper_ch23_common_260905_approved_run3/full/baseline_1kb",
+    "current_identity_equals_original_archive": true,
+    "archived_identity_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/baseline_1kb/db_identity.json",
+    "archived_identity_sha256": "0f61065bcbd9610db0a80a2823bdfe31688f029c0057dc949dc78431fbac70db",
+    "sst_count": 13461,
+    "sst_bytes": 824004110212,
+    "filenames_and_sizes_equal_historical_physcopy": true,
+    "identical_inode_size_mtime_records_with_physcopy": 0,
+    "limitation": "Original DB retained and unchanged, but historical cohort run3 used a now-missing physical copy. Storage placement therefore differs; not an unchanged physical-source remeasurement."
+  },
+  "frozen_binary": {
+    "path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f01_260911/bin/db_bench",
+    "sha256": "20d67c38612cee9a34d9ef7114c81bc8366b2d4cf99c598b642e63f21ab74266",
+    "profiler_current_binary_path": "/home/smrc/virtual_compaction/vcomp-prof/db_bench",
+    "profiler_source_commit": "dbb0a44a65344f263356c507ec09762c8ed81a71",
+    "current_binary_verified_same_sha256": true
+  },
+  "runner": {
+    "path": "/home/smrc/virtual_compaction/vcomp/experiments/scripts/read/run_ycsb_alternatives.py",
+    "configuration": {
+      "systems": "baseline,f2load",
+      "workloads": "c",
+      "duration_seconds": 300,
+      "threads": 48,
+      "cache_size_bytes": 53687091200,
+      "ycsb_requestdistribution": "zipfian",
+      "seed": 87654321,
+      "num_keys": 1048576000,
+      "key_bytes": 24,
+      "value_bytes": 1000,
+      "compression": "none",
+      "WAL": false,
+      "direct_reads": true,
+      "automatic_compaction": true
+    },
+    "pilot": "Runs C 3 seconds once for each selected system; A/E pilots are omitted when only C selected. Full run must pass metric/options/source identity checks.",
+    "clones": "stage_db hardlinks immutable SSTs, copies mutable metadata, and drops cache before each cell. Successful private clones are automatically removed; source preserved. No CLI keep-clone switch exists.",
+    "interference_gate_limitation": "active_benchmarks checks only db_bench and titandb_bench, so separate pebble.test exclusion is required. Pebble PID3639739 was active at audit.",
+    "preflight": [
+      "New run ID and new output paths",
+      ">=3TiB free /work",
+      "Frozen profiler hash/commit equal required old values",
+      "POSIX source LOCK and source identity match",
+      "No competing storage benchmark including Pebble"
+    ]
+  },
+  "conclusion": "All original f01-f10 and later PLR f11-f15 source DBs and workload-C clones are absent. All10 baseline physical-copy cohort sources and Cclones are absent. Exact old low-throughput DB rerun is unavailable from these retained paths. No replacement loading is authorized or started. A newly loaded same-config cohort would be a different experiment and cannot be labeled rerun of the same DB."
+}

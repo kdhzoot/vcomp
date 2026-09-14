@@ -644,6 +644,42 @@ external-SST global sequence override without an SST rewrite. This fixes
 duplicate iterator output while retaining the independently generated keys
 and chosen levels; it does not correct cardinality or key-distribution errors.
 
+### Merge representation: PLR and the discrete CDF
+
+A vSST carries two models of the same key distribution. `GreedyPLRFit` produces
+the PLR segments at ingestion: each segment is a maximal run of keys that a
+straight line predicts within `--plr_error_bound` ranks, so segment boundaries
+mark where key density changes. `CertifyVirtualSST` then hands those boundaries
+to `BuildDiscreteMergeModel`, which turns them into a `DiscreteCDF`: a list of
+disjoint (interval, count) cells whose count is checked against the interval's
+integer capacity at construction, and whose rank-t key is
+`a + ceil((t+1)*C/m) - 1`. The KMV samples enter here as witnesses - each
+sampled key becomes its own width-1, mass-1 cell, pinning a key that is known to
+exist at the position it actually occupies.
+
+The consequence is a division of labour: PLR says *where* the distribution
+changes and compresses roughly twenty keys into one 32 B segment; the discrete
+CDF says *how many* keys are in each interval and exactly *which* key sits at
+each rank. Because the certificate is integer arithmetic, `Count`, `Select` and
+`Slice` are exact, a slice of a cell yields literally the same keys as before
+the cut, and sibling outputs take disjoint rank ranges, so they cannot overlap.
+
+`VCOMP_DISCRETE_CDF_ENABLED=0` disables the certificate and leaves the PLR merge
+path. Measured at 1 TB on 2026-09-14, that path is not worse: on uniform random
+input it reproduces baseline cardinality slightly better (+0.11% against -0.5%),
+and on a 100%-unique trace the two agree to 0.02 pp. It is slower on uniform
+input (90.2 s against 59-61 s) and it leaves files short of their planned
+entries (848,828 entries across 515 files with exact membership on, against zero
+for the certificate), which is the feasibility property the discrete design was
+introduced for. The -19.4% cardinality error that motivated the switch in
+`VIRTUAL_COMPACTION_ACCURACY.md` does not reproduce on the current build; the
+dedup-ratio estimator of `42653d7406` is the likelier fix.
+
+After certification nothing reads the PLR segments again - `Predict`, `Inverse`,
+`MaterializeKeys` and the materialization loop all prefer the discrete branch -
+so the segment vector that every merge rebuilds and every split re-slices is
+carried but never consulted.
+
 ### Exact membership (`--vcomp_exact_membership`)
 
 Global-unique materialization keeps two files from emitting the same key id,

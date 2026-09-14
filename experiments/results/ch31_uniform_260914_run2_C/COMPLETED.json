@@ -1,0 +1,9 @@
+{
+  "status": "complete",
+  "scope": "uniform_C_only",
+  "C_cells": 3,
+  "A_status": "cancelled_by_user_after_baseline_and_fillseq_completed",
+  "sources_preserved": true,
+  "source_campaign": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ch31_uniform_260914_run2",
+  "updated_unix": 1789360939.8533177
+}

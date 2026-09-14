@@ -1,0 +1,231 @@
+{
+  "baseline": {
+    "benchmark": {
+      "avg_latency_us": 3.321,
+      "measured_seconds": 3482.079,
+      "operations": 1048576000,
+      "throughput_ops_sec": 301135.0
+    },
+    "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+    "case_id": "baseline_1kb",
+    "compaction_jobs": 47817,
+    "compaction_read_bytes": 12888641864517,
+    "compaction_sst_write_bytes": 12559770537984,
+    "created_sst_count": 206050,
+    "cumulative_compaction_sec": 33109.376648,
+    "dataset_gib": 1000,
+    "db_dir": "/work/vcomp/exp/paper_ch23_common_260905_approved_run3/full/baseline_1kb",
+    "device_waf": 13.502023593902589,
+    "device_write_bytes": 14497687441408,
+    "distinct_keys": 662840067,
+    "elapsed_sec": 3501.4172496795654,
+    "final_sst_bytes": 824004110212,
+    "final_sst_count": 13461,
+    "flush_sst_write_bytes": 1091460446077,
+    "key_bytes": 24,
+    "key_domain": 1048576000,
+    "key_uniqueness": 0.632133547782898,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 4,
+        "size_mib": 241
+      },
+      "2": {
+        "files": 43,
+        "size_mib": 2542
+      },
+      "3": {
+        "files": 444,
+        "size_mib": 25563
+      },
+      "4": {
+        "files": 4132,
+        "size_mib": 255980
+      },
+      "5": {
+        "files": 8838,
+        "size_mib": 501506
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "load_insertions": 1048576000,
+    "loading_min": 58.356954161326094,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/baseline_1kb",
+    "logical_input_bytes": 1073741824000,
+    "num_keys": 1048576000,
+    "peak_rss_kb": 6205956,
+    "phases": [
+      {
+        "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+        "elapsed_sec": 3501.4172496795654,
+        "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/baseline_1kb/phase1",
+        "peak_rss_kb": 6205956
+      }
+    ],
+    "repetitions": 1,
+    "retained_sst_pct": 6.532880368842514,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/baseline_1kb/db_identity.json",
+    "stall_sec": 2346.696347,
+    "status": "validated",
+    "system": "baseline",
+    "total_sst_write_bytes": 13651230984061,
+    "unique_count": 662840067,
+    "validation": "10000_of_10000_found_after_readonly_reopen",
+    "value_bytes": 1000,
+    "waf": 12.713699586746284
+  },
+  "fillseq_sparse": {
+    "benchmark": {
+      "avg_latency_us": 0.908,
+      "measured_seconds": 601.973,
+      "operations": 662840067,
+      "throughput_ops_sec": 1101113.0
+    },
+    "binary_sha256": "642383b01e60d16ba33438b86f8924e453b850032c7dfae4b0724b45e60c9774",
+    "case_id": "fillseq_sparse_1kb",
+    "compaction_read_bytes": 195409972,
+    "compaction_sst_write_bytes": 194236416,
+    "dataset_gib": 1000.0,
+    "db_dir": "/work/vcomp/exp/fillseq_sparse_260913_run2/full_sparse",
+    "distinct_keys": 662840067,
+    "elapsed_sec": 607.7344241142273,
+    "exact_membership_verified": true,
+    "extraction_sec": 760.975255727768,
+    "final_sst_bytes": 689530007679,
+    "final_sst_count": 10264,
+    "flush_sst_write_bytes": 689554394505,
+    "key_bytes": 24,
+    "key_domain": 1048576000,
+    "key_file": "/work/vcomp/exp/fillseq_sparse_260913_run1/full_sorted_unique_keys.u64le",
+    "key_uniqueness": 0.632133547782898,
+    "keys_sha256": "bf0d61b6ba5915f0cde21613ec967184807200f49d670ba94f62ad9d1f7dae60",
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 4,
+        "size_mib": 249
+      },
+      "2": {
+        "files": 36,
+        "size_mib": 2306
+      },
+      "3": {
+        "files": 396,
+        "size_mib": 25371
+      },
+      "4": {
+        "files": 3992,
+        "size_mib": 255760
+      },
+      "5": {
+        "files": 5836,
+        "size_mib": 373900
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "load_insertions": 662840067,
+    "load_protocol": "fillseq_sparse_flush_compact0_drain",
+    "loading_min": 10.128907068570454,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/fillseq_sparse_260913_run2/full/sparse_load",
+    "logical_input_bytes": 678748228608,
+    "num_keys": 1048576000,
+    "peak_rss_kb": 4558808,
+    "preparation_sec": 1368.7096798419952,
+    "reference_input_bytes": 1073741824000,
+    "repetitions": 1,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/fillseq_sparse_260913_run2/full/sparse_load/db_identity.json",
+    "status": "validated",
+    "swap_pages_in": 0,
+    "system": "fillseq_sparse",
+    "unique_count": 662840067,
+    "value_bytes": 1000
+  },
+  "flush_only": {
+    "benchmark": {
+      "avg_latency_us": 0.934,
+      "measured_seconds": 979.299,
+      "operations": 1048576000,
+      "throughput_ops_sec": 1070741.0
+    },
+    "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+    "case_id": "flush_only_1kb",
+    "compaction_jobs": 0,
+    "compaction_read_bytes": 0,
+    "compaction_sst_write_bytes": 0,
+    "cumulative_compaction_sec": 0.0,
+    "dataset_gib": 1000,
+    "db_dir": "/work/vcomp/exp/paper_ch23_common_260905_approved_run3/full/flush_only_1kb",
+    "device_waf": 1.0170677185058594,
+    "device_write_bytes": 1092068147200,
+    "elapsed_sec": 979.7261683940887,
+    "final_sst_bytes": 1091415631669,
+    "final_sst_count": 16237,
+    "flush_sst_write_bytes": 1091449356114,
+    "key_bytes": 24,
+    "levels": {
+      "0": {
+        "files": 16237,
+        "size_mib": 1040855
+      },
+      "1": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "2": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "3": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "4": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "5": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "loading_min": 16.32876947323481,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/flush_only_1kb",
+    "logical_input_bytes": 1073741824000,
+    "num_keys": 1048576000,
+    "peak_rss_kb": 7016956,
+    "phases": [
+      {
+        "binary_sha256": "8b261de96ed14f84d3b652c43825ab5b2ac68cbe5ff65b95ee379633c69e883b",
+        "elapsed_sec": 979.7261683940887,
+        "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/flush_only_1kb/phase1",
+        "peak_rss_kb": 7016956
+      }
+    ],
+    "repetitions": 1,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paper_ch23_common_260905_approved_run3/full/flush_only_1kb/db_identity.json",
+    "stall_sec": 0.0,
+    "status": "validated",
+    "system": "flush_only",
+    "total_sst_write_bytes": 1091449356114,
+    "validation": "100_of_100_found_after_readonly_reopen",
+    "value_bytes": 1000,
+    "waf": 1.0164914243984968
+  }
+}

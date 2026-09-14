@@ -1,0 +1,38 @@
+ M experiments/docs/PAPER_EVALUATION_PLAN.md
+ M experiments/scripts/paper/run_f2load_band_chain.py
+ M experiments/scripts/read/run_ycsb_alternatives.py
+?? experiments/analysis/build_eval_band_tsv.py
+?? experiments/analysis/build_eval_fidelity_tsv.py
+?? experiments/analysis/build_ssdprobe_tsv.py
+?? experiments/analysis/plot_ch3_band_em.py
+?? experiments/docs/PAPER_CHAPTER5_EXPERIMENT_PLAN.md
+?? experiments/results/paper_ch3_band_em_raw.tsv
+?? experiments/results/paper_ch3_band_em_vs_baseline_raw.tsv
+?? experiments/results/paper_eval_band_loads.tsv
+?? experiments/results/paper_eval_band_raw.tsv
+?? experiments/results/paper_eval_band_summary.tsv
+?? experiments/results/paper_eval_fidelity_behavior.tsv
+?? experiments/results/paper_eval_fidelity_device.tsv
+?? experiments/results/paper_eval_fidelity_levels.tsv
+?? experiments/results/paper_eval_fidelity_loads.tsv
+?? experiments/results/paper_eval_fidelity_summary.tsv
+?? experiments/results/paper_ssdprobe_cu_260913.tsv
+?? experiments/results/ssdprobe_cu_e01_260913/
+?? experiments/results/ssdprobe_cu_e02_260913/
+?? experiments/results/ssdprobe_cu_e03_260913/
+?? experiments/results/ssdprobe_cu_e04_260913/
+?? experiments/results/ssdprobe_cu_e05_260913/
+?? experiments/results/ssdprobe_cu_e06_260913/
+?? experiments/results/ssdprobe_cu_e07_260913/
+?? experiments/results/ssdprobe_cu_e08_260913/
+?? experiments/results/ssdprobe_cu_e09_260913/
+?? experiments/results/ycsb_f2band_e01_260913/
+?? experiments/results/ycsb_f2band_e02_260913/
+?? experiments/results/ycsb_f2band_e03_260913/
+?? experiments/results/ycsb_f2band_e04_260913/
+?? experiments/results/ycsb_f2band_e05_260913/
+?? experiments/results/ycsb_f2band_e06_260913/
+?? experiments/results/ycsb_f2band_e07_260913/
+?? experiments/results/ycsb_f2band_e08_260913/
+?? experiments/results/ycsb_f2band_e09_260913/
+?? experiments/results/ycsb_f2band_e10_260913/

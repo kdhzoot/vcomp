@@ -1,0 +1,93 @@
+diff --git a/experiments/docs/PAPER_EVALUATION_PLAN.md b/experiments/docs/PAPER_EVALUATION_PLAN.md
+index 3e4eccdce3..009cbc684d 100644
+--- a/experiments/docs/PAPER_EVALUATION_PLAN.md
++++ b/experiments/docs/PAPER_EVALUATION_PLAN.md
+@@ -1,5 +1,7 @@
+ # F2Load evaluation plan
+ 
++> 2026-09-13: 새 Chapter 5 실험 설계는 [PAPER_CHAPTER5_EXPERIMENT_PLAN.md](PAPER_CHAPTER5_EXPERIMENT_PLAN.md)를 따른다. 아래는 과거 캠페인 기록이며, 새 계획과 다른 sweep 조건·normalized 표현·DB 삭제 절차를 그대로 적용하지 않는다.
++
+ ## 공통 조건
+ 
+ - 비교 대상: conventional loading (baseline) vs F2Load, 동일 설정
+diff --git a/experiments/scripts/paper/run_f2load_band_chain.py b/experiments/scripts/paper/run_f2load_band_chain.py
+index 825feecf2f..8c0de56274 100644
+--- a/experiments/scripts/paper/run_f2load_band_chain.py
++++ b/experiments/scripts/paper/run_f2load_band_chain.py
+@@ -32,7 +32,7 @@ TEMPLATE = EXP / 'results/paper_ch23_common_260907_f2_completion1/loads.json'
+ CACHE = 50 * GIB
+ 
+ 
+-def load_one(name, db, log, binary=F2):
++def load_one(name, db, log, binary=F2, extra=None):
+     """One F2Load loading of the common 1 TB, 1 KB dataset.
+ 
+     An arm whose load already finished is reused rather than reloaded, so a
+@@ -51,6 +51,8 @@ def load_one(name, db, log, binary=F2):
+     db.parent.mkdir(parents=True, exist_ok=True)
+     log.parent.mkdir(parents=True, exist_ok=True)
+     opts = load_options(1000, 1024, db, log, 'f2load')
++    if extra:
++        opts.update(extra)
+     started = time.time()
+     phase, text = measure(command(binary, opts), log, lambda *a: None)
+     ident = db_identity(db)
+@@ -63,7 +65,8 @@ def load_one(name, db, log, binary=F2):
+                final_sst_count=len(ident['ssts']),
+                binary_sha256=sha(binary), db_dir=str(db), log_dir=str(log),
+                source_identity_file=str(log / 'db_identity.json'),
+-               arm=name, wall_sec=round(time.time() - started, 1))
++               arm=name, wall_sec=round(time.time() - started, 1),
++               load_extra=dict(extra or {}))
+     save_json(log / 'db_identity.json', ident)
+     save_json(log / 'validated.json', row)
+     return row
+@@ -108,15 +111,20 @@ def main():
+     ap.add_argument('--db-root', default='/work/vcomp/exp/f2band_260912')
+     ap.add_argument('--keep-db', action='store_true')
+     ap.add_argument('--load-binary', type=Path, default=F2)
++    ap.add_argument('--exact-membership', action='store_true',
++                    help='load with --vcomp_exact_membership=true, so the DB holds '
++                         'the key ids the write path emits; needs a binary that has it')
+     ap.add_argument('--dry-run', action='store_true')
+     args = ap.parse_args()
++    extra = dict(vcomp_exact_membership=True,
++                 vcomp_exact_membership_max_mb=1024) if args.exact_membership else {}
+ 
+     binary = args.load_binary.resolve()
+     HASHES[str(binary)] = sha(binary)
+     arms = [a.strip() for a in args.arms.split(',') if a.strip()]
+     root = Path(args.db_root)
+     print('binary {} ({})'.format(binary, sha(binary)[:16]))
+-    print('keep_db={}'.format(args.keep_db))
++    print('keep_db={} load_extra={}'.format(args.keep_db, extra or 'none'))
+     for a in arms:
+         print('  {:<5} load {} -> campaign ycsb_f2band_{}_{}'.format(
+             a, root / a, a, args.date))
+@@ -129,7 +137,7 @@ def main():
+         db = root / a
+         log = EXP / 'artifacts/log_loads' / ('f2band_' + args.date) / a
+         print('=== {} load ==='.format(a), flush=True)
+-        row = load_one(a, db, log, binary)
++        row = load_one(a, db, log, binary, extra)
+         print('  {:.0f} s, {} ssts'.format(row['elapsed_sec'],
+                                            row['final_sst_count']), flush=True)
+         run_id = 'ycsb_f2band_{}_{}'.format(a, args.date)
+diff --git a/experiments/scripts/read/run_ycsb_alternatives.py b/experiments/scripts/read/run_ycsb_alternatives.py
+index a0e3eaf829..52b37d8950 100644
+--- a/experiments/scripts/read/run_ycsb_alternatives.py
++++ b/experiments/scripts/read/run_ycsb_alternatives.py
+@@ -564,8 +564,12 @@ def main():
+                         help='block cache bytes (default 1, the cached-zero point)')
+     parser.add_argument('--reuse-run', help='Reuse revalidated successful full cells from a terminal run')
+     parser.add_argument('--dry-run', action='store_true')
++    parser.add_argument('--probe', action='store_true',
++                        help='allow a duration other than 300 s; for short device-level '
++                             'probes, not for approved campaign measurements')
+     args = parser.parse_args()
+-    require(args.duration == 300, 'this approved campaign is fixed at 300s')
++    require(args.probe or args.duration == 300,
++            'this approved campaign is fixed at 300s (pass --probe for a short probe)')
+     campaign = Campaign(args)
+     if args.dry_run:
+         print(json.dumps(dict(full_order=campaign.cells, cells=len(campaign.cells), duration=300,

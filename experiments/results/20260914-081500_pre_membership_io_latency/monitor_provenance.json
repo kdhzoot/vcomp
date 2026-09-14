@@ -1,0 +1,16 @@
+[
+  {
+    "path": "experiments/artifacts/log_runs/ycsb_f2band_f01_260911/provenance/ch23_common.py",
+    "sha256": "a5acf7c54a27c3f5c1a22fe952a9bb867ccdc16b2e4e8c517c78adbb6c035218",
+    "start_line": 210,
+    "end_line": 217,
+    "excerpt": "def active_benchmarks():\n    pids = []\n    for name in ('db_bench', 'titandb_bench'):\n        result = subprocess.run(['pgrep', '-x', name], stdout=subprocess.PIPE, text=True)\n        pids.extend(int(p) for p in result.stdout.split())\n    return pids\n\n"
+  },
+  {
+    "path": "experiments/artifacts/log_runs/ycsb_f2band_f01_260911/provenance/run_ycsb_alternatives.py",
+    "sha256": "bdaee94153ecba10ebf67530bdc8b7c35b07006fd9eff3bfe3b0f8d6861a0b53",
+    "start_line": 333,
+    "end_line": 364,
+    "excerpt": "                    (raw / 'monitor.jsonl').open('w') as telemetry:\n                self.proc = subprocess.Popen(\n                    ['/usr/bin/time', '-v', '-o', str(raw / 'time.out'),\n                     'stdbuf', '-oL', '-eL'] + argv,\n                    stdout=output, stderr=subprocess.STDOUT, start_new_session=True)\n                save_json(raw / 'process.json', dict(wrapper_pid=self.proc.pid,\n                    process_group=self.proc.pid, started_epoch=started))\n                self.event('BEGIN', process_group=self.proc.pid, log=str(log))\n                while self.proc.poll() is None:\n                    try:\n                        self.proc.wait(timeout=10)\n                    except subprocess.TimeoutExpired:\n                        elapsed = time.time() - started\n                        free = shutil.disk_usage('/work').free\n                        pids = active_benchmarks()\n                        for pid in pids:\n                            try:\n                                require(os.getpgid(pid) == self.proc.pid,\n                                        'concurrent benchmark interference')\n                            except ProcessLookupError:\n                                pass\n                        telemetry.write(json.dumps(dict(epoch=time.time(),\n                            elapsed_sec=elapsed, free_bytes=free, pids=pids)) + '\\n')\n                        telemetry.flush()\n                        require(free >= 2 * TIB, 'free space below 2 TiB')\n                        self.event('RUNNING', elapsed_sec=round(elapsed, 1),\n                                   benchmark_pids=pids)\n                        if elapsed > timeout:\n                            timed_out = True\n                            self.terminate()\n                            break\n                rc = self.proc.returncode"
+  }
+]

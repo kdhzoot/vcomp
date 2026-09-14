@@ -1,0 +1,31 @@
+kv_size	system	kind	start_level	output_level	jobs	total_sec	mean_ms	median_ms	p90_ms	mean_input_bytes	mean_input_files	mean_output_files	note
+1KB	baseline	compaction	0	0	3616	2400.294	663.798	606.473	832.092	276757733	4.12	1	intra-L0 (0->0) jobs have no virtual counterpart
+1KB	baseline	compaction	0	1	432	2260.55	5232.754	6789.787	8360.26	2809866532	15.82	35.11	
+1KB	baseline	compaction	1	2	9190	4176.192	454.428	397.871	696.603	160407119	2.34	2.92	
+1KB	baseline	compaction	2	3	17604	11453.441	650.616	650.18	929.177	239877157	4.02	3.96	
+1KB	baseline	compaction	3	4	15565	12979.764	833.907	919.896	1152.704	302872741	4.93	4.63	
+1KB	baseline	compaction	4	5	1668	709.493	425.356	435.188	498.211	162092969	2.14	2.49	
+1KB	f2load	virtual_compaction	0	1	671	24.562	36.606	35.358	47.895	2914682797	38.54	37.46	job time excludes the shared commit batch, reported once in the breakdown file
+1KB	f2load	virtual_compaction	1	2	11749	117.446	9.996	8.171	19.5	159135152	2.54	2.83	job time excludes the shared commit batch, reported once in the breakdown file
+1KB	f2load	virtual_compaction	2	3	17942	156.834	8.741	6.769	16.069	264641850	4.43	4.38	job time excludes the shared commit batch, reported once in the breakdown file
+1KB	f2load	virtual_compaction	3	4	15962	159.843	10.014	7.243	19.81	308727391	5.07	4.77	job time excludes the shared commit batch, reported once in the breakdown file
+1KB	f2load	virtual_compaction	4	5	1845	27.946	15.147	14.596	23.518	177252677	2.64	2.76	job time excludes the shared commit batch, reported once in the breakdown file
+1KB	f2load	virtual_trivial_move	1	2	2077	13.128	6.321	4.543	14.149	118914920	1.57	1.57	job time excludes the shared commit batch, reported once in the breakdown file
+1KB	f2load	virtual_trivial_move	2	3	400	2.569	6.423	4.98	12.572	48601978	1.25	1.25	job time excludes the shared commit batch, reported once in the breakdown file
+1KB	f2load	virtual_trivial_move	3	4	479	5.56	11.607	4.279	20.349	151887447	2.52	2.52	job time excludes the shared commit batch, reported once in the breakdown file
+1KB	f2load	virtual_trivial_move	4	5	1727	12.113	7.014	6.027	11.793	238512716	3.81	3.81	job time excludes the shared commit batch, reported once in the breakdown file
+91B	baseline	compaction	0	0	4662	8775.084	1882.257	1506.528	1586.84	299944643	4.1	1	intra-L0 (0->0) jobs have no virtual counterpart
+91B	baseline	compaction	0	1	732	11556.357	15787.372	15429.71	22148.299	2505455792	20.65	35.13	
+91B	baseline	compaction	1	2	11611	11102.718	956.224	889.406	1322.935	149007906	2.26	2.66	
+91B	baseline	compaction	2	3	19214	31289.575	1628.478	1636.072	2441.055	260474355	4.32	4.24	
+91B	baseline	compaction	3	4	16770	32222.078	1921.412	2119.599	2684.158	311087872	4.97	4.67	
+91B	baseline	compaction	4	5	2303	2151.01	934.003	919.385	1104.817	160846732	2.15	2.4	
+91B	f2load	virtual_compaction	0	1	707	26.504	37.488	34.94	47.836	2907282879	37.97	37.7	job time excludes the shared commit batch, reported once in the breakdown file
+91B	f2load	virtual_compaction	1	2	12094	119.169	9.854	8.624	17.523	163763012	2.56	2.91	job time excludes the shared commit batch, reported once in the breakdown file
+91B	f2load	virtual_compaction	2	3	19206	167.321	8.712	7.471	15.209	253803008	4.26	4.21	job time excludes the shared commit batch, reported once in the breakdown file
+91B	f2load	virtual_compaction	3	4	17206	164.648	9.569	7.667	18.315	308595203	5.04	4.75	job time excludes the shared commit batch, reported once in the breakdown file
+91B	f2load	virtual_compaction	4	5	2713	32.928	12.137	11.333	19.77	174850238	2.62	2.71	job time excludes the shared commit batch, reported once in the breakdown file
+91B	f2load	virtual_trivial_move	1	2	2055	13.904	6.766	4.794	12.729	115839593	1.52	1.52	job time excludes the shared commit batch, reported once in the breakdown file
+91B	f2load	virtual_trivial_move	2	3	469	3.341	7.123	5.39	12.621	42657788	1.2	1.2	job time excludes the shared commit batch, reported once in the breakdown file
+91B	f2load	virtual_trivial_move	3	4	524	5.211	9.945	4.312	13.885	148414221	2.5	2.5	job time excludes the shared commit batch, reported once in the breakdown file
+91B	f2load	virtual_trivial_move	4	5	1739	12.212	7.023	6.036	12.659	237017553	3.82	3.82	job time excludes the shared commit batch, reported once in the breakdown file

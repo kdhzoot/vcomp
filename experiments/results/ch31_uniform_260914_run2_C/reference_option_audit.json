@@ -1,0 +1,32 @@
+[
+  {
+    "changed_option": "ycsb_requestdistribution: zipfian -> uniform",
+    "ignored_paths": [
+      "db",
+      "report_file"
+    ],
+    "reference": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_run3_260910/full/workloadc/baseline/raw/command.json",
+    "reference_sha256": "b094baece3e40008702955b57f4ea5adfbacac5740283fca1e5ac4ece66182b5",
+    "system": "baseline"
+  },
+  {
+    "changed_option": "ycsb_requestdistribution: zipfian -> uniform",
+    "ignored_paths": [
+      "db",
+      "report_file"
+    ],
+    "reference": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ch3_ycsb_cache50_260911_run2/full/workloadc/flush_only/raw/command.json",
+    "reference_sha256": "8cda25545612e0bb4e763afa135b85a6041be96302f81e10b34b2b1ee987b242",
+    "system": "flush_only"
+  },
+  {
+    "changed_option": "ycsb_requestdistribution: zipfian -> uniform",
+    "ignored_paths": [
+      "db",
+      "report_file"
+    ],
+    "reference": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/fillseq_sparse_fixed_a_260913_run1/full_extra/fixed_a/fillseq_sparse/raw/command.json",
+    "reference_sha256": "d399e4227c76378ef0f0f0f87cc0227e88739d697947e6ba6020ce43593bf4ca",
+    "system": "fillseq_sparse"
+  }
+]

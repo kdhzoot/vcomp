@@ -1,0 +1,3 @@
+kv_size	n_batches	mean_batch_ms	cumulative_batch_seconds	note
+1KB	6142	3.0522440892217517	18.746883196000017	Shared work counted once per batch; do not add to per-job latency breakdown.
+91B	8138	2.8503231173507	23.19592952899998	Shared work counted once per batch; do not add to per-job latency breakdown.

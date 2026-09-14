@@ -1,0 +1,282 @@
+[
+  {
+    "system": "baseline",
+    "arm": "b01",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1450020
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b01_260910/full/workloadc/baseline/raw/monitor.jsonl"
+  },
+  {
+    "system": "baseline",
+    "arm": "b02",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1461994
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b02_260910/full/workloadc/baseline/raw/monitor.jsonl"
+  },
+  {
+    "system": "baseline",
+    "arm": "b03",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1475310
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_b03_260910/full/workloadc/baseline/raw/monitor.jsonl"
+  },
+  {
+    "system": "baseline",
+    "arm": "n01",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1368978
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n01_260910/full/workloadc/baseline/raw/monitor.jsonl"
+  },
+  {
+    "system": "baseline",
+    "arm": "n02",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1380840
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n02_260910/full/workloadc/baseline/raw/monitor.jsonl"
+  },
+  {
+    "system": "baseline",
+    "arm": "n03",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1392777
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n03_260910/full/workloadc/baseline/raw/monitor.jsonl"
+  },
+  {
+    "system": "baseline",
+    "arm": "n04",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1487618
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_n04_260910/full/workloadc/baseline/raw/monitor.jsonl"
+  },
+  {
+    "system": "baseline",
+    "arm": "r01",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1414049
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r01_260910/full/workloadc/baseline/raw/monitor.jsonl"
+  },
+  {
+    "system": "baseline",
+    "arm": "r02",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1426126
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_r02_260910/full/workloadc/baseline/raw/monitor.jsonl"
+  },
+  {
+    "system": "baseline",
+    "arm": "run3",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1437970
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_band_run3_260910/full/workloadc/baseline/raw/monitor.jsonl"
+  },
+  {
+    "system": "f2load",
+    "arm": "f01",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1584419
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f01_260911/full/workloadc/f2load/raw/monitor.jsonl"
+  },
+  {
+    "system": "f2load",
+    "arm": "f02",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1610989
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f02_260911/full/workloadc/f2load/raw/monitor.jsonl"
+  },
+  {
+    "system": "f2load",
+    "arm": "f03",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1637737
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f03_260911/full/workloadc/f2load/raw/monitor.jsonl"
+  },
+  {
+    "system": "f2load",
+    "arm": "f04",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1664836
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f04_260911/full/workloadc/f2load/raw/monitor.jsonl"
+  },
+  {
+    "system": "f2load",
+    "arm": "f05",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        1691345
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f05_260911/full/workloadc/f2load/raw/monitor.jsonl"
+  },
+  {
+    "system": "f2load",
+    "arm": "f06",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        2209680
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f06_260912/full/workloadc/f2load/raw/monitor.jsonl"
+  },
+  {
+    "system": "f2load",
+    "arm": "f07",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        2234616
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f07_260912/full/workloadc/f2load/raw/monitor.jsonl"
+  },
+  {
+    "system": "f2load",
+    "arm": "f08",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        2259137
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f08_260912/full/workloadc/f2load/raw/monitor.jsonl"
+  },
+  {
+    "system": "f2load",
+    "arm": "f09",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        2283594
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f09_260912/full/workloadc/f2load/raw/monitor.jsonl"
+  },
+  {
+    "system": "f2load",
+    "arm": "f10",
+    "samples": 30,
+    "max_monitored_benchmarks": 1,
+    "distinct_pid_sets": 1,
+    "stable_pid_set": [
+      [
+        2308141
+      ]
+    ],
+    "recorded_names": "db_bench,titandb_bench only; no general-process telemetry",
+    "monitor_path": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ycsb_f2band_f10_260912/full/workloadc/f2load/raw/monitor.jsonl"
+  }
+]

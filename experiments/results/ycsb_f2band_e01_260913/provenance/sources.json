@@ -1,0 +1,58 @@
+{
+  "f2load": {
+    "arm": "e01",
+    "binary_sha256": "d4c840f7703589b8772d5220b49f7e816b2e49960cc5e88b7d6dce7eaf6d1479",
+    "case_id": "f2load_1kb",
+    "dataset_gib": 1000,
+    "db_dir": "/work/vcomp/exp/f2band_260913_em/e01",
+    "elapsed_sec": 59.26630401611328,
+    "final_sst_bytes": 822966845161,
+    "final_sst_count": 13290,
+    "key_bytes": 24,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 2,
+        "size_mib": 109
+      },
+      "2": {
+        "files": 46,
+        "size_mib": 2439
+      },
+      "3": {
+        "files": 437,
+        "size_mib": 25558
+      },
+      "4": {
+        "files": 4092,
+        "size_mib": 255844
+      },
+      "5": {
+        "files": 8713,
+        "size_mib": 500892
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "load_extra": {
+      "vcomp_exact_membership": true,
+      "vcomp_exact_membership_max_mb": 1024
+    },
+    "load_protocol": "fillvirtual_waitforcompaction",
+    "loading_min": 0.987771733601888,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/f2band_260913/e01",
+    "logical_input_bytes": 1073741824000,
+    "num_keys": 1048576000,
+    "peak_rss_kb": 2060272,
+    "repetitions": 1,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/f2band_260913/e01/db_identity.json",
+    "system": "f2load",
+    "value_bytes": 1000,
+    "wall_sec": 61.1
+  }
+}

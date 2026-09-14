@@ -1,0 +1,3 @@
+phase	system	workload	status	duration_sec	threads	measured_seconds	process_elapsed_sec	operations	throughput_ops_sec	avg_latency_us	successful_gets	engine_keys_read	engine_keys_written	peak_rss_kb	log_dir
+pilot	f2load	workloadc	ok	3	48	3.02	3.776249408721924	243197	80530.0	593.565	153027	243197	0	285000	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ssdprobe_cu_e01_260913/pilot/workloadc/f2load
+full	f2load	workloadc	ok	60	48	60.021	60.75213384628296	4875986	81237.0	590.773	3068579	4875986	0	286880	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/ssdprobe_cu_e01_260913/full/workloadc/f2load

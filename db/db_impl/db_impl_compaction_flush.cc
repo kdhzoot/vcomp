@@ -1474,7 +1474,6 @@ Status DBImpl::PerformTrivialMove(Compaction& c, LogBuffer* log_buffer,
         if (vsst_handle != nullptr) {
           has_virtual_input = true;
           VirtualSST vsst = *vsst_handle;
-          vsst.level = c.output_level();
           moved_virtuals.emplace_back(fnum, std::move(vsst));
           continue;
         }
@@ -5929,8 +5928,7 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   // Release mutex during PLR merge (CPU-intensive, no shared state).
   mutex_.Unlock();
 
-  // N-way PLR shape merge. By default KMV estimates dedup cardinality; setting
-  // VCOMP_KMV_ENABLED=0 falls back to the pre-KMV PLR dedup path.
+  // N-way PLR shape merge. KMV range sketches estimate dedup cardinality.
   uint64_t input_segments_total = 0;
   for (const auto* m : models) input_segments_total += m->NumSegments();
   uint64_t naive_entries = 0;
@@ -5950,16 +5948,9 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
 
   uint64_t merge_t0 = immutable_db_options_.clock->NowMicros();
   uint64_t total_entries = 0;
-  PLRModel merged;
-  const bool use_kmv = VirtualSSTKMVEnabled();
   Status merge_status;
-  if (use_kmv) {
-    merged = NWayMergeKMVRangeAware(input_vsst_ptrs, &total_entries,
-                                   /*kmv_samples=*/0, &merge_status);
-  } else {
-    merged = NWayMergePLR(models, num_entries_vec, key_mins_vec, key_maxs_vec,
-                          /*dedup=*/true, &total_entries);
-  }
+  PLRModel merged = NWayMergeKMVRangeAware(input_vsst_ptrs, &total_entries,
+                                           /*kmv_samples=*/0, &merge_status);
   if (!merge_status.ok() || (naive_entries > 0 && merged.Empty())) {
     Status s = merge_status.ok()
                    ? Status::Corruption("empty virtual merge result")
@@ -6020,31 +6011,8 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
   std::vector<VirtualSST> output_vssts = SplitIntoSSTs(
       merged, total_entries, target_sst_size, avg_entry_size, global_min,
       global_max, output_level, gp_boundaries,
-      use_kmv ? &input_vsst_ptrs : nullptr, /*kmv_samples=*/0,
+      &input_vsst_ptrs, /*kmv_samples=*/0,
       &virtual_sst_registry_->GetSSTSizeModel());
-  if (merged.DiscreteModel() != nullptr) {
-    unsigned __int128 output_count = 0;
-    bool valid = !output_vssts.empty();
-    uint64_t previous_max = 0;
-    bool have_previous = false;
-    for (const auto& output : output_vssts) {
-      const auto* model = output.plr_model.DiscreteModel();
-      valid = valid && model != nullptr && model->Count() == output.num_entries &&
-              output.key_min <= output.key_max &&
-              static_cast<unsigned __int128>(output.num_entries) <=
-                  static_cast<unsigned __int128>(output.key_max) - output.key_min + 1 &&
-              (!have_previous || output.key_min > previous_max);
-      output_count += output.num_entries;
-      previous_max = output.key_max;
-      have_previous = true;
-    }
-    if (!valid || output_count != total_entries) {
-      Status s = Status::Corruption("invalid discrete virtual split");
-      mutex_.Lock();
-      release_compaction(s);
-      return s;
-    }
-  }
   uint64_t split_us = immutable_db_options_.clock->NowMicros() - split_t0;
 
   auto key_width = [](uint64_t key_min, uint64_t key_max) -> uint64_t {
@@ -6267,7 +6235,7 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
         " output_bytes=%" PRIu64 " dedup_entries=%" PRIu64
         " dedup_rate=%.8f key_min=%" PRIu64 " key_max=%" PRIu64
         " target_sst_size=%" PRIu64 " avg_entry_size=%" PRIu64
-        " use_kmv=%d total_us=%" PRIu64 " gather_us=%" PRIu64
+        " total_us=%" PRIu64 " gather_us=%" PRIu64
         " merge_us=%" PRIu64 " split_us=%" PRIu64
         " mutex_wait_us=%" PRIu64 " edit_us=%" PRIu64
         " log_apply_us=%" PRIu64 " commit_queue_us=%" PRIu64
@@ -6276,7 +6244,7 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
         input_file_numbers.size(), input_level_summary.c_str(),
         input_segments_total, naive_entries, input_bytes, output_vssts.size(),
         total_entries, output_bytes, dedup_estimate, dedup_rate, global_min,
-        global_max, target_sst_size, avg_entry_size, use_kmv ? 1 : 0, total_us,
+        global_max, target_sst_size, avg_entry_size, total_us,
         gather_us, merge_us, split_us, mutex_wait_us, edit_build_us,
         log_apply_us, commit_queue_wait_us, commit_batch_size);
     uint64_t split_pos = 0;

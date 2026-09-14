@@ -314,8 +314,6 @@ class CompactionJob {
   void FinalizeCompactionRun(const Status& status,
                              bool stats_built_from_input_table_prop,
                              uint64_t num_input_range_del);
-  void MaybeRecordVCompAccuracy();
-  void MaybeCaptureVCompInputs();
 
   CompactionServiceJobStatus ProcessKeyValueCompactionWithCompactionService(
       SubcompactionState* sub_compact);

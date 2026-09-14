@@ -6,10 +6,8 @@
 
 #include <cstdint>
 #include <limits>
-#include <memory>
 #include <vector>
 
-#include "db/virtual_compaction/discrete_cdf.h"
 #include "rocksdb/rocksdb_namespace.h"
 
 namespace ROCKSDB_NAMESPACE {
@@ -42,23 +40,10 @@ class PLRModel {
   // key = (rank - intercept) / slope
   uint64_t Inverse(double position) const;
 
-  // Return the segment that covers the given key.
-  // If key is out of range, returns the first or last segment.
-  const PLRSegment& GetSegmentAt(uint64_t key) const;
-
   size_t NumSegments() const { return segments_.size(); }
-  bool Empty() const {
-    return discrete_model_ ? discrete_model_->Empty() : segments_.empty();
-  }
+  bool Empty() const { return segments_.empty(); }
 
   const std::vector<PLRSegment>& Segments() const { return segments_; }
-
-  // Exact count/select certificate for the reconstructed model. It does not
-  // claim exact membership of the original logical input keys.
-  const DiscreteCDF* DiscreteModel() const { return discrete_model_.get(); }
-  void SetDiscreteModel(DiscreteCDF model) {
-    discrete_model_ = std::make_shared<const DiscreteCDF>(std::move(model));
-  }
 
   // Key range of the entire model.
   uint64_t KeyMin() const;
@@ -66,7 +51,6 @@ class PLRModel {
 
  private:
   std::vector<PLRSegment> segments_;
-  std::shared_ptr<const DiscreteCDF> discrete_model_;
 };
 
 // Build a PLR model from sorted keys using the Greedy-PLR algorithm.
@@ -74,20 +58,5 @@ class PLRModel {
 // error_bound: maximum allowed rank prediction error (δ).
 PLRModel GreedyPLRFit(const std::vector<uint64_t>& sorted_keys,
                       double error_bound);
-
-// Merge N PLR models into one.
-// The merged model represents the CDF of the merged sorted sequence.
-// pos_merged(x) = sum of pos_i(x) for all models.
-//
-// When dedup=true, applies probabilistic dedup correction per breakpoint:
-//   adjusted_slope = 1 - Π(1 - slope_i)   (inclusion-exclusion)
-// This estimates unique key density assuming independent random placement.
-// If adjusted_total is non-null, the estimated unique entry count is stored.
-PLRModel NWayMergePLR(const std::vector<const PLRModel*>& models,
-                      const std::vector<uint64_t>& num_entries,
-                      const std::vector<uint64_t>& key_mins,
-                      const std::vector<uint64_t>& key_maxs,
-                      bool dedup = false,
-                      uint64_t* adjusted_total = nullptr);
 
 }  // namespace ROCKSDB_NAMESPACE

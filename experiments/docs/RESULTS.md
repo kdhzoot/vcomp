@@ -842,3 +842,69 @@ The residual 3.3% is the unique100 form of the 0.48% coverage gap seen on
 uniform input: in the deepest levels a file's entry budget can be smaller than
 the unclaimed ids in its range, and nothing deeper picks them up.
 
+
+## 11. PLR-only consolidation (2026-09-14)
+
+Acting on section 10, the discrete-CDF representation was removed and the PLR
+merge path — the one the paper describes — became the only one. The same commit
+removed every other code path that the frozen loading configuration could not
+reach.
+
+### 11.1 What was removed
+
+| group | what | where |
+|---|---|---|
+| discrete CDF | `discrete_cdf.{h,cc}`, `discrete_merge.{h,cc}`, `CertifyVirtualSST`, `PLRModel::discrete_model_`, all `discrete != nullptr` branches in merge/split/materialize, `VCOMP_DISCRETE_CDF_ENABLED` | 741 source lines plus call sites |
+| dead code | `VirtualCompact` (no caller), `VirtualSST::EstimateSize` (no caller), `PLRModel::GetSegmentAt` (no caller) | 72 lines |
+| pre-KMV dedup | `NWayMergePLR` with inclusion-exclusion correction (`fd22ee78f7`), `VirtualSSTKMVEnabled`, `VCOMP_KMV_ENABLED` | 173 lines |
+| accuracy tooling | `MaybeCaptureVCompInputs`, `MaybeRecordVCompAccuracy` and their helpers; `--vcomp_accuracy_trace_dir` and its option plumbing; `VCOMP_ACCURACY_CAPTURE_DIR` | 703 lines in `compaction_job.cc` |
+| patch-15 tools | `virtual_compaction_{replay,accuracy_probe,accuracy_chain_probe,discrete_test}.cc`; `run_real_input_accuracy.py`, `run_discrete_fidelity_pilot.py` | never in the build manifests |
+| size model | `--vcomp_sst_size_model` and its `logical` branch; `smoke_sst_size_model.py` | calibration is now unconditional |
+
+Kept deliberately: `--vcomp_exact_membership` **and** `--vcomp_global_unique_keys`
+(both remain selectable), `--vcomp_fidelity_report_dir`, `--load_trace_file`,
+`VCOMP_KMV_SAMPLES` / `VCOMP_KMV_RANGE_BUCKETS`.
+
+### 11.2 Descriptor memory
+
+A whole-file KMV sketch and eight range buckets used to hold the same keys
+twice. The whole-file sketch is gone; the eight equal-count buckets are the
+descriptor's sample, and concatenating them is an unbiased sample of the whole
+file, so the dedup ratio is unchanged. A sample now stores only its 64-bit
+fingerprint: SplitMix64's finalizer is a bijection, so deduplication compares
+fingerprints directly and `KMVUnhash` recovers the key on the two paths that
+test a sample against a key range (verified exact over 21M round-trips
+including `0`, `2^63` and `UINT64_MAX`).
+
+| | before | after |
+|---|---|---|
+| `KMVSample` | 16 B | **8 B** |
+| samples per descriptor | 512 whole-file + 8x64 range = 1024 | **8x64 = 512** |
+| sketch bytes per descriptor | 17,064 B | **4,608 B** (3.70x smaller) |
+| `VirtualSST` header | 144 B | **80 B** |
+| `PLRModel` header | 40 B | **24 B** |
+| `DiscreteCDF::Cell` | 64 B each | **gone** |
+
+`VirtualSST::level` was also removed: it was written at four sites and never
+read for a decision. The level a descriptor materializes at comes from the
+Version, as it always did; a descriptor the Version does not list falls back to
+L0.
+
+### 11.3 Verification
+
+- `make static_lib db_bench` clean, no warnings.
+- `virtual_sst_test`: 12/12 pass, including a new fingerprint round-trip test
+  and a sample-budget test asserting 8 buckets x 64 samples.
+- 4 GB smoke load on the new binary: loads, drains to 0 pending compaction
+  bytes, reopens read-only, and `readrandom` finds 126,579 of 200,000
+  (**63.29%**) against the 63.21% expected for sampling with replacement from a
+  key space of the same size.
+- Removed flags are rejected by gflags; kept flags still parse.
+
+### 11.4 Open
+
+The coverage gap of section 10 is unchanged by this commit and is now the only
+known fidelity gap: 0.48% on uniform input, 3.3% on unique100. The accuracy
+capture and replay lineage that section 4 of `PAPER_CHAPTER5_EXPERIMENT_PLAN.md`
+plans to use was removed with the rest of patch 15; restoring it means reverting
+those files from `265112cf5a`.

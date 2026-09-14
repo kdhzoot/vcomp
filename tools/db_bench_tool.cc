@@ -911,18 +911,9 @@ DEFINE_string(compaction_trace_dir, "",
               "If not empty, write per-compaction trace log files to this "
               "directory with detailed key-level information.");
 
-DEFINE_string(vcomp_accuracy_trace_dir, "",
-              "If not empty, run virtual compaction prediction alongside real "
-              "compactions and write per-job accuracy records to this directory.");
-
 DEFINE_string(vcomp_fidelity_report_dir, "",
               "If not empty, write fillvirtual descriptor/materialization "
               "cardinality diagnostics (fidelity.json and files.tsv) here.");
-
-DEFINE_string(vcomp_sst_size_model, "calibrated",
-              "fillvirtual SST bytes: calibrated uses completed in-memory SST "
-              "probes with the materialization options; logical reproduces "
-              "the old entries*(key+value) estimate. Input batching is unchanged.");
 
 DEFINE_bool(vcomp_global_unique_keys, false,
             "fillvirtual only: assert that every input key is distinct and "
@@ -4907,7 +4898,6 @@ class Benchmark {
     options.env = FLAGS_env;
     options.wal_dir = FLAGS_wal_dir;
     options.compaction_trace_dir = FLAGS_compaction_trace_dir;
-    options.vcomp_accuracy_trace_dir = FLAGS_vcomp_accuracy_trace_dir;
     options.dump_malloc_stats = FLAGS_dump_malloc_stats;
     options.stats_dump_period_sec =
         static_cast<unsigned int>(FLAGS_stats_dump_period_sec);
@@ -6072,7 +6062,7 @@ class Benchmark {
     // Calibration is mandatory loading work, included in Phase 1 and Total.
     auto phase1_start = FLAGS_env->NowMicros();
     const Options materialization_options = VirtualMaterializationOptions();
-    if (FLAGS_vcomp_sst_size_model == "calibrated") {
+    {
       const uint64_t calibration_start = FLAGS_env->NowMicros();
       SSTSizeModel calibrated;
       std::vector<SSTSizeCalibrationSample> samples;
@@ -6108,18 +6098,12 @@ class Benchmark {
       }
       fprintf(stderr, "SST size calibration: %.6f sec (memory-only)\n",
               (FLAGS_env->NowMicros() - calibration_start) / 1e6);
-    } else if (FLAGS_vcomp_sst_size_model != "logical") {
-      fprintf(stderr, "Invalid --vcomp_sst_size_model: %s\n",
-              FLAGS_vcomp_sst_size_model.c_str());
-      if (load_trace_fp != nullptr) fclose(load_trace_fp);
-      db_bench_exit(1);
-      return;
     }
     const SSTSizeModel& sst_size_model = registry->GetSSTSizeModel();
     fprintf(stderr,
-            "SST size model: %s logical_entry_bytes=%" PRIu64
+            "SST size model: calibrated logical_entry_bytes=%" PRIu64
             " target_bytes=%" PRIu64 " entries_at_target=%" PRIu64 "\n",
-            FLAGS_vcomp_sst_size_model.c_str(), avg_entry_size, target_sst_size,
+            avg_entry_size, target_sst_size,
             sst_size_model.MaxEntries(target_sst_size));
     const uint64_t memtable_capacity =
         static_cast<uint64_t>(FLAGS_memtable_flush_size) * 1024 * 1024 /
@@ -6632,22 +6616,11 @@ class Benchmark {
 
           VirtualSST vsst;
           vsst.plr_model = std::move(plr);
-          if (VirtualSSTKMVEnabled()) {
-            vsst.kmv_sketch = BuildKMVSketchFromSortedKeys(keys);
-            vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(keys);
-          }
+          vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(keys);
           vsst.key_min = keys.front();
           vsst.key_max = keys.back();
           vsst.num_entries = keys.size();
-          vsst.level = 0;
           vsst.size_bytes = sst_size_model.Estimate(keys.size());
-
-          Status cdf_status = CertifyVirtualSST(&vsst);
-          if (!cdf_status.ok()) {
-            fprintf(stderr, "Discrete flush model failed: %s\n",
-                    cdf_status.ToString().c_str());
-            exit(1);
-          }
 
           auto regbuild_t0 = FLAGS_env->NowMicros();
           result.pending_file.file_size = vsst.size_bytes;
@@ -6747,22 +6720,11 @@ class Benchmark {
       // Build VirtualSST.
       VirtualSST vsst;
       vsst.plr_model = std::move(plr);
-      if (VirtualSSTKMVEnabled()) {
-        vsst.kmv_sketch = BuildKMVSketchFromSortedKeys(memtable_buf);
-        vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(memtable_buf);
-      }
+      vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(memtable_buf);
       vsst.key_min = memtable_buf.front();
       vsst.key_max = memtable_buf.back();
       vsst.num_entries = memtable_buf.size();
-      vsst.level = 0;
       vsst.size_bytes = sst_size_model.Estimate(memtable_buf.size());
-
-      Status cdf_status = CertifyVirtualSST(&vsst);
-      if (!cdf_status.ok()) {
-        fprintf(stderr, "Discrete flush model failed: %s\n",
-                cdf_status.ToString().c_str());
-        exit(1);
-      }
 
       auto t3 = FLAGS_env->NowMicros();
       uint64_t fnum = next_reserved_l0_file++;
@@ -7240,8 +7202,9 @@ class Benchmark {
     // Collect level distribution for reporting.
     std::map<int, size_t> level_dist;
     for (const auto& [fnum, vsst] : all_vssts) {
+      (void)vsst;
       auto it = file_level_map.find(fnum);
-      int lvl = (it != file_level_map.end()) ? it->second : vsst->level;
+      int lvl = (it != file_level_map.end()) ? it->second : 0;
       level_dist[lvl]++;
     }
     fprintf(stderr, "  Virtual SSTs: %zu (", all_vssts.size());
@@ -7273,9 +7236,7 @@ class Benchmark {
         tasks[i].vsst = all_vssts[i].second;
         tasks[i].real_fnum = versions->NewFileNumber();
         auto it = file_level_map.find(all_vssts[i].first);
-        tasks[i].level = (it != file_level_map.end())
-                             ? it->second
-                             : all_vssts[i].second->level;
+        tasks[i].level = (it != file_level_map.end()) ? it->second : 0;
         tasks[i].materialize_key_min = tasks[i].vsst->key_min;
         tasks[i].materialize_key_max = tasks[i].vsst->key_max;
       }
@@ -7360,13 +7321,12 @@ class Benchmark {
       std::unordered_map<uint64_t, bool> registry_files;
       uint64_t registry_entries = 0, live_entries = 0, live_files = 0;
       uint64_t all_written = 0, live_written = 0;
-      uint64_t discrete_files = 0, discrete_cells = 0;
-      uint64_t registry_only = 0, version_only = 0, level_mismatches = 0;
+      uint64_t registry_only = 0, version_only = 0;
       uint64_t failed_files = 0, skipped_files = 0, put_failed_files = 0;
       uint64_t all_put_successes = 0;
       uint64_t unique_shortfall_total = 0, unique_short_files = 0;
       std::ostringstream tsv;
-      tsv << "virtual_file\treal_file\tlevel\tregistry_level\tin_version"
+      tsv << "virtual_file\treal_file\tlevel\tin_version"
              "\tplanned_entries\tkey_min\tkey_max\tmaterialize_key_min"
              "\tmaterialize_key_max\tkeys_written\tput_successes"
              "\tskipped_nonincreasing_keys\tdropped_entries\tok"
@@ -7378,10 +7338,6 @@ class Benchmark {
         registry_files[task.virtual_fnum] = true;
         const bool live = file_level_map.count(task.virtual_fnum) != 0;
         const uint64_t planned = task.vsst->num_entries;
-        if (const auto* discrete = task.vsst->plr_model.DiscreteModel()) {
-          ++discrete_files;
-          discrete_cells += discrete->Cells().size();
-        }
         registry_entries += planned;
         all_written += res.keys_written;
         all_put_successes += res.put_successes;
@@ -7396,7 +7352,6 @@ class Benchmark {
           ++live_files;
           live_entries += planned;
           live_written += res.keys_written;
-          level_mismatches += task.level != task.vsst->level;
           auto& count = levels[task.level];
           ++count.files;
           count.planned += planned;
@@ -7407,7 +7362,7 @@ class Benchmark {
           ++registry_only;
         }
         tsv << task.virtual_fnum << '\t' << task.real_fnum << '\t'
-            << task.level << '\t' << task.vsst->level << '\t' << live << '\t'
+            << task.level << '\t' << live << '\t'
             << planned << '\t' << task.vsst->key_min << '\t'
             << task.vsst->key_max << '\t' << task.materialize_key_min << '\t'
             << task.materialize_key_max << '\t' << res.keys_written << '\t'
@@ -7443,15 +7398,10 @@ class Benchmark {
            << ",\n  \"version_files\": " << file_level_map.size()
            << ",\n  \"stage1_live_descriptor_files\": " << live_files
            << ",\n  \"stage1_registry_descriptor_entries\": " << registry_entries
-           << ",\n  \"discrete_model_files\": " << discrete_files
-           << ",\n  \"discrete_model_cells\": " << discrete_cells
-           << ",\n  \"discrete_cell_payload_bytes\": "
-           << discrete_cells * sizeof(DiscreteCDF::Cell)
            << ",\n  \"stage1_live_descriptor_entries\": " << live_entries
            << ",\n  \"registry_only_files\": " << registry_only
            << ",\n  \"version_only_files\": " << version_only
            << ",\n  \"version_only_file_numbers\": [" << missing.str() << ']'
-           << ",\n  \"registry_level_mismatches\": " << level_mismatches
            << ",\n  \"snapshot_complete\": "
            << (registry_only == 0 && version_only == 0)
            << ",\n  \"stage2_sst_keys_written\": " << all_written
@@ -7723,18 +7673,6 @@ class Benchmark {
             // Stream materialized keys directly into the SST writer. This
             // avoids allocating and rereading a uint64_t vector per VSST.
             const auto& segments = task.vsst->plr_model.Segments();
-            const auto* discrete = task.vsst->plr_model.DiscreteModel();
-            auto discrete_cursor = discrete == nullptr
-                                       ? DiscreteCDF::Cursor()
-                                       : discrete->NewCursor();
-            if (discrete != nullptr &&
-                (discrete->Count() != task.vsst->num_entries ||
-                 discrete->Select(0) < task.materialize_key_min ||
-                 discrete->Select(discrete->Count() - 1) > task.materialize_key_max)) {
-              res.report_status = "invalid_discrete_range";
-              res.stop_reason = "discrete_invariant";
-              continue;
-            }
             size_t seg_idx = 0;
             uint64_t prev_materialized_key = 0;
             bool has_prev_materialized_key = false;
@@ -7765,11 +7703,6 @@ class Benchmark {
                 member_have[pick] =
                     (pick == 0 ? member_fresh : member_stale)
                         ->Next(&member_next[pick]);
-              } else if (discrete != nullptr) {
-                if (!discrete_cursor.Next(&k)) {
-                  res.stop_reason = "discrete_cursor_exhausted";
-                  break;
-                }
               } else {
                 double position = static_cast<double>(pos);
 
@@ -7867,18 +7800,14 @@ class Benchmark {
               keys_in_file++;
             }
             res.put_successes = keys_in_file;
-            const bool discrete_cursor_ok = discrete_cursor.status().ok();
             // Entries that no free key could carry are a measured capacity
             // limit of global-unique materialization, so they count as a
             // shortfall. Any other missing entry still fails the file.
-            if ((discrete != nullptr || unique_reservation != nullptr ||
-                 membership != nullptr) &&
+            if ((unique_reservation != nullptr || membership != nullptr) &&
                 (keys_in_file + res.unique_shortfall !=
                      task.vsst->num_entries ||
-                 !discrete_cursor_ok || res.skipped_nonincreasing_keys != 0)) {
-              res.report_status = discrete != nullptr
-                                      ? "discrete_count_mismatch"
-                                      : "unique_count_mismatch";
+                 res.skipped_nonincreasing_keys != 0)) {
+              res.report_status = "unique_count_mismatch";
               continue;
             }
 

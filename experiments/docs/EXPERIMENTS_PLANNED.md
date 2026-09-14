@@ -620,24 +620,34 @@ Open follow-up:
    ingestion, which is correct there, but it has not been run against the
    claimed-bitmap materialization.
 
-## Queued after the merge-representation comparison (2026-09-14)
+## Queued after the PLR-only consolidation (2026-09-14)
 
-1. **Decide the paper's merge representation.** Section 4 is written around PLR.
-   Measurements now show PLR only is not worse than the discrete CDF on either
-   distribution, so the PLR narrative can stand. What Section 4 cannot keep as
-   written is the claim that materialization inverts the PLR: it does not, and
-   the KMV witness mechanism that carries exact keys is undocumented.
-2. **Close the coverage gap** (0.48% uniform, 3.3% unique100). Same cause both
+Items 1 and 3 of the previous list are done: the merge representation is PLR
+only, and the descriptor shrank from 17,064 B of sketch to 4,608 B
+(`RESULTS.md` section 11). What remains:
+
+1. **Close the coverage gap** (0.48% uniform, 3.3% unique100). Same cause both
    times: per-file entry budgets in the deepest levels. A redistribution pass
    that gives a deep file more budget where unclaimed ids remain should close
-   it, and it only ever loses keys, so it is the whole remaining gap.
-3. **Shrink the descriptor.** The PLR segment vector is dead weight after
-   certification; `Cell` is 64 B of which 32 B is slice provenance only the
-   first and last cell of a slice need; `KMVSample` stores a key and its own
-   SplitMix64 hash, and that mixer is a bijection. Measure the cell-to-segment
-   ratio first - it decides which of these is worth doing.
+   it, and it only ever loses keys, so it is the whole remaining gap. This is
+   now the only known fidelity gap.
+2. **Re-run the 1 TB band on the consolidated build.** Sections 9 and 10 were
+   measured on the binary that still carried the discrete path. The
+   configuration those runs used is now the only configuration, so a repeat
+   should reproduce them; the point is to confirm the removal changed nothing
+   and to have the campaign's numbers come from the shipping code.
+3. **Fix Section 4 of the paper.** PLR now genuinely is the merge
+   representation, so the narrative can stand as written, with one correction:
+   materialization walks the segments with `Inverse`, and Table 1 should list
+   the KMV range sketches the descriptor actually carries.
 4. **Sweep `plr_error_bound`.** On uniform random input the segmentation tracks
    sampling noise rather than density structure, so a looser bound may cost
    little fidelity for a large memory saving. Section 5.6 already plans this
-   axis.
-
+   axis, and the PLR segments are now load-bearing, so the sweep measures a
+   real accuracy/memory trade-off rather than dead metadata.
+5. **Decide whether Section 5.4 (virtual compaction accuracy) stays.** Its
+   tooling - the per-job capture and trace hooks, `virtual_compaction_replay`,
+   `run_real_input_accuracy.py` - was removed with patch 15. Restoring it means
+   reverting those files from `265112cf5a` and reattaching the two hooks to
+   `CompactionJob::Run`; dropping the section means removing it from
+   `PAPER_CHAPTER5_EXPERIMENT_PLAN.md`.

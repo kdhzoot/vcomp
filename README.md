@@ -21,12 +21,12 @@ directory convention and setup on another server, see
 
 ## Current State
 
-Fidelity qualification, 2026-09-08: this working tree includes an experimental
-discrete-CDF correction for merge, split, and materialization. Its six 100 GiB
-F2Load cases preserve descriptor counts through SST writing and pass strict
-iterator checks. Global distinct-key fidelity remains inaccurate, and small
-ECDF controls expose distribution regressions. This is a count-consistency
-candidate, not a completed fidelity correction. The working tree also adds
+Merge representation, 2026-09-14: the discrete-CDF correction that ran as the
+default between 2026-09-08 and 2026-09-14 has been removed, leaving the PLR
+merge, split, and materialization path the paper describes. The 1 TB comparison
+behind that decision is recorded in `experiments/docs/RESULTS.md` section 10.
+Global distinct-key fidelity is addressed by `--vcomp_exact_membership`; the
+remaining gap is per-file coverage at the deepest level. The tree also keeps
 `--vcomp_global_unique_keys`, an opt-in Phase 2 mode for 100%-unique inputs
 that materializes a globally distinct key set. Its 100 GiB run
 (`fidelity_100gib_20260908_unique_run5`) cuts the unique100 distinct-key error
@@ -65,11 +65,11 @@ for O(N) batch radix sort.
 
 Current implementation:
 
-- `fillvirtual` defaults to `--vcomp_sst_size_model=calibrated`. Bounded
-  in-memory SST probes with the materialization options fit physical bytes
-  (including table overhead/compression) for virtual registration and splitting.
-  Logical KV bytes still determine input batch capacity. Use `logical` to
-  reproduce the old size estimate, not the old binary/merge implementation.
+- `fillvirtual` always calibrates SST bytes. Bounded in-memory SST probes with
+  the materialization options fit physical bytes (including table
+  overhead/compression) for virtual registration and splitting. Logical KV bytes
+  still determine input batch capacity. The `--vcomp_sst_size_model` flag and its
+  `logical` alternative were removed on 2026-09-14.
   The model is approximate; per-level predicted/actual byte diagnostics and
   final compaction draining remain required. See
   [SST size model and validation](experiments/docs/SST_SIZE_MODEL.md).
@@ -205,8 +205,8 @@ its own. Their values at the plan's reference point are in parentheses.
 
 3. **Materialize remaining virtual files**
    - After BG compaction drain, each remaining VirtualSST is converted to real
-     keys by the discrete-CDF cursor (or legacy PLR inverse walking when the
-     discrete path is disabled).
+     keys by PLR inverse walking, or read from the membership stream when
+     `--vcomp_exact_membership` is on.
    - Workers write real SST files with direct I/O. With
      `--vcomp_global_unique_keys` they run one level group at a time so that
      each file can exclude the key ids the levels above it already generated.
@@ -296,11 +296,6 @@ while seg_start < N:
 
 ### PLR inverse
 
-For a model with a discrete certificate, `Predict(key)` delegates to integer
-`CountLessThan(key)` and `Inverse(position)` delegates to rank selection.
-Split and materialization call the integer API directly. The continuous
-formula below applies to a model without a certificate.
-
 Given a rank, recover the estimated key:
 
 $$
@@ -325,29 +320,10 @@ uint64_t Inverse(double position) {
 
 ---
 
-## Discrete CDF and KMV merge candidate
-
-The working-tree default is `VCOMP_KMV_ENABLED=1` and
-`VCOMP_DISCRETE_CDF_ENABLED=1`. Set the latter to `0` to run the legacy KMV
-model path in the same build. Disabling KMV retains the older continuous
-merge path. Record both environment values when comparing experiments.
-
-`DiscreteCDF` represents half-open integer intervals with exact cumulative
-mass `F(b) = count(keys < b)`. Local mass cannot exceed integer-key capacity.
-For an interval of span C with m entries, zero-based rank t selects
-`lo + ceil((t+1)*C/m) - 1`. Wide arithmetic handles the endpoint above
-`UINT64_MAX`. Split slices rank intervals while retaining the original
-rounding phase, so child counts and generated sets partition the parent.
-
-`BuildDiscreteMergeModel` retains input extrema and sampled key IDs as
-mandatory witnesses. It uses range-KMV estimates as local allocation weights,
-projects the global KMV target into feasible capacity/witness bounds, and
-reconciles integer masses by capped weighted allocation. Sample witnesses
-are preserved without retaining or enumerating all original keys. Initially
-fitted flush descriptors are certified through the same builder.
+## KMV dedup estimation
 
 `EstimateKMVUnionEntries` reports the merged distinct count as a dedup ratio
-applied to the summed input counts. The K-minimum samples of every input are
+applied to the summed input counts. The samples of every input range bucket are
 merged under one theta, and `sampled_unique / sampled_entries` scales
 `naive_entries`; theta cancels, so the estimate carries no absolute-cardinality
 sampling error, is at most one by construction, and returns `naive_entries`
@@ -356,25 +332,12 @@ same ratio by the proportional in-range density. The earlier form rescaled the
 sample count by `1/theta` and clamped it to `naive_entries` from above only,
 which turned sampling noise into a systematic undercount on every merge.
 
-The model's exact reconstructed count and the sketch's estimated original
-count are distinct. Output range buckets store both values; a reconstructed
-count is not reused as an upper bound on original-key cardinality. Legacy
-PLR segments remain as compatibility metadata, while the attached certificate
-controls rank, split boundaries, and key generation.
-
-The streaming cursor performs division at cell boundaries and advances
-within each cell with integer quotient/remainder arithmetic. Materialization
-requires exactly the descriptor's count and fails before final registration
-on cursor, count, or encoded-order errors. Compaction validates output count,
-capacity, and sibling ranges before applying input deletions.
-
-These are local invariants. They do not guarantee original key membership,
-accurate incomplete-sketch estimates, preservation of the initial PLR error
-bound, or global uniqueness across separately generated files. In particular,
-the candidate's allocation weights can distort ECDF shape; the linked
-experiment record reports that failure alongside count-conservation results.
-`discrete_cell_payload_bytes` counts 64 bytes per logical CDF cell, not RSS,
-allocator overhead, sketch memory, or peak live memory.
+Because range buckets hold equal-count strata, concatenating a descriptor's
+buckets samples the whole descriptor without bias, so no separate whole-file
+sketch is kept. `VCOMP_KMV_SAMPLES` (512) and `VCOMP_KMV_RANGE_BUCKETS` (8) set
+the budget. A `DiscreteCDF` certificate occupied this section between
+`9c7ab9cfa3` and 2026-09-14 and has been removed; see "Merge representation:
+PLR only".
 
 ## Legacy continuous N-Way PLR Merge
 
@@ -505,9 +468,9 @@ the BG dispatch logic.
 After a merged model is computed, it is split into output virtual
 SSTs. The split logic mirrors RocksDB's
 `CompactionOutputs::ShouldStopBefore` so that the resulting tree shape
-matches a real compaction. With a discrete certificate, cuts are exact rank
-positions, child bounds use `Select`, and child models use phase-preserving
-`Slice`; the size and grandparent policy below remains in use:
+matches a real compaction. Cuts are rank positions, child bounds come from
+`Inverse`, and each child keeps the merged segments clipped to its key range;
+the size and grandparent policy below remains in use:
 
 ```
 Inputs:
@@ -601,11 +564,8 @@ while next_size_cut < total_entries OR gp_idx < len(gp_positions):
 
 ### Materialization
 
-The default discrete path streams strictly increasing keys from its
-certificate and requires the planned count to be written exactly. For models
-without a certificate, converting a VirtualSST back to keys uses PLR inverse
-walking (segments scanned in order, O(N) total instead of O(N log S)
-per-key search):
+Converting a VirtualSST back to keys uses PLR inverse walking (segments scanned
+in order, O(N) total instead of O(N log S) per-key search):
 
 ```
 For pos = 0, 1, 2, ..., num_entries-1:
@@ -630,9 +590,9 @@ for i = 1..len(keys)-1:
 Each VirtualSST is materialized independently. Non-overlap is a within-level
 property of L1+; different levels can still generate the same user key.
 Materialization and SST writing are fused into a single parallel step using
-direct I/O. Neither path guarantees global distinct cardinality. The discrete
-path enforces per-file count/capacity; the legacy inverse path can lose entries
-when a descriptor's planned count does not fit its generated key range.
+direct I/O. The inverse path does not guarantee global distinct cardinality,
+and can lose entries when a descriptor's planned count does not fit its
+generated key range; `--vcomp_exact_membership` supplies the key ids instead.
 
 Final registration uses `InstallVirtualCompactionMaterialization()` to assign
 distinct positive file-global sequences through MANIFEST metadata. Higher
@@ -644,41 +604,42 @@ external-SST global sequence override without an SST rewrite. This fixes
 duplicate iterator output while retaining the independently generated keys
 and chosen levels; it does not correct cardinality or key-distribution errors.
 
-### Merge representation: PLR and the discrete CDF
+### Merge representation: PLR only
 
-A vSST carries two models of the same key distribution. `GreedyPLRFit` produces
-the PLR segments at ingestion: each segment is a maximal run of keys that a
-straight line predicts within `--plr_error_bound` ranks, so segment boundaries
-mark where key density changes. `CertifyVirtualSST` then hands those boundaries
-to `BuildDiscreteMergeModel`, which turns them into a `DiscreteCDF`: a list of
-disjoint (interval, count) cells whose count is checked against the interval's
-integer capacity at construction, and whose rank-t key is
-`a + ceil((t+1)*C/m) - 1`. The KMV samples enter here as witnesses - each
-sampled key becomes its own width-1, mass-1 cell, pinning a key that is known to
-exist at the position it actually occupies.
+A vSST carries one model of its key distribution. `GreedyPLRFit` produces the
+PLR segments at ingestion: each segment is a maximal run of keys that a straight
+line predicts within `--plr_error_bound` ranks, so segment boundaries mark where
+key density changes. `NWayMergeKMVRangeAware` merges N descriptors by sweeping
+the union of their segment boundaries: every interval between two consecutive
+breakpoints gets a slope from the inputs active there, rescaled so the intervals
+sum to the KMV dedup estimate. `SplitIntoSSTs` cuts the merged model at rank
+positions and `Inverse` turns each position back into a key; `MaterializeKeys`
+walks the segments linearly to emit the run.
 
-The consequence is a division of labour: PLR says *where* the distribution
-changes and compresses roughly twenty keys into one 32 B segment; the discrete
-CDF says *how many* keys are in each interval and exactly *which* key sits at
-each rank. Because the certificate is integer arithmetic, `Count`, `Select` and
-`Slice` are exact, a slice of a cell yields literally the same keys as before
-the cut, and sibling outputs take disjoint rank ranges, so they cannot overlap.
-
-`VCOMP_DISCRETE_CDF_ENABLED=0` disables the certificate and leaves the PLR merge
-path. Measured at 1 TB on 2026-09-14, that path is not worse: on uniform random
-input it reproduces baseline cardinality slightly better (+0.11% against -0.5%),
-and on a 100%-unique trace the two agree to 0.02 pp. It is slower on uniform
+A discrete-CDF certificate ran alongside this path between `9c7ab9cfa3`
+(2026-09-08) and 2026-09-14, and was the default for that window. It was removed
+in favour of the PLR path the paper describes. The 1 TB comparison on 2026-09-14
+is why that was affordable: on uniform random input the PLR merge reproduces
+baseline cardinality slightly better (+0.11% against -0.5%), and on a
+100%-unique trace the two agree to 0.02 pp. It costs loading time on uniform
 input (90.2 s against 59-61 s) and it leaves files short of their planned
 entries (848,828 entries across 515 files with exact membership on, against zero
-for the certificate), which is the feasibility property the discrete design was
-introduced for. The -19.4% cardinality error that motivated the switch in
+for the certificate) - the open coverage gap, tracked in `EXPERIMENTS_PLANNED.md`.
+The -19.4% cardinality error that motivated the switch in
 `VIRTUAL_COMPACTION_ACCURACY.md` does not reproduce on the current build; the
 dedup-ratio estimator of `42653d7406` is the likelier fix.
 
-After certification nothing reads the PLR segments again - `Predict`, `Inverse`,
-`MaterializeKeys` and the materialization loop all prefer the discrete branch -
-so the segment vector that every merge rebuilds and every split re-slices is
-carried but never consulted.
+### KMV sketches
+
+Each descriptor keeps `VCOMP_KMV_SAMPLES` fingerprints split evenly across
+`VCOMP_KMV_RANGE_BUCKETS` (8) equal-count range buckets, 512 samples in total.
+There is no separate whole-file sketch: the buckets partition the descriptor's
+keys into equal-mass strata, so their concatenation is a sample of the whole
+file and the dedup ratio computed from it is unbiased. A sample stores only its
+64-bit fingerprint. SplitMix64's finalizer is a bijection, so the fingerprint
+identifies the key exactly - deduplication compares fingerprints directly, and
+`KMVUnhash` recovers the key on the two paths that test a sample against a key
+range. That is 8 B per sample, 4 KiB per descriptor.
 
 ### Exact membership (`--vcomp_exact_membership`)
 
@@ -968,9 +929,9 @@ compaction — an infinite spin that hangs `WaitForCompact`.
 | `db/db_impl/db_impl_files.cc` | Skip disk deletion for virtual files |
 | `db/version_set.cc` | Skip `LoadTableHandlers` / `VerifyFileMetadata` for virtual files; use per-level score inputs to avoid rescanning unchanged Version append paths |
 | `db/compaction/compaction_picker*.cc` | Use registered L0 files directly; no virtual eligibility filtering |
-| `db/virtual_compaction/virtual_sst.{h,cc}` | `SplitIntoSSTs` (dynamic threshold + GP), `MaterializeKeys`, `VirtualCompact` |
+| `db/virtual_compaction/virtual_sst.{h,cc}` | `NWayMergeKMVRangeAware`, `SplitIntoSSTs` (dynamic threshold + GP), `MaterializeKeys`, KMV range sketches |
 | `db/virtual_compaction/virtual_sst_registry.h` | Thread-safe `file_number → VirtualSST` registry |
-| `db/virtual_compaction/plr_model.{h,cc}` | `GreedyPLRFit`, `NWayMergePLR` with optional dedup |
+| `db/virtual_compaction/plr_model.{h,cc}` | `GreedyPLRFit`, `Predict`, `Inverse` |
 | `tools/db_bench_tool.cc` | `fillvirtual` benchmark with pending-window L0 registration, Phase 2 workers using direct I/O, `coverage` benchmark for per-level file-coverage probes; Phase 2b supplies exact sequence-zero bounds to the materialization installer, which assigns effective file-global sequences |
 
 ### Key optimizations in FillVirtual
@@ -2652,7 +2613,7 @@ read from RocksDB. Campaign records: [SST size model](experiments/docs/SST_SIZE_
 [F2Load fidelity](experiments/docs/F2LOAD_FIDELITY_260909.md),
 [baseline coverage repeats](experiments/docs/PAPER_BASELINE_COVERAGE_REPEATS.md).
 
-- **Physical SST size model.** `--vcomp_sst_size_model=calibrated` (default)
+- **Physical SST size model.** `fillvirtual` always calibrates: it
   writes bounded calibration SSTs to an in-memory filesystem with the
   materialization options and fits `ceil(n * slope) + fixed_bytes`. The model
   now sizes L0 descriptors and compaction outputs, sets split capacity through
@@ -2747,3 +2708,43 @@ size. No engine changes. Frozen option set now written down once in
   imposed on baseline, so the 91 B speedups are held back until baseline is
   re-measured under the frozen configuration. Tracked in
   [EXPERIMENTS_PLANNED.md](experiments/docs/EXPERIMENTS_PLANNED.md).
+
+## 2026-09-14 — PLR-only consolidation
+
+- **The build ran a merge representation the paper does not describe.** Since
+  `9c7ab9cfa3` (2026-09-08) `VirtualSSTDiscreteCDFEnabled()` defaulted to true,
+  so `NWayMergeKMVRangeAware` returned a `DiscreteCDF` certificate and every
+  PLR read downstream sat behind `discrete == nullptr`. Section 4 of the paper
+  is written around PLR. The 1 TB comparison of 2026-09-14 settled which one to
+  keep: PLR-only reproduces baseline cardinality slightly better on uniform
+  input (+0.11% against −0.5%) and matches the certificate to 0.02 pp on a
+  100%-unique trace, at 90.2 s against 59–61 s and with 848,828 entries across
+  515 files left short where the certificate leaves none.
+- **The certificate and four other unreachable paths are gone**, 4,668 lines
+  removed against 328 added. `discrete_cdf`/`discrete_merge` and every
+  `discrete != nullptr` branch; `VirtualCompact`, `VirtualSST::EstimateSize`
+  and `PLRModel::GetSegmentAt`, none of which had a caller; `NWayMergePLR`'s
+  inclusion–exclusion dedup, superseded by the KMV ratio of `42653d7406` and
+  reachable only through `VCOMP_KMV_ENABLED=0`; the per-job accuracy capture
+  and trace hooks with their option plumbing and the four probe tools that read
+  them; and `--vcomp_sst_size_model`, since nothing ran anything but
+  `calibrated`. `--vcomp_exact_membership` and `--vcomp_global_unique_keys`
+  both stay selectable.
+- **Descriptors stopped keeping the same keys twice.** A vSST held a 512-sample
+  whole-file sketch *and* eight 64-sample range buckets over the same keys. The
+  buckets are equal-count strata, so their concatenation already samples the
+  whole file without bias and the dedup ratio is unchanged; the whole-file
+  sketch is dropped. A sample now stores only its 64-bit fingerprint, because
+  SplitMix64's finalizer is a bijection — deduplication compares fingerprints
+  directly, and `KMVUnhash` recovers the key on the two paths that test a
+  sample against a key range (exact over 21M round-trips including `0`, `2^63`
+  and `UINT64_MAX`). Sketch bytes per descriptor: **17,064 → 4,608**, a 3.70x
+  reduction, with `DiscreteCDF::Cell`'s 64 B per cell gone entirely.
+  `VirtualSST::level` went too: written at four sites, never read for a
+  decision.
+- **Verification.** `virtual_sst_test` 12/12, including new fingerprint
+  round-trip and sample-budget tests. A 4 GB smoke load drains to zero pending
+  compaction bytes and reads back 126,579 of 200,000 keys (63.29%) against the
+  63.21% expected for sampling with replacement from a key space of the same
+  size. Full numbers in
+  [RESULTS.md](experiments/docs/RESULTS.md) section 11.

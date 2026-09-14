@@ -39,7 +39,7 @@ F2_OPTIONS = dict(use_virtual_compaction=True, plr_error_bound=8,
                   vcomp_visible_l0_batch_mb=0, vcomp_phase1_shards=8,
                   vcomp_materialize_workers=48, vcomp_log_apply_timing=False,
                   vcomp_sort_detail_timing=False)
-RUNTIME_VCOMP_ENV = dict(VCOMP_KMV_ENABLED='1', VCOMP_BG_COMMIT_BATCH_MAX='16',
+RUNTIME_VCOMP_ENV = dict(VCOMP_BG_COMMIT_BATCH_MAX='16',
                         VCOMP_BG_COMMIT_DELAY_US='100')
 AUDITED_VCOMP_ENV = tuple(RUNTIME_VCOMP_ENV) + ('VCOMP_COV_PERFILE',)
 MIN_NOFILE = 65536
@@ -226,7 +226,6 @@ class Campaign:
              source_revisions=revisions, runner_sha256=sha(__file__),
              runtime=self.runtime,
              runtime_control_audit={
-                 'db/virtual_compaction/virtual_sst.cc': ['VCOMP_KMV_ENABLED'],
                  'db/db_impl/db_impl_compaction_flush.cc': ['VCOMP_BG_COMMIT_BATCH_MAX', 'VCOMP_BG_COMMIT_DELAY_US'],
                  'tools/db_bench_tool.cc': ['VCOMP_COV_PERFILE'],
                  'historical_wrapper_environment': 'Runner passes explicit flags and removes inherited VCOMP_* variables'},

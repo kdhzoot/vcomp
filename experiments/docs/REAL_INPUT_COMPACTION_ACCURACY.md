@@ -50,12 +50,26 @@ Run `real_input_accuracy_100gib_20260908_run1` was launched at 16:54 KST on
 pilot; consult its live `STATUS.json` for completion rather than treating the
 launch as a completed 100 GiB measurement.
 
-> **Removed 2026-09-14.** The machinery this document describes - the per-job
-> capture and trace hooks in `CompactionJob`, `virtual_compaction_replay`, and
-> `run_real_input_accuracy.py` - went out with the discrete-CDF patch in the
-> PLR-only consolidation (`RESULTS.md` section 11). The results below stand as a
-> record of what was measured. Re-running any of it means reverting those files
-> from `265112cf5a`; the decision is item 5 in `EXPERIMENTS_PLANNED.md`.
+> **Ported to the PLR-only build, 2026-09-14.** The machinery is intact - the
+> per-job capture and trace hooks in `CompactionJob`,
+> `virtual_compaction_replay`, and `run_real_input_accuracy.py` - but the
+> three-variant A/B it was built around went with the discrete CDF
+> (`RESULTS.md` section 11). `--variant` now accepts only `plr` and rejects the
+> old names; `BASE_CONFIGS` is one configuration and the seven one-parameter
+> sweep settings are unchanged. The results below were measured under the
+> three-variant design and are kept as a record; a new Section 5.4 run needs
+> fresh capture and replay provenance manifests.
+>
+> Build the offline tools against the current static library:
+>
+> ```
+> g++ -std=c++17 -O2 -DNDEBUG -I. -Iinclude -Itools \
+>     -o <out>/replay tools/virtual_compaction_replay.cc \
+>     librocksdb.a -lpthread -lrt -ldl -lsnappy -lgflags -lz -ltbb
+> ```
+>
+> The same line builds `virtual_compaction_accuracy_probe` and
+> `virtual_compaction_accuracy_chain_probe`.
 
 `experiments/scripts/trace/run_real_input_accuracy.py` runs a six-case 4 GiB
 pilot followed by six 100 GiB real-compaction captures under `/work/vcomp/exp`.

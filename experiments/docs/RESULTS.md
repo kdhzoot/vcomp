@@ -901,10 +901,41 @@ L0.
   key space of the same size.
 - Removed flags are rejected by gflags; kept flags still parse.
 
-### 11.4 Open
+### 11.4 Accuracy tooling kept for Section 5.4
+
+The per-job capture and trace hooks, `virtual_compaction_replay`, the two
+accuracy probes and `run_real_input_accuracy.py` were removed with the rest of
+patch 15 and then restored, ported to the PLR-only API. What did not survive is
+the three-variant A/B they were built to drive: `--variant` accepts only `plr`,
+`BASE_CONFIGS` is one configuration, and the second (archived pre-discrete)
+replay binary is gone. The seven one-parameter sweep settings are unchanged.
+
+Verified on a 2 GB `fillrandom` with `--vcomp_accuracy_trace_dir` set, 62 real
+compaction jobs:
+
+| | |
+|---|---|
+| output file count, exact | 57 / 62 (92%) |
+| output file count, within ±1 | 62 / 62 |
+| \|byte error\| | median 0.80%, p90 1.80%, max 2.54% |
+| \|entry-count error\| | median 0.000%, max 0.001% |
+
+### 11.5 Open
 
 The coverage gap of section 10 is unchanged by this commit and is now the only
-known fidelity gap: 0.48% on uniform input, 3.3% on unique100. The accuracy
-capture and replay lineage that section 4 of `PAPER_CHAPTER5_EXPERIMENT_PLAN.md`
-plans to use was removed with the rest of patch 15; restoring it means reverting
-those files from `265112cf5a`.
+known fidelity gap: 0.48% on uniform input, 3.3% on unique100.
+
+### 11.6 Descriptor cost per record
+
+Measured with `GreedyPLRFit` at `plr_error_bound=8` on uniform random keys drawn
+from a 10^9 domain, which is the frozen loading configuration:
+
+| distinct keys | PLR segments | keys / segment | descriptor bytes | bytes / record |
+|---|---|---|---|---|
+| 65,534 | 343 | 191 | 15,584 | 0.238 |
+| 262,112 | 1,340 | 196 | 47,488 | 0.181 |
+| 1,048,074 | 5,403 | 194 | 177,504 | 0.169 |
+| 8,353,446 | 43,280 | 193 | 1,389,568 | 0.166 |
+
+The 4,608 B sketch is a fixed per-descriptor cost, so bytes per record fall
+toward the PLR asymptote of 32 B / 193 keys = 0.166 B as a descriptor grows.

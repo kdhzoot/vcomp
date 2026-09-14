@@ -645,9 +645,10 @@ only, and the descriptor shrank from 17,064 B of sketch to 4,608 B
    little fidelity for a large memory saving. Section 5.6 already plans this
    axis, and the PLR segments are now load-bearing, so the sweep measures a
    real accuracy/memory trade-off rather than dead metadata.
-5. **Decide whether Section 5.4 (virtual compaction accuracy) stays.** Its
-   tooling - the per-job capture and trace hooks, `virtual_compaction_replay`,
-   `run_real_input_accuracy.py` - was removed with patch 15. Restoring it means
-   reverting those files from `265112cf5a` and reattaching the two hooks to
-   `CompactionJob::Run`; dropping the section means removing it from
-   `PAPER_CHAPTER5_EXPERIMENT_PLAN.md`.
+5. **Re-qualify the Section 5.4 campaign.** The tooling is restored and ported
+   (`RESULTS.md` section 11.4), and a 2 GB check gives 92% exact output-file
+   counts with a 0.80% median byte error. What the campaign still needs is fresh
+   provenance: `run_real_input_accuracy.py` gates on a collector release
+   manifest, a replay build manifest and a replay PASS validation, all of which
+   name the 2026-09-08 binaries. Rebuild those three against the consolidated
+   binary before the 100 GiB captures.

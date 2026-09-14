@@ -863,6 +863,12 @@ struct DBOptions {
   // Default: "" (disabled)
   std::string compaction_trace_dir = "";
 
+  // If non-empty, each real compaction also runs the virtual compaction
+  // prediction path on the same input SSTs and writes per-job accuracy records.
+  // This is an experimental validation option and adds extra table scans.
+  // Default: "" (disabled)
+  std::string vcomp_accuracy_trace_dir = "";
+
   // This specifies the absolute dir path for write-ahead logs (WAL).
   // If it is empty, the log files will be in the same dir as data,
   //   dbname is used as the data dir by default

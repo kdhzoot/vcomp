@@ -911,6 +911,10 @@ DEFINE_string(compaction_trace_dir, "",
               "If not empty, write per-compaction trace log files to this "
               "directory with detailed key-level information.");
 
+DEFINE_string(vcomp_accuracy_trace_dir, "",
+              "If not empty, run virtual compaction prediction alongside real "
+              "compactions and write per-job accuracy records to this directory.");
+
 DEFINE_string(vcomp_fidelity_report_dir, "",
               "If not empty, write fillvirtual descriptor/materialization "
               "cardinality diagnostics (fidelity.json and files.tsv) here.");
@@ -4898,6 +4902,7 @@ class Benchmark {
     options.env = FLAGS_env;
     options.wal_dir = FLAGS_wal_dir;
     options.compaction_trace_dir = FLAGS_compaction_trace_dir;
+    options.vcomp_accuracy_trace_dir = FLAGS_vcomp_accuracy_trace_dir;
     options.dump_malloc_stats = FLAGS_dump_malloc_stats;
     options.stats_dump_period_sec =
         static_cast<unsigned int>(FLAGS_stats_dump_period_sec);

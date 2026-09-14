@@ -38,6 +38,8 @@
 #include "db/range_del_aggregator.h"
 #include "db/version_edit.h"
 #include "db/version_set.h"
+#include "db/virtual_compaction/plr_model.h"
+#include "db/virtual_compaction/virtual_sst.h"
 #include "file/filename.h"
 #include "file/read_write_util.h"
 #include "file/sst_file_manager_impl.h"
@@ -133,6 +135,121 @@ const char* GetCompactionProximalOutputRangeTypeString(
       return "Invalid";
   }
 }
+
+namespace {
+
+struct VCompAccuracyFile {
+  uint64_t file_number = 0;
+  int level = 0;
+  uint64_t size_bytes = 0;
+  uint64_t entries = 0;
+  uint64_t key_min = 0;
+  uint64_t key_max = 0;
+};
+
+struct VCompKMVStats {
+  uint64_t inputs = 0;
+  uint64_t empty = 0;
+  uint64_t complete = 0;
+  uint64_t sample_min = 0;
+  uint64_t sample_max = 0;
+  long double sample_mean = 0;
+};
+
+uint64_t ExtractPrefix64(const Slice& user_key) {
+  uint64_t key = 0;
+  size_t n = std::min<size_t>(8, user_key.size());
+  for (size_t i = 0; i < n; i++) {
+    key = (key << 8) | static_cast<uint8_t>(user_key.data()[i]);
+  }
+  return key;
+}
+
+long double AbsDiff64(uint64_t a, uint64_t b) {
+  return a >= b ? static_cast<long double>(a - b)
+                : static_cast<long double>(b - a);
+}
+
+void AppendAccuracyFilesJson(std::string* out,
+                             const std::vector<VCompAccuracyFile>& files) {
+  out->append("[");
+  for (size_t i = 0; i < files.size(); i++) {
+    if (i > 0) out->append(",");
+    const auto& f = files[i];
+    out->append("{\"file\":");
+    out->append(std::to_string(f.file_number));
+    out->append(",\"level\":");
+    out->append(std::to_string(f.level));
+    out->append(",\"size\":");
+    out->append(std::to_string(f.size_bytes));
+    out->append(",\"entries\":");
+    out->append(std::to_string(f.entries));
+    out->append(",\"key_min\":");
+    out->append(std::to_string(f.key_min));
+    out->append(",\"key_max\":");
+    out->append(std::to_string(f.key_max));
+    out->append("}");
+  }
+  out->append("]");
+}
+
+uint64_t SumAccuracyBytes(const std::vector<VCompAccuracyFile>& files) {
+  uint64_t total = 0;
+  for (const auto& f : files) total += f.size_bytes;
+  return total;
+}
+
+uint64_t SumAccuracyEntries(const std::vector<VCompAccuracyFile>& files) {
+  uint64_t total = 0;
+  for (const auto& f : files) total += f.entries;
+  return total;
+}
+
+VCompKMVStats ComputeKMVStats(const std::vector<const VirtualSST*>& vssts) {
+  VCompKMVStats stats;
+  stats.inputs = vssts.size();
+  bool have_samples = false;
+  uint64_t sample_sum = 0;
+  for (const auto* vsst : vssts) {
+    if (vsst == nullptr) {
+      stats.empty++;
+      continue;
+    }
+    const KMVSketch whole = DescriptorSketch(*vsst);
+    const uint64_t samples = whole.samples.size();
+    if (samples == 0) {
+      stats.empty++;
+    }
+    if (whole.complete) {
+      stats.complete++;
+    }
+    if (!have_samples) {
+      stats.sample_min = samples;
+      stats.sample_max = samples;
+      have_samples = true;
+    } else {
+      stats.sample_min = std::min(stats.sample_min, samples);
+      stats.sample_max = std::max(stats.sample_max, samples);
+    }
+    sample_sum += samples;
+  }
+  if (stats.inputs > 0) {
+    stats.sample_mean = static_cast<long double>(sample_sum) /
+                        static_cast<long double>(stats.inputs);
+  }
+  return stats;
+}
+
+VCompKMVStats ComputeKMVStats(const std::vector<VirtualSST>& vssts) {
+  std::vector<const VirtualSST*> ptrs;
+  ptrs.reserve(vssts.size());
+  for (const auto& vsst : vssts) {
+    ptrs.push_back(&vsst);
+  }
+  return ComputeKMVStats(ptrs);
+}
+
+}  // namespace
 
 CompactionJob::CompactionJob(
     int job_id, Compaction* compaction, const ImmutableDBOptions& db_options,
@@ -997,6 +1114,588 @@ void CompactionJob::FinalizeCompactionRun(
                            const_cast<Status*>(&input_status));
 }
 
+void CompactionJob::MaybeCaptureVCompInputs() {
+  const char* requested_dir = std::getenv("VCOMP_ACCURACY_CAPTURE_DIR");
+  if (requested_dir == nullptr || *requested_dir == '\0' || !compact_ ||
+      !compact_->status.ok()) {
+    return;
+  }
+  const std::string root(requested_dir);
+  const Compaction* compaction = compact_->compaction;
+  ColumnFamilyData* cfd =
+      compaction == nullptr ? nullptr : compaction->column_family_data();
+  const uint32_t cf_id = cfd == nullptr ? UINT32_MAX : cfd->GetID();
+  const std::string directory = root + "/cf" + std::to_string(cf_id) +
+                                "_job_" + std::to_string(job_id_);
+  bool directory_created = false;
+  const Status capture_status = [&]() -> Status {
+    Status s = env_->CreateDirIfMissing(root);
+    if (!s.ok()) return s;
+    s = env_->FileExists(directory);
+    if (s.ok()) {
+      return Status::InvalidArgument("capture job directory already exists",
+                                     directory);
+    }
+    if (!s.IsNotFound()) return s;
+    s = env_->CreateDir(directory);
+    if (!s.ok()) return s;
+    directory_created = true;
+    if (cfd == nullptr || cf_id != 0 ||
+        cfd->GetName() != kDefaultColumnFamilyName) {
+      return Status::NotSupported("capture requires the default column family");
+    }
+    if (std::string(cfd->user_comparator()->Name()) !=
+            BytewiseComparator()->Name() ||
+        cfd->user_comparator()->timestamp_size() != 0) {
+      return Status::NotSupported("capture requires the bytewise comparator");
+    }
+    if (job_context_ == nullptr || !job_context_->snapshot_seqs.empty() ||
+        job_context_->snapshot_checker != nullptr ||
+        job_context_->job_snapshot != nullptr) {
+      return Status::NotSupported("capture does not support snapshots");
+    }
+    if (cfd->ioptions().merge_operator || cfd->ioptions().compaction_filter ||
+        cfd->ioptions().compaction_filter_factory ||
+        compaction->SupportsPerKeyPlacement() ||
+        compaction->deletion_compaction() || compaction->output_level() < 0) {
+      return Status::NotSupported(
+          "capture requires ordinary Put-only compaction without filters");
+    }
+    if (!std::isfinite(db_options_.plr_error_bound) ||
+        db_options_.plr_error_bound != 8.0) {
+      return Status::NotSupported("capture v1 requires PLR error 8");
+    }
+
+    ReadOptions ro;
+    ro.total_order_seek = true;
+    ro.verify_checksums = true;
+    ro.fill_cache = false;
+    uint64_t key_size = 0, value_size = 0;
+    bool sizes_known = false;
+    size_t input_files = 0, output_files = 0;
+    std::set<std::pair<std::string, uint64_t>> captured_files;
+    std::string file_records;
+    auto decode_key = [&](const Slice& key, uint64_t* id) -> Status {
+      if (key.size() < 8 || (sizes_known && key.size() != key_size)) {
+        return Status::Corruption("capture key size mismatch");
+      }
+      *id = 0;
+      for (size_t i = 0; i < 8; ++i) {
+        *id = (*id << 8) | static_cast<unsigned char>(key[i]);
+      }
+      for (size_t i = 8; i < key.size(); ++i) {
+        if (key[i] != '0') {
+          return Status::NotSupported("capture key padding is not ASCII zero");
+        }
+      }
+      return Status::OK();
+    };
+    auto capture_file = [&](const char* kind, const FileMetaData& meta,
+                            int level) -> Status {
+      const uint64_t number = meta.fd.GetNumber();
+      if (!captured_files.emplace(kind, number).second) {
+        return Status::Corruption("capture duplicate file number");
+      }
+      const std::string source_path = TableFileName(
+          compaction->immutable_options().cf_paths, number, meta.fd.GetPathId());
+      uint64_t physical_bytes = 0;
+      Status status = env_->GetFileSize(source_path, &physical_bytes);
+      if (!status.ok()) return status;
+      if (physical_bytes != meta.fd.GetFileSize()) {
+        return Status::Corruption("capture SST physical size mismatch",
+                                  source_path);
+      }
+      std::shared_ptr<const TableProperties> properties;
+      status = cfd->table_cache()->GetTableProperties(
+          file_options_for_read_, ro, cfd->internal_comparator(), meta,
+          &properties, compaction->mutable_cf_options());
+      if (!status.ok()) return status;
+      if (!properties || properties->num_entries == 0) {
+        return Status::NotSupported("capture does not support empty SSTs");
+      }
+      if (properties->column_family_id != 0) {
+        return Status::Corruption("capture SST column family mismatch");
+      }
+      if (properties->num_deletions != 0 ||
+          properties->num_range_deletions != 0 ||
+          properties->num_merge_operands != 0) {
+        return Status::NotSupported("capture SST contains deletion or merge");
+      }
+      std::unique_ptr<InternalIterator> iter(cfd->table_cache()->NewIterator(
+          ro, file_options_for_read_, cfd->internal_comparator(), meta,
+          /*range_del_agg=*/nullptr, compaction->mutable_cf_options(),
+          /*table_reader_ptr=*/nullptr, /*file_read_hist=*/nullptr,
+          TableReaderCaller::kCompaction, /*arena=*/nullptr,
+          /*skip_filters=*/true, level,
+          MaxFileSizeForL0MetaPin(compaction->mutable_cf_options()),
+          /*smallest_compaction_key=*/nullptr,
+          /*largest_compaction_key=*/nullptr,
+          /*allow_unprepared_value=*/false));
+      if (!iter || !iter->status().ok()) {
+        return iter ? iter->status()
+                    : Status::Corruption("capture returned a null iterator");
+      }
+      const std::string binary_name =
+          std::string(kind) + "_" + std::to_string(number) + ".keys.u64le";
+      const std::string binary_path = directory + "/" + binary_name;
+      std::unique_ptr<WritableFile> binary;
+      status = env_->NewWritableFile(binary_path, &binary, EnvOptions());
+      if (!status.ok()) return status;
+      std::string buffer;
+      buffer.reserve(1 << 20);
+      uint64_t physical_entries = 0, unique_entries = 0;
+      uint64_t key_min = 0, key_max = 0;
+      for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+        ParsedInternalKey parsed;
+        status = ParseInternalKey(iter->key(), &parsed, true);
+        if (!status.ok()) break;
+        if (parsed.type != kTypeValue) {
+          status = Status::NotSupported("capture requires plain Put entries");
+          break;
+        }
+        uint64_t id = 0;
+        status = decode_key(parsed.user_key, &id);
+        if (!status.ok()) break;
+        if (!sizes_known) {
+          key_size = parsed.user_key.size();
+          value_size = iter->value().size();
+          sizes_known = true;
+        }
+        if (iter->value().size() != value_size) {
+          status = Status::NotSupported("capture value size is not fixed");
+          break;
+        }
+        if (physical_entries == UINT64_MAX) {
+          status = Status::Corruption("capture physical entry count overflow");
+          break;
+        }
+        ++physical_entries;
+        if (unique_entries != 0 && id < key_max) {
+          status = Status::Corruption("capture user keys are not sorted");
+          break;
+        }
+        if (unique_entries == 0 || id != key_max) {
+          if (unique_entries == UINT64_MAX / 8) {
+            status = Status::NotSupported("capture binary size overflow");
+            break;
+          }
+          if (unique_entries == 0) key_min = id;
+          key_max = id;
+          ++unique_entries;
+          PutFixed64(&buffer, id);
+          if (buffer.size() >= (1 << 20)) {
+            status = binary->Append(buffer);
+            if (!status.ok()) break;
+            buffer.clear();
+          }
+        }
+      }
+      if (status.ok()) status = iter->status();
+      if (status.ok() &&
+          (unique_entries == 0 || physical_entries != properties->num_entries ||
+           (meta.num_entries != 0 && physical_entries != meta.num_entries))) {
+        status = Status::Corruption("capture SST entry count mismatch");
+      }
+      if (status.ok()) {
+        uint64_t metadata_min = 0, metadata_max = 0;
+        status = decode_key(meta.smallest.user_key(), &metadata_min);
+        if (status.ok()) {
+          status = decode_key(meta.largest.user_key(), &metadata_max);
+        }
+        if (status.ok() && (metadata_min != key_min || metadata_max != key_max)) {
+          status = Status::Corruption("capture SST extrema mismatch");
+        }
+      }
+      if (status.ok() && !buffer.empty()) status = binary->Append(buffer);
+      if (status.ok()) status = binary->Flush();
+      if (status.ok()) status = binary->Sync();
+      const Status close_status = binary->Close();
+      if (status.ok()) status = close_status;
+      if (!status.ok()) return status;
+      uint64_t binary_bytes = 0;
+      status = env_->GetFileSize(binary_path, &binary_bytes);
+      if (!status.ok()) return status;
+      if (binary_bytes != unique_entries * 8) {
+        return Status::Corruption("capture binary size mismatch");
+      }
+      file_records.append(kind).append("\t").append(std::to_string(number))
+          .append("\t").append(std::to_string(level))
+          .append("\t").append(std::to_string(physical_bytes))
+          .append("\t").append(std::to_string(physical_entries))
+          .append("\t").append(std::to_string(unique_entries))
+          .append("\t").append(std::to_string(key_min))
+          .append("\t").append(std::to_string(key_max))
+          .append("\t").append(binary_name).append("\n");
+      return Status::OK();
+    };
+
+    for (size_t level = 0; level < compaction->num_input_levels(); ++level) {
+      for (size_t index = 0; index < compaction->num_input_files(level); ++index) {
+        const FileMetaData* meta = compaction->input(level, index);
+        if (meta == nullptr) return Status::Corruption("capture null input SST");
+        s = capture_file("input", *meta, compaction->level(level));
+        if (!s.ok()) return s;
+        ++input_files;
+      }
+    }
+    for (auto& sub : compact_->sub_compact_states) {
+      for (const auto& output : sub.Outputs(false)->GetOutputs()) {
+        s = capture_file("output", output.meta, compaction->output_level());
+        if (!s.ok()) return s;
+        ++output_files;
+      }
+    }
+    if (input_files == 0 || output_files == 0 || !sizes_known) {
+      return Status::NotSupported("capture requires nonempty input and output");
+    }
+    uint64_t target = compaction->target_output_file_size();
+    if (target == 0) target = compaction->max_output_file_size();
+    if (target == 0) return Status::NotSupported("capture target size is zero");
+    std::string manifest = "schema\tvcomp_real_input_v1\njob\t" +
+        std::to_string(job_id_) + "\ncf_id\t0\nstart_level\t" +
+        std::to_string(compaction->start_level()) + "\noutput_level\t" +
+        std::to_string(compaction->output_level()) + "\ntarget_sst_size\t" +
+        std::to_string(target) + "\nkey_size\t" + std::to_string(key_size) +
+        "\nvalue_size\t" + std::to_string(value_size) + "\nplr_error\t8\n";
+    manifest += "input_files\t" + std::to_string(input_files) +
+                "\noutput_files\t" + std::to_string(output_files) +
+                "\nsubcompactions\t" +
+                std::to_string(compact_->sub_compact_states.size()) +
+                "\nbinary_encoding\tuint64_le\n";
+    for (const auto* gp : compaction->grandparents()) {
+      if (gp == nullptr) return Status::Corruption("capture null grandparent");
+      uint64_t minimum = 0, maximum = 0;
+      s = decode_key(gp->smallest.user_key(), &minimum);
+      if (s.ok()) s = decode_key(gp->largest.user_key(), &maximum);
+      if (!s.ok()) return s;
+      if (minimum > maximum) return Status::Corruption("capture bad GP range");
+      manifest += "gp\t" + std::to_string(minimum) + "\t" +
+                  std::to_string(maximum) + "\n";
+    }
+    manifest += file_records + "status\tok\n";
+    const std::string temporary = directory + "/manifest.tmp";
+    s = WriteStringToFile(env_, manifest, temporary, /*should_sync=*/true);
+    if (!s.ok()) return s;
+    return env_->RenameFile(temporary, directory + "/manifest.tsv");
+  }();
+  if (!capture_status.ok()) {
+    const std::string message = "VCOMP_ACCURACY_CAPTURE_FAILED job=" +
+        std::to_string(job_id_) + " cf=" + std::to_string(cf_id) + " " +
+        capture_status.ToString() + "\n";
+    ROCKS_LOG_ERROR(db_options_.info_log, "%s", message.c_str());
+    std::fprintf(stderr, "%s", message.c_str());
+    const std::string failure_path = directory_created
+                                         ? directory + "/failed.txt"
+                                         : root + "/cf" + std::to_string(cf_id) +
+                                               "_job_" + std::to_string(job_id_) +
+                                               ".failed.txt";
+    const Status failure_status = WriteStringToFile(
+        env_, message, failure_path, /*should_sync=*/true);
+    if (!failure_status.ok()) {
+      ROCKS_LOG_ERROR(db_options_.info_log,
+                     "VCOMP_ACCURACY_CAPTURE_FAILED cannot write %s: %s",
+                     failure_path.c_str(), failure_status.ToString().c_str());
+      std::fprintf(stderr, "VCOMP_ACCURACY_CAPTURE_FAILED cannot write %s: %s\n",
+                   failure_path.c_str(), failure_status.ToString().c_str());
+    }
+  }
+}
+
+void CompactionJob::MaybeRecordVCompAccuracy() {
+  if (db_options_.vcomp_accuracy_trace_dir.empty() || !compact_ ||
+      !compact_->status.ok()) {
+    return;
+  }
+
+  const Compaction* compaction = compact_->compaction;
+  if (compaction == nullptr || compaction->output_level() < 0) {
+    return;
+  }
+
+  ColumnFamilyData* cfd = compaction->column_family_data();
+  if (cfd == nullptr) return;
+
+  std::vector<VirtualSST> input_vssts;
+  std::vector<VCompAccuracyFile> input_files;
+  size_t input_count = 0;
+  for (size_t lvl = 0; lvl < compaction->num_input_levels(); lvl++) {
+    input_count += compaction->num_input_files(lvl);
+  }
+  input_vssts.reserve(input_count);
+  input_files.reserve(input_count);
+
+  ReadOptions ro;
+  ro.total_order_seek = true;
+  uint64_t input_scan_us = 0;
+  uint64_t input_keys_total = 0;
+  Status read_status;
+
+  for (size_t lvl = 0; lvl < compaction->num_input_levels(); lvl++) {
+    int level = compaction->level(lvl);
+    for (size_t i = 0; i < compaction->num_input_files(lvl); i++) {
+      const FileMetaData* f = compaction->input(lvl, i);
+      if (f == nullptr) continue;
+
+      uint64_t scan_t0 = db_options_.clock->NowMicros();
+      std::unique_ptr<InternalIterator> iter(cfd->table_cache()->NewIterator(
+          ro, file_options_for_read_, cfd->internal_comparator(), *f,
+          /*range_del_agg=*/nullptr, compaction->mutable_cf_options(),
+          /*table_reader_ptr=*/nullptr, /*file_read_hist=*/nullptr,
+          TableReaderCaller::kCompaction, /*arena=*/nullptr,
+          /*skip_filters=*/true, level,
+          MaxFileSizeForL0MetaPin(compaction->mutable_cf_options()),
+          /*smallest_compaction_key=*/nullptr,
+          /*largest_compaction_key=*/nullptr,
+          /*allow_unprepared_value=*/false));
+
+      std::vector<uint64_t> keys;
+      if (iter->status().ok()) {
+        keys.reserve(static_cast<size_t>(std::min<uint64_t>(
+            f->num_entries > 0 ? f->num_entries : 1024, 1ULL << 24)));
+        for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+          ParsedInternalKey pik;
+          if (ParseInternalKey(iter->key(), &pik, true).ok()) {
+            keys.push_back(ExtractPrefix64(pik.user_key));
+          }
+        }
+      }
+      if (!iter->status().ok() && read_status.ok()) {
+        read_status = iter->status();
+      }
+      input_scan_us += db_options_.clock->NowMicros() - scan_t0;
+
+      if (keys.empty()) continue;
+      std::sort(keys.begin(), keys.end());
+
+      VCompAccuracyFile finfo;
+      finfo.file_number = f->fd.GetNumber();
+      finfo.level = level;
+      finfo.size_bytes = f->fd.GetFileSize();
+      finfo.entries = keys.size();
+      finfo.key_min = keys.front();
+      finfo.key_max = keys.back();
+      input_files.push_back(finfo);
+      input_keys_total += finfo.entries;
+
+      VirtualSST vsst;
+      vsst.plr_model = GreedyPLRFit(keys, db_options_.plr_error_bound);
+      vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(keys);
+      vsst.key_min = finfo.key_min;
+      vsst.key_max = finfo.key_max;
+      vsst.num_entries = finfo.entries;
+      vsst.size_bytes = finfo.size_bytes;
+      input_vssts.push_back(std::move(vsst));
+    }
+  }
+
+  if (!read_status.ok()) {
+    ROCKS_LOG_WARN(db_options_.info_log,
+                   "[%s] [JOB %d] vcomp accuracy input scan warning: %s",
+                   cfd->GetName().c_str(), job_id_,
+                   read_status.ToString().c_str());
+  }
+  if (input_vssts.empty()) return;
+
+  std::vector<const VirtualSST*> input_vsst_ptrs;
+  input_vsst_ptrs.reserve(input_vssts.size());
+
+  uint64_t naive_entries = 0;
+  uint64_t global_min = std::numeric_limits<uint64_t>::max();
+  uint64_t global_max = 0;
+  uint64_t input_segments = 0;
+  uint64_t input_bytes = 0;
+  for (const auto& vsst : input_vssts) {
+    input_vsst_ptrs.push_back(&vsst);
+    naive_entries += vsst.num_entries;
+    global_min = std::min(global_min, vsst.key_min);
+    global_max = std::max(global_max, vsst.key_max);
+    input_segments += vsst.plr_model.NumSegments();
+    input_bytes += vsst.size_bytes;
+  }
+  if (naive_entries == 0) return;
+
+  uint64_t predict_t0 = db_options_.clock->NowMicros();
+  uint64_t plr_entries = 0;  // PLR is not used for dedup cardinality.
+  uint64_t kmv_entries = 0;
+  PLRModel merged = NWayMergeKMVRangeAware(input_vsst_ptrs, &kmv_entries);
+  if (kmv_entries > naive_entries) {
+    const double scale = static_cast<double>(naive_entries) /
+                         static_cast<double>(kmv_entries);
+    merged = ScalePLRPositions(merged, scale);
+    kmv_entries = naive_entries;
+  }
+  uint64_t total_entries = kmv_entries;
+  long double kmv_rank_scale = 1.0L;
+  VCompKMVStats input_kmv_stats = ComputeKMVStats(input_vsst_ptrs);
+
+  std::vector<uint64_t> gp_boundaries;
+  const auto& grandparents = compaction->grandparents();
+  gp_boundaries.reserve(grandparents.size() * 2);
+  for (const auto* gp : grandparents) {
+    if (gp == nullptr) continue;
+    uint64_t gp_min = ExtractPrefix64(gp->smallest.user_key());
+    uint64_t gp_max = ExtractPrefix64(gp->largest.user_key());
+    if (gp_max < gp_min) std::swap(gp_min, gp_max);
+    gp_boundaries.push_back(gp_min);
+    gp_boundaries.push_back(gp_max);
+  }
+  std::sort(gp_boundaries.begin(), gp_boundaries.end());
+
+  uint64_t target_sst_size = compaction->target_output_file_size();
+  if (target_sst_size == 0) {
+    target_sst_size = compaction->max_output_file_size();
+  }
+  uint64_t avg_entry_size = std::max<uint64_t>(1, input_bytes / naive_entries);
+  std::vector<VirtualSST> predicted_vssts =
+      SplitIntoSSTs(merged, total_entries, target_sst_size, avg_entry_size,
+                    global_min, global_max, compaction->output_level(),
+                    gp_boundaries, &input_vsst_ptrs);
+  VCompKMVStats output_kmv_stats = ComputeKMVStats(predicted_vssts);
+  uint64_t predict_us = db_options_.clock->NowMicros() - predict_t0;
+
+  std::vector<VCompAccuracyFile> predicted_files;
+  predicted_files.reserve(predicted_vssts.size());
+  for (size_t i = 0; i < predicted_vssts.size(); i++) {
+    const auto& vsst = predicted_vssts[i];
+    VCompAccuracyFile f;
+    f.file_number = i;
+    f.level = compaction->output_level();
+    f.size_bytes = vsst.size_bytes;
+    f.entries = vsst.num_entries;
+    f.key_min = vsst.key_min;
+    f.key_max = vsst.key_max;
+    predicted_files.push_back(f);
+  }
+
+  std::vector<VCompAccuracyFile> actual_files;
+  for (auto& sub : compact_->sub_compact_states) {
+    auto collect_outputs =
+        [&](const std::vector<CompactionOutputs::Output>& outputs, int level) {
+          for (const auto& out : outputs) {
+            const auto& meta = out.meta;
+            VCompAccuracyFile f;
+            f.file_number = meta.fd.GetNumber();
+            f.level = level;
+            f.size_bytes = meta.fd.GetFileSize();
+            f.entries = out.table_properties
+                            ? out.table_properties->num_entries
+                            : meta.num_entries;
+            f.key_min = ExtractPrefix64(meta.smallest.user_key());
+            f.key_max = ExtractPrefix64(meta.largest.user_key());
+            actual_files.push_back(f);
+          }
+        };
+    collect_outputs(sub.Outputs(false)->GetOutputs(),
+                    compaction->output_level());
+    if (compaction->SupportsPerKeyPlacement()) {
+      collect_outputs(sub.Outputs(true)->GetOutputs(),
+                      compaction->GetProximalLevel());
+    }
+  }
+
+  auto by_key = [](const VCompAccuracyFile& a, const VCompAccuracyFile& b) {
+    if (a.level != b.level) return a.level < b.level;
+    if (a.key_min != b.key_min) return a.key_min < b.key_min;
+    return a.key_max < b.key_max;
+  };
+  std::sort(predicted_files.begin(), predicted_files.end(), by_key);
+  std::sort(actual_files.begin(), actual_files.end(), by_key);
+
+  size_t matched = std::min(predicted_files.size(), actual_files.size());
+  long double boundary_error_sum = 0;
+  long double boundary_error_max = 0;
+  for (size_t i = 0; i < matched; i++) {
+    long double min_err =
+        AbsDiff64(predicted_files[i].key_min, actual_files[i].key_min);
+    long double max_err =
+        AbsDiff64(predicted_files[i].key_max, actual_files[i].key_max);
+    boundary_error_sum += min_err + max_err;
+    boundary_error_max = std::max(boundary_error_max, min_err);
+    boundary_error_max = std::max(boundary_error_max, max_err);
+  }
+  long double boundary_error_mean =
+      matched == 0 ? 0 : boundary_error_sum / static_cast<long double>(2 * matched);
+
+  uint64_t predicted_bytes = SumAccuracyBytes(predicted_files);
+  uint64_t actual_bytes = SumAccuracyBytes(actual_files);
+  uint64_t actual_entries = SumAccuracyEntries(actual_files);
+  int64_t count_error = static_cast<int64_t>(predicted_files.size()) -
+                        static_cast<int64_t>(actual_files.size());
+  long double byte_error_pct =
+      actual_bytes == 0
+          ? 0
+          : (static_cast<long double>(predicted_bytes) -
+             static_cast<long double>(actual_bytes)) *
+                100.0L / static_cast<long double>(actual_bytes);
+
+  env_->CreateDirIfMissing(db_options_.vcomp_accuracy_trace_dir);
+  std::string path = db_options_.vcomp_accuracy_trace_dir +
+                     "/vcomp_accuracy_job_" + std::to_string(job_id_) +
+                     ".json";
+  std::unique_ptr<WritableFile> file;
+  Status s = env_->NewWritableFile(path, &file, EnvOptions());
+  if (!s.ok()) {
+    ROCKS_LOG_WARN(db_options_.info_log,
+                   "[%s] [JOB %d] failed to open vcomp accuracy trace %s: %s",
+                   cfd->GetName().c_str(), job_id_, path.c_str(),
+                   s.ToString().c_str());
+    return;
+  }
+
+  char metrics[2048];
+  snprintf(metrics, sizeof(metrics),
+           "{\"job\":%u,\"cf\":\"%s\",\"reason\":\"%s\","
+           "\"start_level\":%d,\"output_level\":%d,"
+           "\"input_files\":%zu,\"input_keys\":%" PRIu64
+           ",\"input_bytes\":%" PRIu64 ",\"input_segments\":%" PRIu64
+           ",\"target_sst_size\":%" PRIu64 ",\"avg_entry_size\":%" PRIu64
+           ",\"naive_entries\":%" PRIu64 ",\"predicted_entries\":%" PRIu64
+           ",\"plr_entries\":%" PRIu64 ",\"kmv_entries\":%" PRIu64
+           ",\"actual_entries\":%" PRIu64 ",\"kmv_rank_scale\":%.9Lf"
+           ",\"input_kmv_empty\":%" PRIu64
+           ",\"input_kmv_complete\":%" PRIu64
+           ",\"input_kmv_sample_min\":%" PRIu64
+           ",\"input_kmv_sample_mean\":%.3Lf"
+           ",\"input_kmv_sample_max\":%" PRIu64
+           ",\"output_kmv_empty\":%" PRIu64
+           ",\"output_kmv_complete\":%" PRIu64
+           ",\"output_kmv_sample_min\":%" PRIu64
+           ",\"output_kmv_sample_mean\":%.3Lf"
+           ",\"output_kmv_sample_max\":%" PRIu64
+           ",\"predicted_outputs\":%zu,\"actual_outputs\":%zu,"
+           "\"count_error\":%" PRId64 ",\"predicted_bytes\":%" PRIu64
+           ",\"actual_bytes\":%" PRIu64 ",\"byte_error_pct\":%.6Lf,"
+           "\"boundary_error_mean\":%.0Lf,\"boundary_error_max\":%.0Lf,"
+           "\"input_scan_us\":%" PRIu64 ",\"predict_us\":%" PRIu64 ",",
+           job_id_, cfd->GetName().c_str(),
+           GetCompactionReasonString(compaction->compaction_reason()),
+           compaction->start_level(), compaction->output_level(),
+           input_files.size(), input_keys_total, input_bytes, input_segments,
+           target_sst_size, avg_entry_size, naive_entries, total_entries,
+           plr_entries, kmv_entries, actual_entries, kmv_rank_scale,
+           input_kmv_stats.empty, input_kmv_stats.complete,
+           input_kmv_stats.sample_min, input_kmv_stats.sample_mean,
+           input_kmv_stats.sample_max, output_kmv_stats.empty,
+           output_kmv_stats.complete, output_kmv_stats.sample_min,
+           output_kmv_stats.sample_mean, output_kmv_stats.sample_max,
+           predicted_files.size(), actual_files.size(), count_error,
+           predicted_bytes, actual_bytes, byte_error_pct, boundary_error_mean,
+           boundary_error_max, input_scan_us, predict_us);
+
+  std::string record(metrics);
+  record.append("\"inputs\":");
+  AppendAccuracyFilesJson(&record, input_files);
+  record.append(",\"predicted\":");
+  AppendAccuracyFilesJson(&record, predicted_files);
+  record.append(",\"actual\":");
+  AppendAccuracyFilesJson(&record, actual_files);
+  record.append("}\n");
+
+  file->Append(record);
+  file->Flush();
+  file->Close();
+}
+
 Status CompactionJob::Run() {
   InitializeCompactionRun();
 
@@ -1079,6 +1778,9 @@ Status CompactionJob::Run() {
 
   FinalizeCompactionRun(status, stats_built_from_input_table_prop,
                         num_input_range_del);
+
+  MaybeRecordVCompAccuracy();
+  MaybeCaptureVCompInputs();
 
   // Finalize compaction trace log
   if (trace_logger_) {

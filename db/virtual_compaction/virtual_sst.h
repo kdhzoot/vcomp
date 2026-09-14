@@ -69,6 +69,11 @@ std::vector<KMVRangeSketch> BuildKMVRangeSketchesFromSortedKeys(
     size_t max_samples = 0,
     size_t max_ranges = 0);
 
+// The descriptor's whole-file sample, assembled from its range buckets under a
+// common theta. The buckets are equal-count strata, so this is an unbiased
+// sample of the descriptor; it is materialised on demand rather than stored.
+KMVSketch DescriptorSketch(const VirtualSST& vsst, size_t max_samples = 0);
+
 // Estimate the union cardinality of the input VSSTs using their KMV sketches.
 // Returns naive_entries when sketches are missing or too sparse.
 uint64_t EstimateKMVUnionEntries(const std::vector<const VirtualSST*>& inputs,

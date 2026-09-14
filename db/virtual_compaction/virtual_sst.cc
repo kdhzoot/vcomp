@@ -189,6 +189,34 @@ std::vector<KMVRangeSketch> BuildKMVRangeSketchesFromSortedKeys(
   return ranges;
 }
 
+KMVSketch DescriptorSketch(const VirtualSST& vsst, size_t max_samples) {
+  KMVSketch sketch;
+  if (vsst.kmv_ranges.empty()) return sketch;
+  if (max_samples == 0) max_samples = VirtualSSTKMVSamples();
+  bool complete = true;
+  uint64_t theta_hash = MaxHash();
+  size_t reserve = 0;
+  for (const auto& range : vsst.kmv_ranges) {
+    complete = complete && range.sketch.complete;
+    theta_hash = std::min(theta_hash, range.sketch.theta_hash);
+    reserve += range.sketch.samples.size();
+  }
+  sketch.samples.reserve(reserve);
+  for (const auto& range : vsst.kmv_ranges) {
+    for (const auto& sample : range.sketch.samples) {
+      if (sample.hash <= theta_hash) sketch.samples.push_back(sample);
+    }
+  }
+  SortUniqueByHash(&sketch.samples);
+  const bool trimmed = sketch.samples.size() > max_samples;
+  SortByHashAndTrim(&sketch.samples, max_samples);
+  sketch.complete = complete && !trimmed;
+  sketch.theta_hash = sketch.complete || sketch.samples.empty()
+                          ? MaxHash()
+                          : std::min(theta_hash, sketch.samples.back().hash);
+  return sketch;
+}
+
 uint64_t EstimateKMVUnionEntries(const std::vector<const VirtualSST*>& inputs,
                                  uint64_t naive_entries,
                                  size_t max_samples) {

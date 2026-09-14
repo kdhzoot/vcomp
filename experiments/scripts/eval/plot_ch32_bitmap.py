@@ -9,8 +9,9 @@ from matplotlib.ticker import MaxNLocator, FuncFormatter
 
 A = 'experiments/artifacts/'
 OUT = 'experiments/results/paper_ch32/ch32_bitmap_uniqueness'
-PTS = [('25%', 'E3-u25'), ('50%', 'E3-u50'), ('75%', 'E3-u75'), ('100%', 'E3-u100')]
-SERIES = [('Baseline', '#0072B2', None), ('F2Load', '#009E73', '////'), ('F2Load, no bitmap', '#D55E00', '\\\\\\\\')]
+PTS = [('25%', 'E3-u25'), ('50%', 'E3-u50'), ('63%', 'P0'), ('75%', 'E3-u75'), ('100%', 'E3-u100')]
+SERIES = [('Baseline', '#0072B2', '#00456B', None), ('F2Load', '#009E73', '#006147', None),
+          ('F2Load, no bitmap', '#009E73', '#006147', '////')]
 METRICS = [('pl', 'Positive\nlookup (%)', 'pct'), ('ops', 'Throughput\n(ops/s)', 'big'),
            ('fpr', 'Filter checks\n/ lookup', 'dec'), ('ssts', 'SST count', 'big')]
 fam = 'Cambria' if any('cambria' in f.name.lower() for f in font_manager.fontManager.ttflist) else 'DejaVu Serif'
@@ -27,9 +28,23 @@ def get(path):
 def find(pat):
     g = [p for p in sorted(glob.glob(pat)) if 'uniform' not in p]
     return get(g[-1])
-data = [[find(f'{A}eval_*/{c}_baseline__workloadc/result.json'),
-         find(f'{A}fix_20260913_ycsbc/{c}_f2load__workloadc/result.json'),
-         find(f'{A}fix_20260914_ycsbc_nobitmap/{c}_f2load__workloadc/result.json')] for _, c in PTS]
+def trio(c):
+    b = 'P0-r1_baseline' if c == 'P0' else c + '_baseline'
+    f = 'P0fix-r1_f2load' if c == 'P0' else c + '_f2load'
+    import os
+    def pick(pred):
+        for p in sorted(glob.glob(f'{A}*/{f if pred else b}__workloadc/result.json')): pass
+        return None
+    def by(nm, cond):
+        for p in sorted(glob.glob(f'{A}*/{nm}__workloadc/result.json')):
+            r = json.load(open(p)); run = p.split('/')[2]
+            if 'uniform' in run: continue
+            if cond(r.get('source', '')): return get(p)
+        return None
+    return [by(b, lambda s: True),
+            by(f, lambda s: '/fix_20260913/' in s),
+            by(f, lambda s: 'nobitmap' in s)]
+data = [trio(c) for _, c in PTS]
 def fmt(kind):
     def big(v, _=None):
         if v >= 1e6: return f'{v/1e6:.2f}'.rstrip('0').rstrip('.') + 'M'
@@ -43,9 +58,9 @@ for i, (key, ylabel, kind) in enumerate(METRICS):
     ax = axes[i]; f = fmt(kind)
     vals = [[d[s][key] for d in data] for s in range(3)]
     top = max(max(v) for v in vals)
-    for s, (lab, col, hat) in enumerate(SERIES):
-        ax.bar([k + (s - 1) * w for k in x], vals[s], w, color=col, edgecolor='black',
-               linewidth=1.0, hatch=hat, zorder=3)
+    for s, (lab, col, ec, hat) in enumerate(SERIES):
+        ax.bar([k + (s - 1) * w for k in x], vals[s], w, color=('white' if hat else col), edgecolor=ec,
+               linewidth=1.4, hatch=hat, zorder=3)
         for k in x:
             ax.text(k + (s - 1) * w, vals[s][k] + top * 0.02, f(vals[s][k]),
                     ha='center', va='bottom', fontsize=15, rotation=90, zorder=5)
@@ -60,7 +75,7 @@ for i, (key, ylabel, kind) in enumerate(METRICS):
     for sp in ('top', 'right'): ax.spines[sp].set_visible(False)
     for sp in ('left', 'bottom'): ax.spines[sp].set_color('black'); ax.spines[sp].set_linewidth(1.0)
 axes[-1].set_xlabel('Key uniqueness', fontsize=26, labelpad=10)
-leg = fig.legend(handles=[Patch(facecolor=c, edgecolor='black', linewidth=1.0, hatch=h, label=l) for l, c, h in SERIES],
+leg = fig.legend(handles=[Patch(facecolor=('white' if h else c), edgecolor=e, linewidth=1.4, hatch=h, label=l) for l, c, e, h in SERIES],
                  fontsize=21, frameon=False, loc='upper center', ncol=3, bbox_to_anchor=(0.5, 1.0),
                  handlelength=1.8, handleheight=1.1, columnspacing=1.8)
 fig.canvas.draw()

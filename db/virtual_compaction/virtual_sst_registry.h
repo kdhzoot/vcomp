@@ -122,6 +122,51 @@ class VirtualSSTRegistry {
     return registry_.size();
   }
 
+  // Heap bytes the live descriptor set actually holds. Vector capacity, not
+  // size: what the allocator was asked for is what shows up in RSS. Walking
+  // the registry under its own lock counts every shared allocation once.
+  struct HeapUsage {
+    uint64_t files = 0;            // live descriptors
+    uint64_t plr_segment_bytes = 0;
+    uint64_t kmv_sample_bytes = 0;
+    uint64_t kmv_bucket_bytes = 0;  // the per-bucket headers
+    uint64_t descriptor_bytes = 0;  // VirtualSST object + shared_ptr control block
+    uint64_t index_bytes = 0;       // registry map + retired set
+    uint64_t Total() const {
+      return plr_segment_bytes + kmv_sample_bytes + kmv_bucket_bytes +
+             descriptor_bytes + index_bytes;
+    }
+  };
+
+  HeapUsage GetHeapUsage() const {
+    // libstdc++ allocates one control block alongside a make_shared object and
+    // one node per unordered_map/set entry; both are counted at their nominal
+    // size, so this is a lower bound on what the allocator rounded up to.
+    constexpr uint64_t kControlBlock = 16;
+    constexpr uint64_t kMapNode = sizeof(void*) + sizeof(uint64_t) +
+                                  sizeof(std::shared_ptr<const VirtualSST>);
+    constexpr uint64_t kSetNode = sizeof(void*) + sizeof(uint64_t);
+    HeapUsage u;
+    std::lock_guard<std::mutex> lk(mu_);
+    for (const auto& kv : registry_) {
+      const VirtualSST* v = kv.second.get();
+      if (v == nullptr) continue;
+      u.files++;
+      u.plr_segment_bytes +=
+          v->plr_model.Segments().capacity() * sizeof(PLRSegment);
+      u.kmv_bucket_bytes += v->kmv_ranges.capacity() * sizeof(KMVRangeSketch);
+      for (const auto& r : v->kmv_ranges) {
+        u.kmv_sample_bytes += r.sketch.samples.capacity() * sizeof(KMVSample);
+      }
+      u.descriptor_bytes += sizeof(VirtualSST) + kControlBlock;
+    }
+    u.index_bytes = registry_.bucket_count() * sizeof(void*) +
+                    registry_.size() * kMapNode +
+                    retired_.bucket_count() * sizeof(void*) +
+                    retired_.size() * kSetNode;
+    return u;
+  }
+
  private:
   mutable std::mutex mu_;
   std::unordered_map<uint64_t, Handle> registry_;

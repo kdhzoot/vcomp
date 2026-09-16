@@ -6,6 +6,33 @@
 
 **2026-09-06 common Chapter 2/3 update:** Seven load states and twenty reads completed and were reflected in Figures 2(b), 4 and 5 and their prose. Use [PAPER_CHAPTER23_COMMON_RESULTS.md](PAPER_CHAPTER23_COMMON_RESULTS.md) for the current shared baseline. Earlier paper values below are historical for these comparisons. F2Load recovery/reads and the scaling/breakdown follow-ups remain deferred.
 
+## 2026-09-14: mixgraph on Ten Baseline and Ten No-Bitmap F2Load Loadings
+
+**Status:** queued and waiting (supervisor pid 4141734), behind the
+memory-overhead campaign's last cell. It starts by itself once no `db_bench`
+is running and that campaign's supervisor has exited; progress in
+`artifacts/queues/mixgraph_pairs_260914/STATUS.json`.
+
+Twenty mixgraph cells at the frozen YCSB settings (50 GiB cache, 48 threads,
+300 s), one per loading: the ten retained baseline DBs, each deep-copied
+immediately before it is measured and the copy deleted after, and ten fresh
+F2Load loadings made without the membership bitmap (the `f06`-`f15` series was
+deleted, so it is reloaded as `g01`-`g10`) measured on the loaded DB and then
+deleted. Each cell drains pending compaction with `waitforcompaction` before
+the statistics dump the compaction bytes are read from. The mixgraph
+parameters are this repository's existing prefix-dist command
+(`run_q3_read_workloads.sh:169`, the wiki's ZippyDB fit plus the `key_dist`
+pair) taken unchanged; the runner's dict is missing `key_dist_a`/`key_dist_b`,
+without which the key-range hotness model is fitted and then never consulted.
+Two consequences of the published fit to record with the results: mixgraph
+ignores `--value_size` and its Puts write ~36-byte values into the 1 KB
+dataset, and at the default `mix_max_scan_len` a seek reads ~570 entries, so
+the cells are scan-bandwidth-bound. Full protocol, arm
+table, required code changes and validation gates are in
+[PLAN_MIXGRAPH_PAIRS_260914.md](PLAN_MIXGRAPH_PAIRS_260914.md). This
+supersedes the mixgraph half of
+[PLAN_deepcopy_cu_mixgraph.md](PLAN_deepcopy_cu_mixgraph.md).
+
 ## 2026-09-11: Baseline Series Unification and Phase 1 Shard Sweep
 
 Two items left open by the 91 B scale-up, both blocking numbers that would

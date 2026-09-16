@@ -1,0 +1,12 @@
+sweep	x	plr_error_bound	kmv_samples	is_default	loading_min	plr_memory_mb	peak_rss_gb	final_sst_count	final_db_gb	sst_count_vs_baseline_pct	db_size_vs_baseline_pct	speedup_vs_baseline	ycsbc_kops_sec	positive_lookup_pct
+PLR error bound	2	2	512	0	16.92	3076.4	4.543	13792	852.4	2.18	3.46	3.5	1520.4	60.1
+PLR error bound	4	4	512	0	6.3	1121.9	2.434	13740	851.0	1.79	3.29	9.3	1384.2	60.07
+PLR error bound	8	8	512	1	2.41	346.8	1.613	13719	850.1	1.64	3.18	24.4	1459.4	60.05
+PLR error bound	16	16	512	0	1.21	101.3	1.307	13754	850.7	1.9	3.25	48.7	1417.0	60.1
+PLR error bound	32	32	512	0	0.89	32.4	1.158	13733	850.4	1.74	3.22	66.1	1598.0	60.1
+KMV samples	128	8	128	0	1.36	346.6	1.65	17114	944.8	26.79	14.68	43.2	1359.3	60.28
+KMV samples	256	8	256	0	1.64	346.7	1.671	14871	894.3	10.17	8.54	35.8	1555.1	60.18
+KMV samples	512	8	512	1	2.41	346.8	1.613	13719	850.1	1.64	3.18	24.4	1459.4	60.05
+KMV samples	1024	8	1024	0	4.89	346.7	1.549	13367	833.8	-0.97	1.2	12.0	1497.6	60.07
+KMV samples	2048	8	2048	0	11.26	346.7	1.54	13217	826.1	-2.08	0.27	5.2	1401.0	60.11
+baseline (10 incremental loadings)				0	58.8			13498	823.9	0	0	1.0	1600.9	60.29

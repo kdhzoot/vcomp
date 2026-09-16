@@ -1,0 +1,58 @@
+{
+  "f2load": {
+    "arm": "h09",
+    "binary_sha256": "a04221e7076cf3030b4b3965494be5c8bbebcd8b7cbebcd8b8f4e7efbed1da0e",
+    "case_id": "f2load_1kb",
+    "dataset_gib": 1000,
+    "db_dir": "/work/vcomp/exp/f2band_260915_em/h09",
+    "elapsed_sec": 144.1655330657959,
+    "final_sst_bytes": 850592128172,
+    "final_sst_count": 13755,
+    "key_bytes": 24,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 181
+      },
+      "2": {
+        "files": 45,
+        "size_mib": 2510
+      },
+      "3": {
+        "files": 435,
+        "size_mib": 25548
+      },
+      "4": {
+        "files": 4097,
+        "size_mib": 255852
+      },
+      "5": {
+        "files": 9175,
+        "size_mib": 527096
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "load_extra": {
+      "vcomp_exact_membership": true,
+      "vcomp_exact_membership_max_mb": 1024
+    },
+    "load_protocol": "fillvirtual_waitforcompaction",
+    "loading_min": 2.4027588844299315,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/mixgraph_bitmap_260915/h09",
+    "logical_input_bytes": 1073741824000,
+    "num_keys": 1048576000,
+    "peak_rss_kb": 1596180,
+    "repetitions": 1,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/mixgraph_bitmap_260915/h09/db_identity.json",
+    "system": "f2load",
+    "value_bytes": 1000,
+    "wall_sec": 145.6
+  }
+}

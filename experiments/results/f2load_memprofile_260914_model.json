@@ -1,0 +1,12 @@
+{
+  "model": "overhead_bytes = c_record * records + c_sst * sst_files",
+  "c_record_bytes": 0.34369547432485265,
+  "c_sst_bytes": 36491.910135304686,
+  "r_squared": 0.9953207434759406,
+  "cells": 8,
+  "sources": [
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/f2load_memprofile_260914/results.json",
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/f2load_memprofile_3tb100b_260915/results.json",
+    "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/f2load_memprofile_3tb5tb_260915/results.json"
+  ]
+}

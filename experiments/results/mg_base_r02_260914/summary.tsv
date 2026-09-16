@@ -1,0 +1,4 @@
+phase	system	workload	status	duration_sec	threads	measured_seconds	process_elapsed_sec	operations	throughput_ops_sec	avg_latency_us	successful_gets	engine_keys_read	engine_keys_written	peak_rss_kb	log_dir
+pilot	baseline	workloadc	ok	3	48	3.028	4.426548957824707	3571086	1179291.0	40.467	2152704	3571086	0	11471176	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/mg_base_r02_260914/pilot/workloadc/baseline
+pilot	baseline	mixgraph	ok	5	48	5.089	12.861447811126709	2305306	452968.0	104.528	1238402	1912413	323554	45551396	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/mg_base_r02_260914/pilot/mixgraph/baseline
+full	baseline	mixgraph	ok	300	48	300.03	310.10807609558105	194758994	649130.0	73.942	128514733	161645172	27268590	55159220	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/mg_base_r02_260914/full/mixgraph/baseline

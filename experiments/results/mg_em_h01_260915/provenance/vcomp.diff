@@ -1,0 +1,535 @@
+diff --git a/db/virtual_compaction/virtual_sst_registry.h b/db/virtual_compaction/virtual_sst_registry.h
+index 5e25632e60..882ebd2cc4 100644
+--- a/db/virtual_compaction/virtual_sst_registry.h
++++ b/db/virtual_compaction/virtual_sst_registry.h
+@@ -122,6 +122,51 @@ class VirtualSSTRegistry {
+     return registry_.size();
+   }
+ 
++  // Heap bytes the live descriptor set actually holds. Vector capacity, not
++  // size: what the allocator was asked for is what shows up in RSS. Walking
++  // the registry under its own lock counts every shared allocation once.
++  struct HeapUsage {
++    uint64_t files = 0;            // live descriptors
++    uint64_t plr_segment_bytes = 0;
++    uint64_t kmv_sample_bytes = 0;
++    uint64_t kmv_bucket_bytes = 0;  // the per-bucket headers
++    uint64_t descriptor_bytes = 0;  // VirtualSST object + shared_ptr control block
++    uint64_t index_bytes = 0;       // registry map + retired set
++    uint64_t Total() const {
++      return plr_segment_bytes + kmv_sample_bytes + kmv_bucket_bytes +
++             descriptor_bytes + index_bytes;
++    }
++  };
++
++  HeapUsage GetHeapUsage() const {
++    // libstdc++ allocates one control block alongside a make_shared object and
++    // one node per unordered_map/set entry; both are counted at their nominal
++    // size, so this is a lower bound on what the allocator rounded up to.
++    constexpr uint64_t kControlBlock = 16;
++    constexpr uint64_t kMapNode = sizeof(void*) + sizeof(uint64_t) +
++                                  sizeof(std::shared_ptr<const VirtualSST>);
++    constexpr uint64_t kSetNode = sizeof(void*) + sizeof(uint64_t);
++    HeapUsage u;
++    std::lock_guard<std::mutex> lk(mu_);
++    for (const auto& kv : registry_) {
++      const VirtualSST* v = kv.second.get();
++      if (v == nullptr) continue;
++      u.files++;
++      u.plr_segment_bytes +=
++          v->plr_model.Segments().capacity() * sizeof(PLRSegment);
++      u.kmv_bucket_bytes += v->kmv_ranges.capacity() * sizeof(KMVRangeSketch);
++      for (const auto& r : v->kmv_ranges) {
++        u.kmv_sample_bytes += r.sketch.samples.capacity() * sizeof(KMVSample);
++      }
++      u.descriptor_bytes += sizeof(VirtualSST) + kControlBlock;
++    }
++    u.index_bytes = registry_.bucket_count() * sizeof(void*) +
++                    registry_.size() * kMapNode +
++                    retired_.bucket_count() * sizeof(void*) +
++                    retired_.size() * kSetNode;
++    return u;
++  }
++
+  private:
+   mutable std::mutex mu_;
+   std::unordered_map<uint64_t, Handle> registry_;
+diff --git a/experiments/docs/EXPERIMENTS_PLANNED.md b/experiments/docs/EXPERIMENTS_PLANNED.md
+index 867fa9cb94..7865be8039 100644
+--- a/experiments/docs/EXPERIMENTS_PLANNED.md
++++ b/experiments/docs/EXPERIMENTS_PLANNED.md
+@@ -6,6 +6,33 @@
+ 
+ **2026-09-06 common Chapter 2/3 update:** Seven load states and twenty reads completed and were reflected in Figures 2(b), 4 and 5 and their prose. Use [PAPER_CHAPTER23_COMMON_RESULTS.md](PAPER_CHAPTER23_COMMON_RESULTS.md) for the current shared baseline. Earlier paper values below are historical for these comparisons. F2Load recovery/reads and the scaling/breakdown follow-ups remain deferred.
+ 
++## 2026-09-14: mixgraph on Ten Baseline and Ten No-Bitmap F2Load Loadings
++
++**Status:** queued and waiting (supervisor pid 4141734), behind the
++memory-overhead campaign's last cell. It starts by itself once no `db_bench`
++is running and that campaign's supervisor has exited; progress in
++`artifacts/queues/mixgraph_pairs_260914/STATUS.json`.
++
++Twenty mixgraph cells at the frozen YCSB settings (50 GiB cache, 48 threads,
++300 s), one per loading: the ten retained baseline DBs, each deep-copied
++immediately before it is measured and the copy deleted after, and ten fresh
++F2Load loadings made without the membership bitmap (the `f06`-`f15` series was
++deleted, so it is reloaded as `g01`-`g10`) measured on the loaded DB and then
++deleted. Each cell drains pending compaction with `waitforcompaction` before
++the statistics dump the compaction bytes are read from. The mixgraph
++parameters are this repository's existing prefix-dist command
++(`run_q3_read_workloads.sh:169`, the wiki's ZippyDB fit plus the `key_dist`
++pair) taken unchanged; the runner's dict is missing `key_dist_a`/`key_dist_b`,
++without which the key-range hotness model is fitted and then never consulted.
++Two consequences of the published fit to record with the results: mixgraph
++ignores `--value_size` and its Puts write ~36-byte values into the 1 KB
++dataset, and at the default `mix_max_scan_len` a seek reads ~570 entries, so
++the cells are scan-bandwidth-bound. Full protocol, arm
++table, required code changes and validation gates are in
++[PLAN_MIXGRAPH_PAIRS_260914.md](PLAN_MIXGRAPH_PAIRS_260914.md). This
++supersedes the mixgraph half of
++[PLAN_deepcopy_cu_mixgraph.md](PLAN_deepcopy_cu_mixgraph.md).
++
+ ## 2026-09-11: Baseline Series Unification and Phase 1 Shard Sweep
+ 
+ Two items left open by the 91 B scale-up, both blocking numbers that would
+diff --git a/experiments/lib/ch23_common.py b/experiments/lib/ch23_common.py
+index f96899b999..5797468047 100644
+--- a/experiments/lib/ch23_common.py
++++ b/experiments/lib/ch23_common.py
+@@ -76,7 +76,9 @@ def command(binary, options):
+ 
+ 
+ def load_options(gib, kv, db, log, mode):
+-    key, value = (24, 1000) if kv == 1024 else (48, 43)
++    # 100 B keeps the 24 B key of the 1 KB case so that only the record count
++    # changes between them; 91 B is the older (48, 43) pair kept for its series.
++    key, value = {1024: (24, 1000), 100: (24, 76)}.get(kv, (48, 43))
+     n = gib * GIB // kv
+     o = dict(BASE, num=n, key_size=key, value_size=value, db=str(db),
+              report_file=str(log / 'report.rep'))
+diff --git a/experiments/scripts/read/run_ycsb_alternatives.py b/experiments/scripts/read/run_ycsb_alternatives.py
+index fcf714164c..c97c7020dc 100644
+--- a/experiments/scripts/read/run_ycsb_alternatives.py
++++ b/experiments/scripts/read/run_ycsb_alternatives.py
+@@ -60,15 +60,38 @@ def group_members(pgid):
+     return members
+ 
+ 
+-# The RocksDB wiki's published ZippyDB fit for mixgraph (Cao et al., FAST '20),
+-# with the sine rate limiter left off so a fixed duration runs at full speed.
+-# The key space and key size follow the source DB, not the wiki example.
++# The published ZippyDB fit for mixgraph (Cao et al., FAST '20), taken from
++# this repository's own prefix-dist command in
++# scripts/read/run_q3_read_workloads.sh, whose cells are bundled under
++# paper_evidence/current/fig_exp_scale. key_dist_a/key_dist_b are what make it
++# "prefix dist": MixGraph() sets use_random_modeling when either is zero (they
++# default to 0.0) and takes that branch before the prefix one, so without them
++# keyrange_dist_* is fitted and then never consulted and keys come out uniform.
++# mix_max_value_size (1024) and mix_max_scan_len (10000) are left at the
++# db_bench defaults the published command leaves them at, so Puts average ~36 B
++# and a Seek scans ~570 entries; the key space and key size follow the source
++# DB, not the wiki example. The sine rate limiter stays off (the wiki command
++# sets sine_a/b/d but never sine_mix_rate, so its limiter is inert too).
+ MIXGRAPH = dict(keyrange_dist_a=14.18, keyrange_dist_b=-2.917, keyrange_dist_c=0.0164,
+-                keyrange_dist_d=-0.08082, keyrange_num=30, value_k=0.2615,
+-                value_sigma=25.45, iter_k=2.517, iter_sigma=14.236, mix_get_ratio=0.85,
+-                mix_put_ratio=0.14, mix_seek_ratio=0.01, mix_max_value_size=1024,
++                keyrange_dist_d=-0.08082, keyrange_num=30,
++                key_dist_a=0.002312, key_dist_b=0.3467, value_k=0.2615,
++                value_sigma=25.45, iter_k=2.517, iter_sigma=14.236, mix_get_ratio=0.83,
++                mix_put_ratio=0.14, mix_seek_ratio=0.03, mix_max_value_size=1024,
+                 sine_mix_rate=False)
+ 
++# mixgraph writes (14 % of its operations), so the compaction bytes it is
++# measured for are only complete once the pending work has drained. The tail
++# matches run_ch3_write_fixed_ops.py: the first stats dump is the state at the
++# duration mark, the second is what the metrics are read from.
++MIXGRAPH_BENCHMARKS = 'mixgraph,stats,waitforcompaction,stats,levelstats'
++
++PENDING_RE = re.compile(r'Estimated pending compaction bytes:\s*(\d+)')
++
++
++def pending_bytes(text):
++    values = PENDING_RE.findall(text)
++    return int(values[-1]) if values else None
++
+ 
+ def options(source, db, log, workload, duration, cache_size=1,
+             request_distribution=None):
+@@ -94,6 +117,7 @@ def options(source, db, log, workload, duration, cache_size=1,
+         for key in [k for k in result if k.startswith('ycsb_')]:
+             del result[key]
+         result.update(MIXGRAPH)
++        result['benchmarks'] = MIXGRAPH_BENCHMARKS
+     return result
+ 
+ 
+@@ -130,6 +154,10 @@ class Campaign:
+                              if not (args.exclude_flush_only and s == 'flush_only'))
+         self.benchmark = getattr(args, 'benchmark', None) or 'ycsb'
+         require(self.benchmark in ('ycsb', 'mixgraph'), 'unknown benchmark')
++        # Budget for waitforcompaction after a mixgraph cell, on top of the
++        # measured duration. 7200 s is what run_ch31_uniform.py allows the
++        # equivalent YCSB A drain.
++        self.drain_timeout = getattr(args, 'drain_timeout', None) or 7200
+         if self.benchmark == 'mixgraph':
+             # One full cell per system; the workload token names the benchmark.
+             self.workloads = ''
+@@ -234,7 +262,9 @@ class Campaign:
+             excluded_systems=[s for s in SYSTEMS if s not in self.systems],
+             full_order=self.cells, total_full=len(self.cells), pilot_seconds=[3, 5],
+             reuse_run=self.args.reuse_run,
+-            full_watchdog_sec=self.args.duration + 600, pilot_watchdog_sec=180,
++            full_watchdog_sec=self.cell_timeout('full', self.cells[0][1], self.args.duration),
++            pilot_watchdog_sec=self.cell_timeout('pilot', self.cells[0][1], 5),
++            drain_timeout_sec=self.drain_timeout if self.benchmark == 'mixgraph' else None,
+             representative_options=options(self.sources['baseline_1kb'],
+                 self.dbroot / 'full/workloada/baseline',
+                 self.root / 'full/workloada/baseline', 'workloada', self.args.duration,
+@@ -428,6 +458,13 @@ class Campaign:
+                           .format(self.cache_size), startup),
+                 'unable to verify {}-byte block cache in DB LOG'.format(self.cache_size))
+ 
++    def cell_timeout(self, phase, workload, duration):
++        if workload != 'mixgraph':
++            return 180 if phase == 'pilot' else duration + 600
++        # The pilot's three seconds of writes drain in seconds, but give the
++        # same tail room rather than guessing.
++        return duration + self.drain_timeout
++
+     def run_cell(self, phase, system, workload, duration):
+         self.current = dict(phase=phase, system=system, workload=workload)
+         log = self.root / phase / workload / system
+@@ -439,7 +476,7 @@ class Campaign:
+         opts = options(source, db, log, workload, duration, self.cache_size,
+                        self.request_distribution)
+         execution, output = self.measure(command(self.binary, opts), log,
+-            timeout=180 if phase == 'pilot' else duration + 600)
++            timeout=self.cell_timeout(phase, workload, duration))
+         require(db_identity(source['db_dir']) == before, 'source DB changed')
+         save_json(log / 'source_identity.json', before)
+         self.audit_options(db, log, opts)
+@@ -457,6 +494,13 @@ class Campaign:
+             require(not row['missing_tickers'], 'required engine statistics missing')
+             require(row['operation_histograms'], 'merged operation histograms missing')
+             row['final_levels'] = levels(output)
++            row['pending_bytes_end'] = pending_bytes(output)
++            if workload == 'mixgraph':
++                require('waitforcompaction' in output and 'status (OK)' in output,
++                        'mixgraph cell has no successful compaction drain')
++                require(row['pending_bytes_end'] == 0,
++                        'pending compaction did not drain: '
++                        + str(row['pending_bytes_end']))
+             row['status'] = 'ok' if abs(row['measured_seconds'] - duration) <= 5 \
+                             else 'duration_overrun'
+         save_json(log / 'validated.json', row)
+@@ -537,10 +581,17 @@ class Campaign:
+             for workload in ('workloada', 'workloade'):
+                 if workload[-1] in self.workloads:
+                     self.run_cell('pilot', pilot_system, workload, 5)
++            if self.benchmark == 'mixgraph':
++                # The C pilot above does not touch a single mixgraph flag. Five
++                # seconds of the real thing, drain included, turns a bad
++                # parameter or a missing waitforcompaction into a failure now
++                # rather than after the full cell has run.
++                self.run_cell('pilot', pilot_system, 'mixgraph', 5)
+             self.verify_sources()
+             save_json(self.root / 'PILOT_COMPLETED.json',
+                       dict(utc=utc(), cells=len(self.systems)
+-                           + sum(1 for w in 'ae' if w in self.workloads)))
++                           + sum(1 for w in 'ae' if w in self.workloads)
++                           + (1 if self.benchmark == 'mixgraph' else 0)))
+             self.current = None
+             pending = [cell for cell in self.cells if cell not in self.reused]
+             self.event('FULL_START', nominal_seconds=len(pending) * self.args.duration,
+@@ -580,6 +631,9 @@ def main():
+     parser.add_argument('--benchmark', default='ycsb', choices=('ycsb', 'mixgraph'),
+                         help='ycsb (default) runs the selected YCSB workloads; mixgraph runs '
+                              'one mixgraph cell per system with the published parameters')
++    parser.add_argument('--drain-timeout', type=int, default=7200,
++                        help='seconds allowed for waitforcompaction after a mixgraph '
++                             'cell, on top of --duration (default 7200)')
+     parser.add_argument('--workloads', default='abcdef',
+                         help='workload letters to run in the full phase (default abcdef); '
+                              'the pilot cells are unchanged')
+diff --git a/tools/db_bench_tool.cc b/tools/db_bench_tool.cc
+index f1e8b21154..ef3d744269 100644
+--- a/tools/db_bench_tool.cc
++++ b/tools/db_bench_tool.cc
+@@ -54,6 +54,7 @@
+ #include "monitoring/histogram.h"
+ #include "monitoring/statistics_impl.h"
+ #include "options/cf_options.h"
++#include "port/jemalloc_helper.h"
+ #include "port/port.h"
+ #include "port/stack_trace.h"
+ #include "rocksdb/cache.h"
+@@ -911,6 +912,15 @@ DEFINE_string(compaction_trace_dir, "",
+               "If not empty, write per-compaction trace log files to this "
+               "directory with detailed key-level information.");
+ 
++DEFINE_string(vcomp_memory_profile_out, "",
++              "fillvirtual only: sample process RSS, jemalloc arena stats and "
++              "the live descriptor set into this JSONL file. Components are "
++              "chosen to partition RSS exactly, so a stacked bar of one sample "
++              "sums to that sample's RSS.");
++
++DEFINE_uint64(vcomp_memory_profile_interval_ms, 100,
++              "Sampling period for --vcomp_memory_profile_out.");
++
+ DEFINE_string(vcomp_accuracy_trace_dir, "",
+               "If not empty, run virtual compaction prediction alongside real "
+               "compactions and write per-job accuracy records to this directory.");
+@@ -2051,6 +2061,202 @@ static Status CreateMemTableRepFactory(
+   return s;
+ }
+ 
++// Samples where fillvirtual's memory actually is. The components below
++// partition resident memory without overlap, so one sample's parts sum to that
++// sample's RSS:
++//
++//   stats.allocated = [descriptor set] + [block cache + memtables] + [other live]
++//
++// That split is exact: the last term is defined as the remainder. RSS is a
++// different quantity and is reported beside it, not inside it - allocated
++// bytes need not be resident (a reserved buffer nobody has written yet), and
++// resident pages need not be allocated (the allocator holding freed memory
++// back from the kernel). rss_minus_allocated carries that signed difference,
++// which is small while Phase 1 runs and becomes the whole of RSS once
++// materialization frees the descriptors. Descriptor bytes are vector
++// capacity, not size.
++class VCompMemoryProfiler {
++ public:
++  VCompMemoryProfiler(std::string path, uint64_t interval_ms,
++                      const ROCKSDB_NAMESPACE::VirtualSSTRegistry* registry,
++                      ROCKSDB_NAMESPACE::DB* db)
++      : path_(std::move(path)),
++        interval_ms_(interval_ms == 0 ? 200 : interval_ms),
++        registry_(registry),
++        db_(db) {
++    out_ = fopen(path_.c_str(), "w");
++    if (out_ == nullptr) {
++      fprintf(stderr, "memory profile: cannot open %s\n", path_.c_str());
++      return;
++    }
++    start_us_ = ROCKSDB_NAMESPACE::SystemClock::Default()->NowMicros();
++    // What the process already holds before any loading work: binary, stacks,
++    // the open DB and its cache reservation. Loading overhead is measured
++    // against this, so every row carries it and the peak is a difference.
++    // Reset the kernel's peak-RSS counter so VmHWM measures the loading window
++    // and not whatever the process touched while opening the DB. Sampling can
++    // miss a short spike; VmHWM cannot.
++    if (FILE* cr = fopen("/proc/self/clear_refs", "w")) {
++      fputs("5\n", cr);
++      fclose(cr);
++    }
++    JeRefresh();
++    const Proc proc = ReadProc();
++    base_rss_ = proc.rss;
++    base_allocated_ = JeStat("stats.allocated");
++    base_resident_ = JeStat("stats.resident");
++    base_cache_ = DbProperty("rocksdb.block-cache-usage");
++    base_memtables_ = DbProperty("rocksdb.cur-size-all-mem-tables");
++    Emit("baseline");
++    thread_ = std::thread([this] { Loop(); });
++  }
++
++  ~VCompMemoryProfiler() { Stop(); }
++
++  void SetPhase(const char* phase) {
++    {
++      std::lock_guard<std::mutex> lk(mu_);
++      phase_ = phase;
++    }
++    Emit(phase);  // one sample exactly at the boundary
++  }
++
++  void Stop() {
++    if (!thread_.joinable()) return;
++    {
++      std::lock_guard<std::mutex> lk(mu_);
++      stop_ = true;
++    }
++    cv_.notify_all();
++    thread_.join();
++    Emit("final");
++    if (out_ != nullptr) {
++      fclose(out_);
++      out_ = nullptr;
++    }
++  }
++
++ private:
++  struct Proc {
++    uint64_t rss = 0, hwm = 0;
++  };
++
++  static Proc ReadProc() {
++    Proc p;
++    FILE* f = fopen("/proc/self/status", "r");
++    if (f == nullptr) return p;
++    char line[256];
++    while (fgets(line, sizeof(line), f) != nullptr) {
++      unsigned long long kb = 0;
++      if (sscanf(line, "VmRSS: %llu kB", &kb) == 1) p.rss = kb * 1024;
++      else if (sscanf(line, "VmHWM: %llu kB", &kb) == 1) p.hwm = kb * 1024;
++    }
++    fclose(f);
++    return p;
++  }
++
++  static uint64_t JeStat(const char* name) {
++#ifdef ROCKSDB_JEMALLOC
++    size_t v = 0, sz = sizeof(v);
++    if (mallctl(name, &v, &sz, nullptr, 0) == 0) return v;
++#else
++    (void)name;
++#endif
++    return 0;
++  }
++
++  static void JeRefresh() {
++#ifdef ROCKSDB_JEMALLOC
++    uint64_t epoch = 1;
++    size_t sz = sizeof(epoch);
++    mallctl("epoch", &epoch, &sz, &epoch, sz);
++#endif
++  }
++
++  uint64_t DbProperty(const char* name) const {
++    uint64_t v = 0;
++    if (db_ != nullptr && db_->GetIntProperty(name, &v)) return v;
++    return 0;
++  }
++
++  void Emit(const char* tag) {
++    if (out_ == nullptr) return;
++    JeRefresh();
++    const Proc proc = ReadProc();
++    const uint64_t allocated = JeStat("stats.allocated");
++    const uint64_t active = JeStat("stats.active");
++    const uint64_t resident = JeStat("stats.resident");
++    const uint64_t retained = JeStat("stats.retained");
++    ROCKSDB_NAMESPACE::VirtualSSTRegistry::HeapUsage u;
++    if (registry_ != nullptr) u = registry_->GetHeapUsage();
++    const uint64_t cache = DbProperty("rocksdb.block-cache-usage");
++    const uint64_t memtables = DbProperty("rocksdb.cur-size-all-mem-tables");
++    const uint64_t descriptors = u.Total();
++    // Live allocations the named buckets do not cover: generation and sort
++    // buffers, materialization buffers, VersionSet state, everything else.
++    const uint64_t named = descriptors + cache + memtables;
++    const uint64_t other_live = allocated > named ? allocated - named : 0;
++    std::string phase;
++    {
++      std::lock_guard<std::mutex> lk(mu_);
++      phase = phase_;
++    }
++    const uint64_t now =
++        ROCKSDB_NAMESPACE::SystemClock::Default()->NowMicros();
++    std::lock_guard<std::mutex> wl(write_mu_);
++    fprintf(out_,
++            "{\"t_ms\":%.1f,\"phase\":\"%s\",\"tag\":\"%s\""
++            ",\"rss\":%" PRIu64 ",\"hwm\":%" PRIu64
++            ",\"je_allocated\":%" PRIu64 ",\"je_active\":%" PRIu64
++            ",\"je_resident\":%" PRIu64 ",\"je_retained\":%" PRIu64
++            ",\"files\":%" PRIu64 ",\"plr_segment_bytes\":%" PRIu64
++            ",\"kmv_sample_bytes\":%" PRIu64 ",\"kmv_bucket_bytes\":%" PRIu64
++            ",\"descriptor_object_bytes\":%" PRIu64 ",\"registry_index_bytes\":%" PRIu64
++            ",\"descriptor_total\":%" PRIu64 ",\"block_cache\":%" PRIu64
++            ",\"memtables\":%" PRIu64 ",\"other_live\":%" PRIu64
++            ",\"named_live\":%" PRIu64 ",\"rss_minus_allocated\":%" PRId64
++            ",\"base_rss\":%" PRIu64 ",\"base_allocated\":%" PRIu64
++            ",\"base_resident\":%" PRIu64 ",\"base_cache\":%" PRIu64
++            ",\"base_memtables\":%" PRIu64 ",\"rss_delta\":%" PRId64 "}\n",
++            (now - start_us_) / 1000.0, phase.c_str(), tag, proc.rss, proc.hwm,
++            allocated, active, resident, retained, u.files, u.plr_segment_bytes,
++            u.kmv_sample_bytes, u.kmv_bucket_bytes, u.descriptor_bytes,
++            u.index_bytes, descriptors, cache, memtables, other_live, named,
++            static_cast<int64_t>(proc.rss) - static_cast<int64_t>(allocated),
++            base_rss_, base_allocated_, base_resident_, base_cache_,
++            base_memtables_,
++            static_cast<int64_t>(proc.rss) - static_cast<int64_t>(base_rss_));
++    fflush(out_);
++  }
++
++  void Loop() {
++    for (;;) {
++      std::unique_lock<std::mutex> lk(mu_);
++      cv_.wait_for(lk, std::chrono::milliseconds(interval_ms_),
++                   [this] { return stop_; });
++      const bool stop = stop_;
++      lk.unlock();
++      if (stop) return;
++      Emit("sample");
++    }
++  }
++
++  std::string path_;
++  uint64_t interval_ms_;
++  const ROCKSDB_NAMESPACE::VirtualSSTRegistry* registry_;
++  ROCKSDB_NAMESPACE::DB* db_;
++  FILE* out_ = nullptr;
++  uint64_t start_us_ = 0;
++  std::thread thread_;
++  std::mutex mu_;
++  std::mutex write_mu_;
++  std::condition_variable cv_;
++  bool stop_ = false;
++  std::string phase_ = "init";
++  uint64_t base_rss_ = 0, base_allocated_ = 0, base_resident_ = 0;
++  uint64_t base_cache_ = 0, base_memtables_ = 0;
++};
++
+ // Reservation bitmap for --vcomp_global_unique_keys.
+ //
+ // A trace whose keys are all distinct must materialize a globally distinct key
+@@ -6064,7 +6270,17 @@ class Benchmark {
+     const bool membership_drives_keys =
+         membership != nullptr && !use_load_trace;
+     KeyMembership* const ingest_membership = membership.get();
++    std::unique_ptr<VCompMemoryProfiler> mem_profile;
++    if (!FLAGS_vcomp_memory_profile_out.empty()) {
++      mem_profile = std::make_unique<VCompMemoryProfiler>(
++          FLAGS_vcomp_memory_profile_out,
++          FLAGS_vcomp_memory_profile_interval_ms, registry, db_.db);
++    }
++    auto phase_mark = [&](const char* name) {
++      if (mem_profile != nullptr) mem_profile->SetPhase(name);
++    };
+     // Calibration is mandatory loading work, included in Phase 1 and Total.
++    phase_mark("calibration");
+     auto phase1_start = FLAGS_env->NowMicros();
+     const Options materialization_options = VirtualMaterializationOptions();
+     {
+@@ -6903,6 +7119,7 @@ class Benchmark {
+     auto foreground_end = FLAGS_env->NowMicros();
+ 
+     auto phase1_end = foreground_end;
++    phase_mark("phase1_end");
+     uint64_t phase1_total_us = phase1_end - phase1_start;
+     double phase1_secs = phase1_total_us / 1e6;
+     uint64_t non_keygen_accounted_us =
+@@ -7059,6 +7276,7 @@ class Benchmark {
+     // ── Final L0 drain ──
+     // Foreground is done, so no more virtual L0 files will arrive. Lower the
+     // file-count trigger to 1 so the tail can drain through the normal picker.
++    phase_mark("l0_drain");
+     fprintf(stderr, "FillVirtual: draining residual L0...\n");
+     auto drain_start = FLAGS_env->NowMicros();
+     db_.db->SetOptions({{"level0_file_num_compaction_trigger", "1"}});
+@@ -7108,6 +7326,7 @@ class Benchmark {
+         l0_window_after_drain.refill_us / 1e6,
+         l0_window_after_drain.log_apply_us / 1e6);
+ 
++    phase_mark("materialize");
+     // Freeze BG compaction so Phase 2 sees a stable registry/version snapshot.
+     // Without this, BG can re-fire virtual compactions during Phase 2's
+     // parallel SST write window (~3s), mutating the registry and the version
+@@ -7986,6 +8205,7 @@ class Benchmark {
+                    kInvalidBlobFileNumber, 0, 0, epoch, "", "",
+                    UniqueId64x2{}, 0, res.tail_size, true);
+     }
++    phase_mark("version_edit");
+     {
+       Status s = db_impl->InstallVirtualCompactionMaterialization(&edit);
+       ReadOptions ro;

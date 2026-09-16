@@ -1,0 +1,75 @@
+{
+  "f2load": {
+    "arm": "plr128_kmv512",
+    "axis": "plr",
+    "baseline_rss": 284065792,
+    "binary_sha256": "a04221e7076cf3030b4b3965494be5c8bbebcd8b7cbebcd8b8f4e7efbed1da0e",
+    "case_id": "f2load_1kb",
+    "dataset_gib": 1000,
+    "db_dir": "/work/vcomp/exp/paramsweep_260916/plr128_kmv512",
+    "elapsed_sec": 49.90299916267395,
+    "final_sst_bytes": 854335802893,
+    "final_sst_count": 13770,
+    "key_bytes": 24,
+    "kmv_range_buckets": 8,
+    "kmv_samples": 512,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 224
+      },
+      "2": {
+        "files": 44,
+        "size_mib": 2482
+      },
+      "3": {
+        "files": 436,
+        "size_mib": 25547
+      },
+      "4": {
+        "files": 4066,
+        "size_mib": 255806
+      },
+      "5": {
+        "files": 9221,
+        "size_mib": 530700
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "load_extra": {
+      "plr_error_bound": 128,
+      "vcomp_exact_membership": true,
+      "vcomp_exact_membership_max_mb": 1024,
+      "vcomp_memory_profile_interval_ms": 100,
+      "vcomp_memory_profile_out": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paramsweep_260916/plr128_kmv512/profile.jsonl"
+    },
+    "load_protocol": "fillvirtual_waitforcompaction",
+    "loading_min": 0.8317166527112325,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paramsweep_260916/plr128_kmv512",
+    "logical_input_bytes": 1073741824000,
+    "num_keys": 1048576000,
+    "peak_descriptor_total": 30385392,
+    "peak_kmv_bucket_bytes": 7050240,
+    "peak_kmv_sample_bytes": 9015584,
+    "peak_other_live": 554103344,
+    "peak_phase": "materialize",
+    "peak_plr_segment_bytes": 9582496,
+    "peak_rss_hwm": 1081966592,
+    "peak_rss_kb": 1056608,
+    "peak_rss_sampled": 1081438208,
+    "plr_error_bound": 128,
+    "repetitions": 1,
+    "samples": 432,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paramsweep_260916/plr128_kmv512/db_identity.json",
+    "system": "f2load",
+    "value_bytes": 1000,
+    "wall_sec": 51.3
+  }
+}

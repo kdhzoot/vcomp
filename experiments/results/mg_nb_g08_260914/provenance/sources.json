@@ -1,0 +1,55 @@
+{
+  "f2load": {
+    "arm": "g08",
+    "binary_sha256": "a04221e7076cf3030b4b3965494be5c8bbebcd8b7cbebcd8b8f4e7efbed1da0e",
+    "case_id": "f2load_1kb",
+    "dataset_gib": 1000,
+    "db_dir": "/work/vcomp/exp/f2band_260914_nb/g08",
+    "elapsed_sec": 149.42813372612,
+    "final_sst_bytes": 862372638357,
+    "final_sst_count": 13801,
+    "key_bytes": 24,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 3,
+        "size_mib": 151
+      },
+      "2": {
+        "files": 46,
+        "size_mib": 2539
+      },
+      "3": {
+        "files": 441,
+        "size_mib": 25570
+      },
+      "4": {
+        "files": 4083,
+        "size_mib": 255715
+      },
+      "5": {
+        "files": 9228,
+        "size_mib": 538448
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "load_extra": {},
+    "load_protocol": "fillvirtual_waitforcompaction",
+    "loading_min": 2.4904688954353333,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/mixgraph_pairs_260914/g08",
+    "logical_input_bytes": 1073741824000,
+    "num_keys": 1048576000,
+    "peak_rss_kb": 1261700,
+    "repetitions": 1,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/mixgraph_pairs_260914/g08/db_identity.json",
+    "system": "f2load",
+    "value_bytes": 1000,
+    "wall_sec": 151.5
+  }
+}

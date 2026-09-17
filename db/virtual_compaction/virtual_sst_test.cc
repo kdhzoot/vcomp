@@ -44,23 +44,27 @@ class ScopedEnvVar {
   bool had_old_value_ = false;
 };
 
-VirtualSST MakeVirtualSST(std::vector<uint64_t> keys, int level = 0,
-                          size_t kmv_samples = 64,
+VirtualSST MakeVirtualSST(std::vector<uint64_t> keys, size_t kmv_samples = 64,
                           size_t kmv_range_buckets = 4) {
   std::sort(keys.begin(), keys.end());
   keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
 
   VirtualSST vsst;
   vsst.plr_model = GreedyPLRFit(keys, 0.0);
-  vsst.kmv_sketch = BuildKMVSketchFromSortedKeys(keys, kmv_samples);
   vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(
       keys, kmv_samples, kmv_range_buckets);
   vsst.key_min = keys.empty() ? 0 : keys.front();
   vsst.key_max = keys.empty() ? 0 : keys.back();
   vsst.num_entries = keys.size();
-  vsst.level = level;
   vsst.size_bytes = keys.size();
   return vsst;
+}
+
+bool AllRangesComplete(const VirtualSST& vsst) {
+  for (const auto& range : vsst.kmv_ranges) {
+    if (!range.sketch.complete) return false;
+  }
+  return !vsst.kmv_ranges.empty();
 }
 
 std::vector<uint64_t> KeyRange(uint64_t begin, uint64_t end) {
@@ -69,20 +73,39 @@ std::vector<uint64_t> KeyRange(uint64_t begin, uint64_t end) {
   return keys;
 }
 
-TEST(VirtualSSTTest, KMVRuntimeSwitch) {
-  {
-    ScopedEnvVar enabled("VCOMP_KMV_ENABLED", "true");
-    ASSERT_TRUE(VirtualSSTKMVEnabled());
+TEST(VirtualSSTTest, SampleFingerprintRecoversItsKey) {
+  for (uint64_t key : {uint64_t{0}, uint64_t{1}, uint64_t{1} << 63,
+                       std::numeric_limits<uint64_t>::max()}) {
+    ASSERT_EQ(key, KMVUnhash(KMVHash(key)));
   }
-  {
-    ScopedEnvVar disabled("VCOMP_KMV_ENABLED", "off");
-    ASSERT_FALSE(VirtualSSTKMVEnabled());
+  for (uint64_t key = 0; key < 100000; ++key) {
+    ASSERT_EQ(key, KMVUnhash(KMVHash(key)));
   }
+  const auto vsst = MakeVirtualSST(KeyRange(0, 64));
+  ASSERT_FALSE(vsst.kmv_ranges.empty());
+  for (const auto& range : vsst.kmv_ranges) {
+    for (const auto& sample : range.sketch.samples) {
+      ASSERT_GE(sample.key(), range.key_min);
+      ASSERT_LE(sample.key(), range.key_max);
+    }
+  }
+}
+
+TEST(VirtualSSTTest, SampleBudgetIsSplitAcrossRangesOnly) {
+  ScopedEnvVar samples("VCOMP_KMV_SAMPLES", "512");
+  ScopedEnvVar buckets("VCOMP_KMV_RANGE_BUCKETS", "8");
+  const auto vsst = MakeVirtualSST(KeyRange(0, 100000), 0, 0);
+  ASSERT_EQ(8U, vsst.kmv_ranges.size());
+  size_t total = 0;
+  for (const auto& range : vsst.kmv_ranges) {
+    ASSERT_LE(range.sketch.samples.size(), 64U);
+    total += range.sketch.samples.size();
+  }
+  ASSERT_EQ(512U, total);
 }
 
 TEST(VirtualSSTTest, PhysicalSizeModelControlsSplitAndRegistration) {
   auto input = MakeVirtualSST(KeyRange(0, 100));
-  ASSERT_OK(CertifyVirtualSST(&input));
   SSTSizeModel physical;
   ASSERT_TRUE(physical.AddCalibration(10, 1100, 20, 2100));
   const auto output = SplitIntoSSTs(input.plr_model, 100, 1000, 50, 0, 99, 1,
@@ -111,7 +134,6 @@ TEST(VirtualSSTTest, PhysicalSizeModelControlsSplitAndRegistration) {
 
 TEST(VirtualSSTTest, PhysicalBytesDriveGrandparentThreshold) {
   auto input = MakeVirtualSST(KeyRange(0, 100));
-  ASSERT_OK(CertifyVirtualSST(&input));
   SSTSizeModel physical;
   ASSERT_TRUE(physical.AddCalibration(10, 1100, 20, 2100));
   const auto output = SplitIntoSSTs(input.plr_model, 100, 1000, 50, 0, 99, 1,
@@ -130,8 +152,8 @@ TEST(VirtualSSTTest, CompleteKMVSketchDeduplicatesExactUnion) {
   auto right = MakeVirtualSST(KeyRange(16, 48));
   std::vector<const VirtualSST*> inputs{&left, &right};
 
-  ASSERT_TRUE(left.kmv_sketch.complete);
-  ASSERT_TRUE(right.kmv_sketch.complete);
+  ASSERT_TRUE(AllRangesComplete(left));
+  ASSERT_TRUE(AllRangesComplete(right));
   ASSERT_EQ(48U, EstimateKMVUnionEntries(inputs, 64, 64));
 
   uint64_t merged_entries = 0;
@@ -148,12 +170,12 @@ TEST(VirtualSSTTest, CompleteKMVSketchDeduplicatesExactUnion) {
 }
 
 TEST(VirtualSSTTest, IncompleteKMVEstimateIsBoundedByInputEntries) {
-  auto left = MakeVirtualSST(KeyRange(0, 1000), 0, 64, 8);
-  auto right = MakeVirtualSST(KeyRange(500, 1500), 0, 64, 8);
+  auto left = MakeVirtualSST(KeyRange(0, 1000), 64, 8);
+  auto right = MakeVirtualSST(KeyRange(500, 1500), 64, 8);
   std::vector<const VirtualSST*> inputs{&left, &right};
 
-  ASSERT_FALSE(left.kmv_sketch.complete);
-  ASSERT_FALSE(right.kmv_sketch.complete);
+  ASSERT_FALSE(AllRangesComplete(left));
+  ASSERT_FALSE(AllRangesComplete(right));
   const uint64_t estimate = EstimateKMVUnionEntries(inputs, 2000, 64);
   ASSERT_GT(estimate, 0U);
   ASSERT_LE(estimate, 2000U);
@@ -170,7 +192,6 @@ TEST(VirtualSSTTest, SplitPreservesEntryCountAndOrderedRanges) {
   ASSERT_EQ(4U, outputs.size());
   uint64_t total_entries = 0;
   for (size_t i = 0; i < outputs.size(); ++i) {
-    ASSERT_EQ(1, outputs[i].level);
     ASSERT_LE(outputs[i].num_entries, 25U);
     ASSERT_LE(outputs[i].key_min, outputs[i].key_max);
     if (i > 0) {
@@ -208,7 +229,7 @@ TEST(VirtualSSTTest, MaterializedKeysAreStrictlyIncreasingAndBounded) {
 
 TEST(VirtualSSTRegistryTest, HandleRemainsValidAfterRemoval) {
   VirtualSSTRegistry registry;
-  registry.Register(7, MakeVirtualSST(KeyRange(10, 20), 2));
+  registry.Register(7, MakeVirtualSST(KeyRange(10, 20)));
 
   auto handle = registry.Lookup(7);
   ASSERT_NE(nullptr, handle);
@@ -217,7 +238,6 @@ TEST(VirtualSSTRegistryTest, HandleRemainsValidAfterRemoval) {
   ASSERT_EQ(nullptr, registry.Lookup(7));
   ASSERT_EQ(10U, handle->key_min);
   ASSERT_EQ(19U, handle->key_max);
-  ASSERT_EQ(2, handle->level);
 }
 
 TEST(VirtualSSTRegistryTest, SnapshotIsStableAcrossReplacement) {
@@ -226,7 +246,7 @@ TEST(VirtualSSTRegistryTest, SnapshotIsStableAcrossReplacement) {
   auto snapshot = registry.GetSnapshot();
   ASSERT_EQ(1U, snapshot.size());
 
-  registry.Register(11, MakeVirtualSST(KeyRange(100, 120), 3));
+  registry.Register(11, MakeVirtualSST(KeyRange(100, 120)));
   auto current = registry.Lookup(11);
   ASSERT_NE(nullptr, current);
   ASSERT_EQ(100U, current->key_min);

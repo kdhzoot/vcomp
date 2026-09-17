@@ -1,0 +1,75 @@
+{
+  "f2load": {
+    "arm": "plr8_kmv1024",
+    "axis": "kmv",
+    "baseline_rss": 284073984,
+    "binary_sha256": "a04221e7076cf3030b4b3965494be5c8bbebcd8b7cbebcd8b8f4e7efbed1da0e",
+    "case_id": "f2load_1kb",
+    "dataset_gib": 1000,
+    "db_dir": "/work/vcomp/exp/paramsweep_260915/plr8_kmv1024",
+    "elapsed_sec": 293.6236536502838,
+    "final_sst_bytes": 833769690336,
+    "final_sst_count": 13367,
+    "key_bytes": 24,
+    "kmv_range_buckets": 8,
+    "kmv_samples": 1024,
+    "levels": {
+      "0": {
+        "files": 0,
+        "size_mib": 0
+      },
+      "1": {
+        "files": 4,
+        "size_mib": 241
+      },
+      "2": {
+        "files": 46,
+        "size_mib": 2532
+      },
+      "3": {
+        "files": 436,
+        "size_mib": 25542
+      },
+      "4": {
+        "files": 4087,
+        "size_mib": 255794
+      },
+      "5": {
+        "files": 8794,
+        "size_mib": 511035
+      },
+      "6": {
+        "files": 0,
+        "size_mib": 0
+      }
+    },
+    "load_extra": {
+      "plr_error_bound": 8,
+      "vcomp_exact_membership": true,
+      "vcomp_exact_membership_max_mb": 1024,
+      "vcomp_memory_profile_interval_ms": 100,
+      "vcomp_memory_profile_out": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paramsweep_260915/plr8_kmv1024/profile.jsonl"
+    },
+    "load_protocol": "fillvirtual_waitforcompaction",
+    "loading_min": 4.893727560838063,
+    "log_dir": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paramsweep_260915/plr8_kmv1024",
+    "logical_input_bytes": 1073741824000,
+    "num_keys": 1048576000,
+    "peak_descriptor_total": 378192768,
+    "peak_kmv_bucket_bytes": 6843776,
+    "peak_kmv_sample_bytes": 19926768,
+    "peak_other_live": 579295656,
+    "peak_phase": "materialize",
+    "peak_plr_segment_bytes": 346736736,
+    "peak_rss_hwm": 1549266944,
+    "peak_rss_kb": 1512956,
+    "peak_rss_sampled": 1548668928,
+    "plr_error_bound": 8,
+    "repetitions": 1,
+    "samples": 2838,
+    "source_identity_file": "/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_loads/paramsweep_260915/plr8_kmv1024/db_identity.json",
+    "system": "f2load",
+    "value_bytes": 1000,
+    "wall_sec": 295.1
+  }
+}

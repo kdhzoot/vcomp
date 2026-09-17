@@ -40,10 +40,11 @@ both the reported Phase 1/Total and enclosing db_bench/process wall time include
 calibration. `fillvirtual` explicitly requires one outer benchmark coordinator
 (`--threads=1`); phase-1 shards and materialization workers remain parallel.
 
-`--vcomp_sst_size_model=logical` preserves the old byte estimate for controlled
-comparisons with this same source version. It does not revert other incoming
-changes (notably the default-on discrete-CDF path). A rebuilt binary is not the
-historical binary, regardless of this flag.
+Calibration is now the only size model. `--vcomp_sst_size_model` and its
+`logical` alternative (`entries * (key + value)`) were removed on 2026-09-14
+together with the discrete-CDF path; the binaries that carried both are the ones
+recorded under `experiments/results/`, and a rebuilt binary is not the
+historical binary.
 
 ## Limits
 

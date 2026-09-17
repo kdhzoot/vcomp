@@ -81,10 +81,9 @@ std::vector<r::VirtualSST> Describe(const std::vector<Keys>& inputs, double erro
   for (const auto& input : inputs) {
     r::VirtualSST descriptor{};
     descriptor.key_min = input.front(); descriptor.key_max = input.back();
-    descriptor.num_entries = input.size(); descriptor.level = 0;
+    descriptor.num_entries = input.size();
     descriptor.size_bytes = input.size();
     descriptor.plr_model = r::GreedyPLRFit(input, error);
-    descriptor.kmv_sketch = r::BuildKMVSketchFromSortedKeys(input, samples);
     descriptor.kmv_ranges = r::BuildKMVRangeSketchesFromSortedKeys(input, samples, 8);
     outputs.push_back(std::move(descriptor));
   }
@@ -132,17 +131,15 @@ Keys StreamReference(const r::VirtualSST& descriptor) {
   }
   return keys;
 }
-std::vector<r::VirtualSST> TrimSameLevel(std::vector<r::VirtualSST> outputs) {
+std::vector<r::VirtualSST> TrimSameLevel(std::vector<r::VirtualSST> outputs, int level = 1) {
+  if (level == 0) return outputs;  // L0 files may overlap.
   std::sort(outputs.begin(), outputs.end(), [](const auto& a, const auto& b) {
-    if (a.level != b.level) return a.level < b.level;
     if (a.key_min != b.key_min) return a.key_min < b.key_min;
     return a.key_max < b.key_max;
   });
-  bool previous = false; int level = -1; uint64_t maximum = 0;
+  bool previous = false; uint64_t maximum = 0;
   for (auto& output : outputs) {
-    if (!previous || output.level != level || output.level == 0) {
-      level = output.level; maximum = output.key_max; previous = output.level != 0; continue;
-    }
+    if (!previous) { maximum = output.key_max; previous = true; continue; }
     if (output.key_min <= maximum) output.key_min = maximum == UINT64_MAX ? maximum : maximum+1;
     maximum = std::max(maximum, output.key_max);
   }
@@ -204,7 +201,7 @@ void Pipeline(const std::string& name,size_t samples,double error,bool grandpare
   auto inputs=Dataset(name);const auto truth=Union(inputs);
   auto descriptors=Describe(inputs,error,samples);const auto pointers=Pointers(descriptors);
   uint64_t sum=0;size_t segments=0;bool complete=true;
-  for(const auto& d:descriptors){sum+=d.num_entries;segments+=d.plr_model.NumSegments();complete &= d.kmv_sketch.complete;}
+  for(const auto& d:descriptors){sum+=d.num_entries;segments+=d.plr_model.NumSegments();complete &= r::DescriptorSketch(d).complete;}
   const auto union_estimate=r::EstimateKMVUnionEntries(pointers,sum,samples);
   uint64_t target=0;auto merged=r::NWayMergeKMVRangeAware(pointers,&target,samples);
   const auto oracle=r::GreedyPLRFit(truth,error);
@@ -227,7 +224,7 @@ void Pipeline(const std::string& name,size_t samples,double error,bool grandpare
     if(truth.size()<=5 && !model.Empty())row.Number("first_segment_slope",model.Segments().front().slope);
     MaterializedMetrics(&row,"independent_inputs",descriptors,truth);
     r::VirtualSST unsplit{};unsplit.plr_model=model;unsplit.key_min=truth.front();unsplit.key_max=truth.back();
-    unsplit.num_entries=current_target;unsplit.level=1;
+    unsplit.num_entries=current_target;
     MaterializedMetrics(&row,"unsplit",{unsplit},truth);
     MaterializedMetrics(&row,"raw_split",outputs,truth);
     MaterializedMetrics(&row,"trimmed_split",TrimSameLevel(outputs),truth);
@@ -242,7 +239,7 @@ void OffsetSeries(const std::string& name,size_t samples) {
     uint64_t sum=0;
     for(const auto& input:inputs) {
       r::VirtualSST d{};d.key_min=input.front();d.key_max=input.back();d.num_entries=input.size();
-      d.kmv_sketch=r::BuildKMVSketchFromSortedKeys(input,samples);sum+=input.size();descriptors.push_back(std::move(d));
+      sum+=input.size();descriptors.push_back(std::move(d));
     }
     const auto pointers=Pointers(descriptors);const auto estimate=r::EstimateKMVUnionEntries(pointers,sum,samples);
     Record row;row.Text("record_type","single_merge_hash_offset");row.Text("case",name);

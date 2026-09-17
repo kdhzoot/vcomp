@@ -1,0 +1,14 @@
+plr_error_bound	kmv_samples	kmv_range_buckets	loading_sec	speedup_vs_baseline	final_db_gb	db_size_error_pct	final_sst_count	sst_count_error_pct	peak_rss_gb	plr_memory_mb	kmv_memory_mb	descriptor_total_mb	ycsb_c_ops_per_sec	ycsb_c_avg_latency_us	ycsb_c_positive_lookup_pct	ycsb_c_filter_checks_per_lookup	ycsb_c_cache_hit_fraction	ycsb_measured	source_run
+baseline			3528.0	1.00	823.9	0.00	13498	0.00										no	param_sensitivity_figure.tsv
+2	512	8	1015.0	3.5	852.4	3.46	13792	2.18	4.543	3076.4	16.6	3097.7	1520437	31.57	60.10	3.9206	0.6263	yes	paramsweep_260915
+4	512	8	378.1	9.3	851.0	3.29	13740	1.79	2.434	1121.9	16.7	1143.3	1384182	34.68	60.07	4.1427	0.6257	yes	paramsweep_260915
+8	512	8	144.8	24.4	850.1	3.18	13719	1.64	1.613	346.8	16.6	368.1	1459398	32.89	60.05	3.8916	0.6264	yes	paramsweep_260915
+16	512	8	72.5	48.7	850.7	3.25	13754	1.90	1.307	101.3	16.7	122.8	1417006	33.87	60.10	4.0017	0.6355	yes	paramsweep_260915
+32	512	8	53.4	66.1	850.4	3.22	13733	1.74	1.158	32.4	16.8	53.9	1597976	30.04	60.10	3.6680	0.6254	yes	paramsweep_260915
+64	512	8	52.4	67.3	853.0	3.53	13734	1.75	1.106	14.2	16.0	35.0						no	paramsweep_260916
+128	512	8	49.9	70.7	854.3	3.69	13770	2.02	1.082	9.6	16.1	30.4						no	paramsweep_260916
+256	512	8	48.5	72.8	854.0	3.65	13829	2.45	1.067	8.5	15.8	29.0						no	paramsweep_260916
+512	512	8	51.1	69.1	853.4	3.59	13803	2.26	1.069	8.4	15.9	29.1						no	paramsweep_260916
+1024	512	8	47.5	74.3	853.1	3.55	13720	1.64	1.105	8.4	16.1	29.2						no	paramsweep_260916
+2048	512	8	47.9	73.7	854.6	3.73	13815	2.35	1.126	8.4	16.1	29.3						no	paramsweep_260916
+4096	512	8	49.2	71.6	851.8	3.38	13731	1.73	1.087	8.4	16.2	29.3						no	paramsweep_260916

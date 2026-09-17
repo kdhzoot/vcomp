@@ -32,15 +32,12 @@ RUN4 = ARTIFACTS / 'fidelity_100gib_20260908_discrete_run4'
 PILOT_SOURCE = ARTIFACTS / 'fidelity_discrete_20260908_pilot_candidate1'
 PREPARE = ARTIFACTS / 'real_input_accuracy_20260908_prepare'
 CAPTURE_MARKER = 'VCOMP_ACCURACY_CAPTURE_FAILED'
-RUNTIME = dict(VCOMP_KMV_ENABLED='1', VCOMP_BG_COMMIT_BATCH_MAX='16',
-               VCOMP_BG_COMMIT_DELAY_US='100', VCOMP_DISCRETE_CDF_ENABLED='1')
-BASE_CONFIGS = [dict(name='legacy_512_8_e8', variant='legacy', samples=512,
-                     buckets=8, plr_error=8),
-                dict(name='raw_512_8_e8', variant='discrete_raw', samples=512,
-                     buckets=8, plr_error=8),
-                dict(name='certified_512_8_e8', variant='discrete_certified', samples=512,
+RUNTIME = dict(VCOMP_BG_COMMIT_BATCH_MAX='16', VCOMP_BG_COMMIT_DELAY_US='100')
+# One merge representation since 2026-09-14; the legacy/discrete_raw/
+# discrete_certified A-B that this runner used to drive no longer exists.
+BASE_CONFIGS = [dict(name='plr_512_8_e8', variant='plr', samples=512,
                      buckets=8, plr_error=8)]
-SWEEP_CONFIGS = [dict(BASE_CONFIGS[2], name='certified_%s_%s_e%s' % (s, b, e),
+SWEEP_CONFIGS = [dict(BASE_CONFIGS[0], name='plr_%s_%s_e%s' % (s, b, e),
                       samples=s, buckets=b, plr_error=e)
                  for s, b, e in [(1024, 8, 8), (2048, 8, 8), (4096, 8, 8),
                                  (512, 4, 8), (512, 16, 8), (512, 8, 4), (512, 8, 1)]]
@@ -285,7 +282,7 @@ class Campaign:
             return
         require(not self.args.resume, 'nothing to resume')
         require(not self.work.exists(), 'work root exists; refusing reuse')
-        require(self.args.replay_binary and self.args.legacy_replay_binary, 'both replay binaries are required')
+        require(self.args.replay_binary, 'the replay binary is required')
         build = read_json(PREPARE / 'build_release/manifest.json')
         require(build['exit_code'] == 0 and build['source_unchanged'] is True, 'collector release build not validated')
         collector_fixture = read_json(PREPARE / 'fixture_validation.json')
@@ -298,8 +295,7 @@ class Campaign:
         require(sha(capture) == build['binary_sha256']['db_bench'], 'collector binary does not match release manifest')
         for name, digest in build['source_sha256'].items():
             require(sha(REPO / name) == digest, 'collector build source changed: ' + name)
-        sources = dict(capture_db_bench=capture, replay=Path(self.args.replay_binary).resolve(),
-                       replay_legacy=Path(self.args.legacy_replay_binary).resolve())
+        sources = dict(capture_db_bench=capture, replay=Path(self.args.replay_binary).resolve())
         sources.update({name: RUN4 / 'bin' / name for name in
                         ('clean_db_bench', 'db_fidelity_check', 'verify_load_trace', 'generate_load_trace_fast')})
         old_manifest = read_json(RUN4 / 'manifest.json')
@@ -308,13 +304,12 @@ class Campaign:
             if name in old_manifest['binary_sha256']:
                 require(sha(source) == old_manifest['binary_sha256'][name], 'run4 binary changed: ' + name)
         replay_builds = [read_json(path) for path in self.args.replay_provenance
-                         if 'legacy_source_sha256' in read_json(path)]
+                         if 'binary_sha256' in read_json(path) and 'source_sha256' in read_json(path)]
         require(len(replay_builds) == 1, 'supply the qualified replay build manifest via --replay-provenance')
         replay_build = replay_builds[0]
         require(all(code == 0 for code in replay_build['exit_codes'].values()) and
                 replay_build['library_unchanged'] is True, 'replay build not validated')
-        require(sha(sources['replay']) == replay_build['binary_sha256']['replay'] and
-                sha(sources['replay_legacy']) == replay_build['binary_sha256']['replay_archived_legacy'],
+        require(sha(sources['replay']) == replay_build['binary_sha256']['replay'],
                 'replay binary differs from supplied build manifest')
         require(sha(REPO / 'tools/virtual_compaction_replay.cc') == replay_build['source_sha256'],
                 'replay source changed since build')
@@ -324,7 +319,7 @@ class Campaign:
                           if read_json(path).get('status') == 'PASS' and 'runs' in read_json(path)]
         require(len(qualifications) == 1, 'supply the replay PASS validation via --replay-provenance')
         qualification = qualifications[0]
-        for name in ('replay', 'replay_legacy'):
+        for name in ('replay',):
             source = sources[name]
             require(qualification['binary_sha256'].get(str(source)) == sha(source),
                     'replay validation does not match selected binary: ' + name)
@@ -357,14 +352,6 @@ class Campaign:
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
             source_hashes[name] = sha(destination)
-        for name, digest in replay_build['legacy_source_sha256'].items():
-            source = Path(replay_build['legacy_source_path']) / name
-            require(sha(source) == digest, 'archived legacy source changed: ' + name)
-            archived_name = 'archived_legacy/' + name
-            destination = snapshot / archived_name
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, destination)
-            source_hashes[archived_name] = sha(destination)
         provenance = self.root / 'provenance'
         provenance.mkdir()
         for name in ('build_release/manifest.json', 'fixture_validation.json'):
@@ -382,7 +369,7 @@ class Campaign:
         self.manifest = dict(schema='real_input_accuracy_campaign_v1', created=now(),
                              config=self.fixed_config(), artifact_root=str(self.root), work_root=str(self.work),
                              runner_sha256=sha(__file__), binaries=binaries, source_sha256=source_hashes,
-                             source_provenance='release collector/current candidate plus separately frozen historical legacy replay',
+                             source_provenance='release collector and the current replay build',
                              trace_reuse='read-only symbolic links to independently verified frozen traces; no regeneration',
                              baseline='collector db_bench baseload with use_virtual_compaction=false; clean RocksDB only settle/reader',
                              interpretation='one matrix; accuracy experiment, not performance comparison; poor accuracy is not failure')
@@ -597,13 +584,13 @@ class Campaign:
         temp.mkdir(parents=True, exist_ok=True)
         output = evidence / 'result.json'
         evidence.mkdir(parents=True, exist_ok=True)
-        binary = self.bin / ('replay_legacy' if config['variant'] == 'legacy' else 'replay')
+        binary = self.bin / 'replay'
         argv = ['prlimit', '--as=' + str(self.args.replay_memory_gib * GIB), '--', binary,
                 '--manifest', job['manifest'], '--output', output, '--variant', config['variant'],
                 '--samples', config['samples'], '--buckets', config['buckets'], '--plr-error', config['plr_error'],
                 '--max-buffer-keys', self.args.max_buffer_keys, '--work-dir', temp]
-        env = dict(self.env, VCOMP_DISCRETE_CDF_ENABLED='0' if config['variant'] == 'legacy' else '1',
-                   VCOMP_KMV_SAMPLES=str(config['samples']), VCOMP_KMV_RANGE_BUCKETS=str(config['buckets']))
+        env = dict(self.env, VCOMP_KMV_SAMPLES=str(config['samples']),
+                   VCOMP_KMV_RANGE_BUCKETS=str(config['buckets']))
         self.process(argv, evidence / 'run', env=env, outputs=[output])
         result = read_json(output)
         require(result['status'] == 'ok', 'replay I/O or invariant failure: ' + str(output))
@@ -622,7 +609,7 @@ class Campaign:
                    total_input_unique_entries=job['total_input_unique_entries'],
                    actual_unique_entries=result['actual_unique_entries'], dedup=result['dedup'],
                    stages=result['stages'], invariants=result['invariants'],
-                   replay_provenance='archived_true_legacy' if config['variant'] == 'legacy' else 'current_candidate')
+                   replay_provenance='current_build')
         with self.lock:
             self.state['completed_replays'] += 1
         self.event('REPLAY_VALIDATED', phase + ':' + case_id + ':job%d:' % job['job'] + config['name'])
@@ -699,7 +686,7 @@ class Campaign:
                   'Trivial moves are separately inventoried. All captured input/output key IDs and their SHA256 hashes are retained.', '',
                   'Replay uses identical captured inputs and exact input-union oracles. Baseline uses the collector binary with '
                   '`use_virtual_compaction=false`; frozen clean RocksDB performs settling and strict final iteration. '
-                  'The legacy replay is a separate archived implementation; current modes use the current candidate.', '',
+                  'One merge representation: the PLR path. Every configuration uses the same replay build.', '',
                   'Job selection is smallest/lower-median/largest input-entry sum within each case and level pair. '
                   'The selected sample is not full replay coverage. Exclusions and every captured job appear in the inventories. '
                   'Pilot uses three initial variants; full adds seven independent one-parameter settings on the same jobs.', '',
@@ -740,7 +727,6 @@ def parse_args():
     parser.add_argument('--phase', choices=['pilot', 'all'], default='all')
     parser.add_argument('--capture-binary', default=str(REPO / 'db_bench'))
     parser.add_argument('--replay-binary')
-    parser.add_argument('--legacy-replay-binary')
     parser.add_argument('--replay-provenance', action='append', default=[])
     parser.add_argument('--capture-parallel', type=int, choices=range(1, 7), default=6)
     parser.add_argument('--replay-parallel', type=int, choices=range(1, 5), default=2)
@@ -764,7 +750,7 @@ def main():
         print(json.dumps(dict(action='plan_only_no_writes', artifact_root=str(campaign.root),
                               work_root=str(campaign.work), config=campaign.fixed_config(),
                               capture_binary=args.capture_binary, replay_binary=args.replay_binary,
-                              legacy_replay_binary=args.legacy_replay_binary), indent=2, sort_keys=True))
+                              ), indent=2, sort_keys=True))
         return
     if args.background:
         # Launcher evidence is separate, so failed preflight cannot overwrite an existing campaign.

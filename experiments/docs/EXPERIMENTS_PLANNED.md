@@ -6,6 +6,33 @@
 
 **2026-09-06 common Chapter 2/3 update:** Seven load states and twenty reads completed and were reflected in Figures 2(b), 4 and 5 and their prose. Use [PAPER_CHAPTER23_COMMON_RESULTS.md](PAPER_CHAPTER23_COMMON_RESULTS.md) for the current shared baseline. Earlier paper values below are historical for these comparisons. F2Load recovery/reads and the scaling/breakdown follow-ups remain deferred.
 
+## 2026-09-14: mixgraph on Ten Baseline and Ten No-Bitmap F2Load Loadings
+
+**Status:** queued and waiting (supervisor pid 4141734), behind the
+memory-overhead campaign's last cell. It starts by itself once no `db_bench`
+is running and that campaign's supervisor has exited; progress in
+`artifacts/queues/mixgraph_pairs_260914/STATUS.json`.
+
+Twenty mixgraph cells at the frozen YCSB settings (50 GiB cache, 48 threads,
+300 s), one per loading: the ten retained baseline DBs, each deep-copied
+immediately before it is measured and the copy deleted after, and ten fresh
+F2Load loadings made without the membership bitmap (the `f06`-`f15` series was
+deleted, so it is reloaded as `g01`-`g10`) measured on the loaded DB and then
+deleted. Each cell drains pending compaction with `waitforcompaction` before
+the statistics dump the compaction bytes are read from. The mixgraph
+parameters are this repository's existing prefix-dist command
+(`run_q3_read_workloads.sh:169`, the wiki's ZippyDB fit plus the `key_dist`
+pair) taken unchanged; the runner's dict is missing `key_dist_a`/`key_dist_b`,
+without which the key-range hotness model is fitted and then never consulted.
+Two consequences of the published fit to record with the results: mixgraph
+ignores `--value_size` and its Puts write ~36-byte values into the 1 KB
+dataset, and at the default `mix_max_scan_len` a seek reads ~570 entries, so
+the cells are scan-bandwidth-bound. Full protocol, arm
+table, required code changes and validation gates are in
+[PLAN_MIXGRAPH_PAIRS_260914.md](PLAN_MIXGRAPH_PAIRS_260914.md). This
+supersedes the mixgraph half of
+[PLAN_deepcopy_cu_mixgraph.md](PLAN_deepcopy_cu_mixgraph.md).
+
 ## 2026-09-11: Baseline Series Unification and Phase 1 Shard Sweep
 
 Two items left open by the 91 B scale-up, both blocking numbers that would
@@ -620,24 +647,35 @@ Open follow-up:
    ingestion, which is correct there, but it has not been run against the
    claimed-bitmap materialization.
 
-## Queued after the merge-representation comparison (2026-09-14)
+## Queued after the PLR-only consolidation (2026-09-14)
 
-1. **Decide the paper's merge representation.** Section 4 is written around PLR.
-   Measurements now show PLR only is not worse than the discrete CDF on either
-   distribution, so the PLR narrative can stand. What Section 4 cannot keep as
-   written is the claim that materialization inverts the PLR: it does not, and
-   the KMV witness mechanism that carries exact keys is undocumented.
-2. **Close the coverage gap** (0.48% uniform, 3.3% unique100). Same cause both
+Items 1 and 3 of the previous list are done: the merge representation is PLR
+only, and the descriptor shrank from 17,064 B of sketch to 4,608 B
+(`RESULTS.md` section 11). What remains:
+
+1. **Close the coverage gap** (0.48% uniform, 3.3% unique100). Same cause both
    times: per-file entry budgets in the deepest levels. A redistribution pass
    that gives a deep file more budget where unclaimed ids remain should close
-   it, and it only ever loses keys, so it is the whole remaining gap.
-3. **Shrink the descriptor.** The PLR segment vector is dead weight after
-   certification; `Cell` is 64 B of which 32 B is slice provenance only the
-   first and last cell of a slice need; `KMVSample` stores a key and its own
-   SplitMix64 hash, and that mixer is a bijection. Measure the cell-to-segment
-   ratio first - it decides which of these is worth doing.
+   it, and it only ever loses keys, so it is the whole remaining gap. This is
+   now the only known fidelity gap.
+2. **Re-run the 1 TB band on the consolidated build.** Sections 9 and 10 were
+   measured on the binary that still carried the discrete path. The
+   configuration those runs used is now the only configuration, so a repeat
+   should reproduce them; the point is to confirm the removal changed nothing
+   and to have the campaign's numbers come from the shipping code.
+3. **Fix Section 4 of the paper.** PLR now genuinely is the merge
+   representation, so the narrative can stand as written, with one correction:
+   materialization walks the segments with `Inverse`, and Table 1 should list
+   the KMV range sketches the descriptor actually carries.
 4. **Sweep `plr_error_bound`.** On uniform random input the segmentation tracks
    sampling noise rather than density structure, so a looser bound may cost
    little fidelity for a large memory saving. Section 5.6 already plans this
-   axis.
-
+   axis, and the PLR segments are now load-bearing, so the sweep measures a
+   real accuracy/memory trade-off rather than dead metadata.
+5. **Re-qualify the Section 5.4 campaign.** The tooling is restored and ported
+   (`RESULTS.md` section 11.4), and a 2 GB check gives 92% exact output-file
+   counts with a 0.80% median byte error. What the campaign still needs is fresh
+   provenance: `run_real_input_accuracy.py` gates on a collector release
+   manifest, a replay build manifest and a replay PASS validation, all of which
+   name the 2026-09-08 binaries. Rebuild those three against the consolidated
+   binary before the 100 GiB captures.

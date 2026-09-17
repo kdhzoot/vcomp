@@ -215,11 +215,12 @@ VCompKMVStats ComputeKMVStats(const std::vector<const VirtualSST*>& vssts) {
       stats.empty++;
       continue;
     }
-    const uint64_t samples = vsst->kmv_sketch.samples.size();
+    const KMVSketch whole = DescriptorSketch(*vsst);
+    const uint64_t samples = whole.samples.size();
     if (samples == 0) {
       stats.empty++;
     }
-    if (vsst->kmv_sketch.complete) {
+    if (whole.complete) {
       stats.complete++;
     }
     if (!have_samples) {
@@ -1478,12 +1479,10 @@ void CompactionJob::MaybeRecordVCompAccuracy() {
 
       VirtualSST vsst;
       vsst.plr_model = GreedyPLRFit(keys, db_options_.plr_error_bound);
-      vsst.kmv_sketch = BuildKMVSketchFromSortedKeys(keys);
       vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(keys);
       vsst.key_min = finfo.key_min;
       vsst.key_max = finfo.key_max;
       vsst.num_entries = finfo.entries;
-      vsst.level = level;
       vsst.size_bytes = finfo.size_bytes;
       input_vssts.push_back(std::move(vsst));
     }
@@ -1560,7 +1559,7 @@ void CompactionJob::MaybeRecordVCompAccuracy() {
     const auto& vsst = predicted_vssts[i];
     VCompAccuracyFile f;
     f.file_number = i;
-    f.level = vsst.level;
+    f.level = compaction->output_level();
     f.size_bytes = vsst.size_bytes;
     f.entries = vsst.num_entries;
     f.key_min = vsst.key_min;

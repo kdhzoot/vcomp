@@ -1,5 +1,4 @@
 // Offline replay of captured Put-only compactions. No RocksDB DB is opened.
-// VCOMP_REPLAY_ARCHIVED_LEGACY builds against the archived pre-discrete sources.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -75,7 +74,7 @@ std::string Array(const std::vector<Json>& rows) {
 }
 struct Options {
   fs::path capture, output, work;
-  std::string variant = "discrete_certified";
+  std::string variant = "plr";
   uint64_t samples = 512, buckets = 8, max_buffer_keys = 50000000;
   double error = 8;
   bool force_stream_merged = false;
@@ -103,7 +102,7 @@ Options Parse(int argc, char** argv) {
   Need(!o.capture.empty() && !o.output.empty(), "--capture and --output are required");
   Need(o.samples>0 && o.samples<=1048576 && o.buckets>0 && o.buckets<=4096 &&
        o.max_buffer_keys>0 && o.max_buffer_keys<=1000000000, "budget outside supported bounds");
-  Need(o.variant=="legacy" || o.variant=="discrete_raw" || o.variant=="discrete_certified", "invalid variant");
+  Need(o.variant=="plr", "invalid variant; the discrete-CDF variants were removed on 2026-09-14");
   if (o.work.empty()) o.work=fs::path("/work/vcomp/exp/offline_replay_tmp");
   return o;
 }
@@ -245,15 +244,8 @@ Generated GenerateMerged(const r::VirtualSST& file,const Options& o,Temp* temp) 
   std::ofstream out(path,std::ios::binary); Need(bool(out),"cannot create merged run");
   bool have=false; uint64_t last=0;
   auto emit=[&](uint64_t key) { Need(!have || last<=key,"streamed merged keys decreased"); if(!have || last!=key) { WriteKey(out,key); ++g.perfile_distinct; } last=key;have=true; };
-#ifndef VCOMP_REPLAY_ARCHIVED_LEGACY
-  if(const auto* cdf=file.plr_model.DiscreteModel()) {
-    Need(cdf->Count()==file.num_entries,"merged certificate count mismatch");
-    auto cursor=cdf->NewCursor();uint64_t key=0;while(cursor.Next(&key))emit(key);
-    Need(cursor.status().ok(),"merged CDF cursor failed");g.source="DiscreteCDF cursor (helper-equivalent)";
-  } else
-#endif
   {
-    // Exact streaming equivalent of the legacy helper's segment walk,
+    // Exact streaming equivalent of the helper's segment walk,
     // increasing pass, then tail cap. This bound rules out uint64 wrap in the
     // helper's increasing pass; unsafe domains fail instead of guessing.
     Need(file.key_max<=kMax-file.num_entries,"legacy streaming overflow domain unsupported; use larger buffer for actual helper");
@@ -321,32 +313,20 @@ Json Metrics(const Generated& generated,const Runs& truth,uint64_t n,const std::
   result.fields["actual_output_boundaries"]=Array(ranges);return result;
 }
 Json Metadata(const std::vector<r::VirtualSST>& files) {
-  uint64_t segments=0,cells=0,global=0,range=0,buckets=0,modeled=0;
-  for(const auto& f:files){segments+=f.plr_model.NumSegments();global+=f.kmv_sketch.samples.size();buckets+=f.kmv_ranges.size();
-    for(const auto& b:f.kmv_ranges){range+=b.sketch.samples.size();
-#ifndef VCOMP_REPLAY_ARCHIVED_LEGACY
-      modeled+=b.entries_are_modeled;
-#endif
-    }
-#ifndef VCOMP_REPLAY_ARCHIVED_LEGACY
-    if(const auto* c=f.plr_model.DiscreteModel())cells+=c->Cells().size();
-#endif
+  uint64_t segments=0,global=0,range=0,buckets=0;
+  for(const auto& f:files){segments+=f.plr_model.NumSegments();global+=r::DescriptorSketch(f).samples.size();
+    buckets+=f.kmv_ranges.size();
+    for(const auto& b:f.kmv_ranges)range+=b.sketch.samples.size();
   }
-  Json j;j.Number("files",files.size());j.Number("plr_segments",segments);j.Number("cdf_cells",cells);
-  j.Number("global_samples",global);j.Number("range_samples",range);j.Number("range_buckets",buckets);j.Number("modeled_range_buckets",modeled);return j;
+  Json j;j.Number("files",files.size());j.Number("plr_segments",segments);
+  j.Number("global_samples",global);j.Number("range_samples",range);j.Number("range_buckets",buckets);return j;
 }
 
 Json Replay(const Options& o) {
   const auto start=std::chrono::steady_clock::now();const auto cpu=std::clock();Json result;
-  setenv("VCOMP_KMV_ENABLED","1",1);setenv("VCOMP_DISCRETE_CDF_ENABLED",o.variant=="legacy"?"0":"1",1);
   setenv("VCOMP_KMV_SAMPLES",std::to_string(o.samples).c_str(),1);setenv("VCOMP_KMV_RANGE_BUCKETS",std::to_string(o.buckets).c_str(),1);
-#ifdef VCOMP_REPLAY_ARCHIVED_LEGACY
-  Need(o.variant=="legacy" && o.samples==512 && o.buckets==8,"archived legacy build supports only legacy samples512/buckets8");
-  result.Text("implementation","archived_pre_discrete_sources");
-#else
   Need(r::VirtualSSTKMVSamples()==o.samples && r::VirtualSSTKMVRangeBuckets()==o.buckets,"effective sketch budget mismatch");
-  result.Text("implementation",o.variant=="legacy"?"legacy_path_in_current_build":"discrete_path_in_current_build");
-#endif
+  result.Text("implementation","plr_path_in_current_build");
   const auto c=ReadCapture(o.capture);const auto input_runs=FileRuns(c.inputs),oracle=FileRuns(c.outputs);
   const uint64_t n=VerifySameUnion(input_runs,oracle);Need(n>0,"empty compaction union");Temp temporary(o.work);
   result.Text("capture",fs::absolute(o.capture).string());result.Text("job",c.scalars.at("job"));result.Text("variant",o.variant);
@@ -355,51 +335,41 @@ Json Replay(const Options& o) {
   result.Number("total_input_unique_entries",c.input_sum);result.Number("actual_unique_entries",n);result.Number("max_buffer_keys",o.max_buffer_keys);
   result.Number("key_size",c.key_size);result.Number("value_size",c.value_size);result.Number("target_sst_size",c.target);result.Number("output_level",c.output_level);
   result.Bool("database_opened",false);result.Text("count_scope","distinct helper-generated IDs; not production SST-write counts");
-  Generated before,after;std::vector<r::VirtualSST> files;std::vector<Json> input_metrics;
+  Generated before;std::vector<r::VirtualSST> files;std::vector<Json> input_metrics;
   Json timings;double phase_cpu=double(std::clock())/CLOCKS_PER_SEC;
   for(const auto& original:c.inputs) {
     Need(original.count<=o.max_buffer_keys,"input file exceeds --max-buffer-keys");Keys keys;keys.reserve(original.count);
     for(uint64_t i=0;i<original.count;++i)keys.push_back(original.keys->At(i));
-    r::VirtualSST f{};f.key_min=original.minimum;f.key_max=original.maximum;f.num_entries=original.count;f.level=static_cast<int>(original.level);
+    r::VirtualSST f{};f.key_min=original.minimum;f.key_max=original.maximum;f.num_entries=original.count;
     Need(Wide{f.num_entries}*(c.key_size+c.value_size)<=kMax,"modeled input size overflow");f.size_bytes=f.num_entries*(c.key_size+c.value_size);
-    f.plr_model=r::GreedyPLRFit(keys,o.error);f.kmv_sketch=r::BuildKMVSketchFromSortedKeys(keys,o.samples);
+    f.plr_model=r::GreedyPLRFit(keys,o.error);
     f.kmv_ranges=r::BuildKMVRangeSketchesFromSortedKeys(keys,o.samples,o.buckets);Keys().swap(keys);
-    auto b=Generate({f},o,&temporary);Json row;row.Number("file_number",original.number);row.fields["before_certification"]=Metrics(b,{original.keys},original.count).Dump();
+    auto b=Generate({f},o,&temporary);Json row;row.Number("file_number",original.number);row.fields["input_model"]=Metrics(b,{original.keys},original.count).Dump();
     before.planned+=b.planned;before.raw_rows+=b.raw_rows;before.perfile_distinct+=b.perfile_distinct;before.runs.insert(before.runs.end(),b.runs.begin(),b.runs.end());
-#ifndef VCOMP_REPLAY_ARCHIVED_LEGACY
-    if(o.variant=="discrete_certified") {const auto status=r::CertifyVirtualSST(&f);Need(status.ok(),"initial certification: "+status.ToString());}
-#endif
-    if(o.variant=="discrete_certified") {auto a=Generate({f},o,&temporary);row.fields["after_certification"]=Metrics(a,{original.keys},original.count).Dump();
-      after.planned+=a.planned;after.raw_rows+=a.raw_rows;after.perfile_distinct+=a.perfile_distinct;after.runs.insert(after.runs.end(),a.runs.begin(),a.runs.end());}
-    else row.fields["after_certification"]="null";
     files.push_back(std::move(f));input_metrics.push_back(std::move(row));
   }
   timings.Number("input_model_and_metrics_cpu_seconds",double(std::clock())/CLOCKS_PER_SEC-phase_cpu);Json stages;
-  stages.fields["input_model_before_certification"]=Metrics(before,oracle,n).Dump();
-  stages.fields["input_model_after_certification"]=o.variant=="discrete_certified"?Metrics(after,oracle,n).Dump():"null";
+  stages.fields["input_model"]=Metrics(before,oracle,n).Dump();
   result.fields["input_file_models"]=Array(input_metrics);Json metadata;metadata.fields["input"]=Metadata(files).Dump();
   std::vector<const r::VirtualSST*> pointers;for(const auto& f:files)pointers.push_back(&f);
   Keys witnesses,theta_keys;uint64_t theta=kMax;bool sketches_present=true,all_complete=true;
-  for(const auto& f:files){theta=std::min(theta,f.kmv_sketch.theta_hash);all_complete=all_complete&&f.kmv_sketch.complete;
-    sketches_present=sketches_present&&(!f.kmv_sketch.samples.empty()||f.kmv_sketch.complete);
+  for(const auto& f:files){const auto whole=r::DescriptorSketch(f,o.samples);
+    theta=std::min(theta,whole.theta_hash);all_complete=all_complete&&whole.complete;
+    sketches_present=sketches_present&&(!whole.samples.empty()||whole.complete);
     witnesses.push_back(f.key_min);witnesses.push_back(f.key_max);
-    for(const auto& s:f.kmv_sketch.samples)witnesses.push_back(s.key);
-    for(const auto& b:f.kmv_ranges)for(const auto& s:b.sketch.samples)witnesses.push_back(s.key);}
-  for(const auto& f:files)for(const auto& s:f.kmv_sketch.samples)if(s.hash<=theta)theta_keys.push_back(s.key);
+    for(const auto& b:f.kmv_ranges)for(const auto& s:b.sketch.samples)witnesses.push_back(s.key());}
+  for(const auto& f:files)for(const auto& b:f.kmv_ranges)for(const auto& s:b.sketch.samples)
+    if(s.hash<=theta)theta_keys.push_back(s.key());
   std::sort(witnesses.begin(),witnesses.end());witnesses.erase(std::unique(witnesses.begin(),witnesses.end()),witnesses.end());
   std::sort(theta_keys.begin(),theta_keys.end());theta_keys.erase(std::unique(theta_keys.begin(),theta_keys.end()),theta_keys.end());
   const bool raw_available=sketches_present&&(all_complete||!theta_keys.empty());
   const uint64_t raw_estimate=raw_available?r::EstimateKMVUnionEntries(pointers,kMax,o.samples):0;
   const uint64_t requested=r::EstimateKMVUnionEntries(pointers,c.input_sum,o.samples);
   uint64_t chosen=0;phase_cpu=double(std::clock())/CLOCKS_PER_SEC;
-#ifdef VCOMP_REPLAY_ARCHIVED_LEGACY
-  auto merged=r::NWayMergeKMVRangeAware(pointers,&chosen,o.samples);
-#else
   r::Status merge_status;auto merged=r::NWayMergeKMVRangeAware(pointers,&chosen,o.samples,&merge_status);Need(merge_status.ok(),"merge: "+merge_status.ToString());
-#endif
   timings.Number("merge_model_cpu_seconds",double(std::clock())/CLOCKS_PER_SEC-phase_cpu);
   uint64_t minimum=kMax,maximum=0;for(const auto& f:files){minimum=std::min(minimum,f.key_min);maximum=std::max(maximum,f.key_max);}
-  r::VirtualSST whole{};whole.plr_model=merged;whole.num_entries=chosen;whole.key_min=minimum;whole.key_max=maximum;whole.level=c.output_level;
+  r::VirtualSST whole{};whole.plr_model=merged;whole.num_entries=chosen;whole.key_min=minimum;whole.key_max=maximum;
   const auto gm=GenerateMerged(whole,o,&temporary);const auto merged_metrics=Metrics(gm,oracle,n,c.outputs,witnesses);
   stages.fields["merged"]=merged_metrics.Dump();metadata.fields["merged"]=Metadata({whole}).Dump();
   phase_cpu=double(std::clock())/CLOCKS_PER_SEC;
@@ -418,16 +388,16 @@ Json Replay(const Options& o) {
   invariants.Number("capacity_violations",bad_capacity);invariants.Number("sibling_range_overlaps",overlaps);invariants.Number("range_bucket_count_mismatches",bad_bucket_sum);
   const bool witness_retained=merged_metrics.fields.at("missing_input_witnesses")=="0" && split_metrics.fields.at("missing_input_witnesses")=="0";
   invariants.Bool("retained_witness_membership",witness_retained);
-  const bool required=o.variant=="legacy" || (gm.valid && gs.valid && gs.planned==chosen && split_u==chosen && same_selected && witness_retained && !bad_capacity && !overlaps && !bad_bucket_sum);
+  const bool required=gm.valid && gs.valid && gs.planned==chosen && split_u==chosen && same_selected && witness_retained && !bad_capacity && !overlaps && !bad_bucket_sum;
   invariants.Bool("required_pass",required);Json dedup;dedup.Number("naive_entries",c.input_sum);dedup.Number("chosen_D",chosen);dedup.Number("true_N",n);
   dedup.Bool("raw_estimate_available",raw_available);if(raw_available)dedup.Number("raw_estimate_without_input_cap",raw_estimate);else dedup.fields["raw_estimate_without_input_cap"]="null";
   dedup.Number("requested_after_input_cap",requested);dedup.Bool("input_count_cap_applied",raw_available&&raw_estimate>requested);
   dedup.Bool("witness_capacity_projection_changed_D",chosen!=requested);dedup.Number("theta_hash",theta);dedup.Number("samples_at_common_theta",theta_keys.size());
-  dedup.Bool("all_global_sketches_complete",all_complete);dedup.Number("theta_fraction",(static_cast<long double>(theta)+1)/(static_cast<long double>(kMax)+1));
+  dedup.Bool("all_descriptor_sketches_complete",all_complete);dedup.Number("theta_fraction",(static_cast<long double>(theta)+1)/(static_cast<long double>(kMax)+1));
   dedup.Number("relative_count_error",(static_cast<long double>(chosen)-n)/n);result.fields["dedup"]=dedup.Dump();
   result.fields["stages"]=stages.Dump();result.fields["metadata"]=metadata.Dump();result.fields["invariants"]=invariants.Dump();
   timings.Number("total_cpu_seconds",double(std::clock()-cpu)/CLOCKS_PER_SEC);timings.Number("wall_seconds",std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count());
-  result.fields["timings"]=timings.Dump();result.Text("status",required?"ok":"error");if(!required)result.Text("error","required discrete count/range invariant failed");return result;
+  result.fields["timings"]=timings.Dump();result.Text("status",required?"ok":"error");if(!required)result.Text("error","required count/range invariant failed");return result;
 }
 }  // namespace
 

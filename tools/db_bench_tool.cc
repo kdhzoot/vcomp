@@ -54,6 +54,7 @@
 #include "monitoring/histogram.h"
 #include "monitoring/statistics_impl.h"
 #include "options/cf_options.h"
+#include "port/jemalloc_helper.h"
 #include "port/port.h"
 #include "port/stack_trace.h"
 #include "rocksdb/cache.h"
@@ -911,6 +912,15 @@ DEFINE_string(compaction_trace_dir, "",
               "If not empty, write per-compaction trace log files to this "
               "directory with detailed key-level information.");
 
+DEFINE_string(vcomp_memory_profile_out, "",
+              "fillvirtual only: sample process RSS, jemalloc arena stats and "
+              "the live descriptor set into this JSONL file. Components are "
+              "chosen to partition RSS exactly, so a stacked bar of one sample "
+              "sums to that sample's RSS.");
+
+DEFINE_uint64(vcomp_memory_profile_interval_ms, 100,
+              "Sampling period for --vcomp_memory_profile_out.");
+
 DEFINE_string(vcomp_accuracy_trace_dir, "",
               "If not empty, run virtual compaction prediction alongside real "
               "compactions and write per-job accuracy records to this directory.");
@@ -918,11 +928,6 @@ DEFINE_string(vcomp_accuracy_trace_dir, "",
 DEFINE_string(vcomp_fidelity_report_dir, "",
               "If not empty, write fillvirtual descriptor/materialization "
               "cardinality diagnostics (fidelity.json and files.tsv) here.");
-
-DEFINE_string(vcomp_sst_size_model, "calibrated",
-              "fillvirtual SST bytes: calibrated uses completed in-memory SST "
-              "probes with the materialization options; logical reproduces "
-              "the old entries*(key+value) estimate. Input batching is unchanged.");
 
 DEFINE_bool(vcomp_global_unique_keys, false,
             "fillvirtual only: assert that every input key is distinct and "
@@ -2055,6 +2060,202 @@ static Status CreateMemTableRepFactory(
   }
   return s;
 }
+
+// Samples where fillvirtual's memory actually is. The components below
+// partition resident memory without overlap, so one sample's parts sum to that
+// sample's RSS:
+//
+//   stats.allocated = [descriptor set] + [block cache + memtables] + [other live]
+//
+// That split is exact: the last term is defined as the remainder. RSS is a
+// different quantity and is reported beside it, not inside it - allocated
+// bytes need not be resident (a reserved buffer nobody has written yet), and
+// resident pages need not be allocated (the allocator holding freed memory
+// back from the kernel). rss_minus_allocated carries that signed difference,
+// which is small while Phase 1 runs and becomes the whole of RSS once
+// materialization frees the descriptors. Descriptor bytes are vector
+// capacity, not size.
+class VCompMemoryProfiler {
+ public:
+  VCompMemoryProfiler(std::string path, uint64_t interval_ms,
+                      const ROCKSDB_NAMESPACE::VirtualSSTRegistry* registry,
+                      ROCKSDB_NAMESPACE::DB* db)
+      : path_(std::move(path)),
+        interval_ms_(interval_ms == 0 ? 200 : interval_ms),
+        registry_(registry),
+        db_(db) {
+    out_ = fopen(path_.c_str(), "w");
+    if (out_ == nullptr) {
+      fprintf(stderr, "memory profile: cannot open %s\n", path_.c_str());
+      return;
+    }
+    start_us_ = ROCKSDB_NAMESPACE::SystemClock::Default()->NowMicros();
+    // What the process already holds before any loading work: binary, stacks,
+    // the open DB and its cache reservation. Loading overhead is measured
+    // against this, so every row carries it and the peak is a difference.
+    // Reset the kernel's peak-RSS counter so VmHWM measures the loading window
+    // and not whatever the process touched while opening the DB. Sampling can
+    // miss a short spike; VmHWM cannot.
+    if (FILE* cr = fopen("/proc/self/clear_refs", "w")) {
+      fputs("5\n", cr);
+      fclose(cr);
+    }
+    JeRefresh();
+    const Proc proc = ReadProc();
+    base_rss_ = proc.rss;
+    base_allocated_ = JeStat("stats.allocated");
+    base_resident_ = JeStat("stats.resident");
+    base_cache_ = DbProperty("rocksdb.block-cache-usage");
+    base_memtables_ = DbProperty("rocksdb.cur-size-all-mem-tables");
+    Emit("baseline");
+    thread_ = std::thread([this] { Loop(); });
+  }
+
+  ~VCompMemoryProfiler() { Stop(); }
+
+  void SetPhase(const char* phase) {
+    {
+      std::lock_guard<std::mutex> lk(mu_);
+      phase_ = phase;
+    }
+    Emit(phase);  // one sample exactly at the boundary
+  }
+
+  void Stop() {
+    if (!thread_.joinable()) return;
+    {
+      std::lock_guard<std::mutex> lk(mu_);
+      stop_ = true;
+    }
+    cv_.notify_all();
+    thread_.join();
+    Emit("final");
+    if (out_ != nullptr) {
+      fclose(out_);
+      out_ = nullptr;
+    }
+  }
+
+ private:
+  struct Proc {
+    uint64_t rss = 0, hwm = 0;
+  };
+
+  static Proc ReadProc() {
+    Proc p;
+    FILE* f = fopen("/proc/self/status", "r");
+    if (f == nullptr) return p;
+    char line[256];
+    while (fgets(line, sizeof(line), f) != nullptr) {
+      unsigned long long kb = 0;
+      if (sscanf(line, "VmRSS: %llu kB", &kb) == 1) p.rss = kb * 1024;
+      else if (sscanf(line, "VmHWM: %llu kB", &kb) == 1) p.hwm = kb * 1024;
+    }
+    fclose(f);
+    return p;
+  }
+
+  static uint64_t JeStat(const char* name) {
+#ifdef ROCKSDB_JEMALLOC
+    size_t v = 0, sz = sizeof(v);
+    if (mallctl(name, &v, &sz, nullptr, 0) == 0) return v;
+#else
+    (void)name;
+#endif
+    return 0;
+  }
+
+  static void JeRefresh() {
+#ifdef ROCKSDB_JEMALLOC
+    uint64_t epoch = 1;
+    size_t sz = sizeof(epoch);
+    mallctl("epoch", &epoch, &sz, &epoch, sz);
+#endif
+  }
+
+  uint64_t DbProperty(const char* name) const {
+    uint64_t v = 0;
+    if (db_ != nullptr && db_->GetIntProperty(name, &v)) return v;
+    return 0;
+  }
+
+  void Emit(const char* tag) {
+    if (out_ == nullptr) return;
+    JeRefresh();
+    const Proc proc = ReadProc();
+    const uint64_t allocated = JeStat("stats.allocated");
+    const uint64_t active = JeStat("stats.active");
+    const uint64_t resident = JeStat("stats.resident");
+    const uint64_t retained = JeStat("stats.retained");
+    ROCKSDB_NAMESPACE::VirtualSSTRegistry::HeapUsage u;
+    if (registry_ != nullptr) u = registry_->GetHeapUsage();
+    const uint64_t cache = DbProperty("rocksdb.block-cache-usage");
+    const uint64_t memtables = DbProperty("rocksdb.cur-size-all-mem-tables");
+    const uint64_t descriptors = u.Total();
+    // Live allocations the named buckets do not cover: generation and sort
+    // buffers, materialization buffers, VersionSet state, everything else.
+    const uint64_t named = descriptors + cache + memtables;
+    const uint64_t other_live = allocated > named ? allocated - named : 0;
+    std::string phase;
+    {
+      std::lock_guard<std::mutex> lk(mu_);
+      phase = phase_;
+    }
+    const uint64_t now =
+        ROCKSDB_NAMESPACE::SystemClock::Default()->NowMicros();
+    std::lock_guard<std::mutex> wl(write_mu_);
+    fprintf(out_,
+            "{\"t_ms\":%.1f,\"phase\":\"%s\",\"tag\":\"%s\""
+            ",\"rss\":%" PRIu64 ",\"hwm\":%" PRIu64
+            ",\"je_allocated\":%" PRIu64 ",\"je_active\":%" PRIu64
+            ",\"je_resident\":%" PRIu64 ",\"je_retained\":%" PRIu64
+            ",\"files\":%" PRIu64 ",\"plr_segment_bytes\":%" PRIu64
+            ",\"kmv_sample_bytes\":%" PRIu64 ",\"kmv_bucket_bytes\":%" PRIu64
+            ",\"descriptor_object_bytes\":%" PRIu64 ",\"registry_index_bytes\":%" PRIu64
+            ",\"descriptor_total\":%" PRIu64 ",\"block_cache\":%" PRIu64
+            ",\"memtables\":%" PRIu64 ",\"other_live\":%" PRIu64
+            ",\"named_live\":%" PRIu64 ",\"rss_minus_allocated\":%" PRId64
+            ",\"base_rss\":%" PRIu64 ",\"base_allocated\":%" PRIu64
+            ",\"base_resident\":%" PRIu64 ",\"base_cache\":%" PRIu64
+            ",\"base_memtables\":%" PRIu64 ",\"rss_delta\":%" PRId64 "}\n",
+            (now - start_us_) / 1000.0, phase.c_str(), tag, proc.rss, proc.hwm,
+            allocated, active, resident, retained, u.files, u.plr_segment_bytes,
+            u.kmv_sample_bytes, u.kmv_bucket_bytes, u.descriptor_bytes,
+            u.index_bytes, descriptors, cache, memtables, other_live, named,
+            static_cast<int64_t>(proc.rss) - static_cast<int64_t>(allocated),
+            base_rss_, base_allocated_, base_resident_, base_cache_,
+            base_memtables_,
+            static_cast<int64_t>(proc.rss) - static_cast<int64_t>(base_rss_));
+    fflush(out_);
+  }
+
+  void Loop() {
+    for (;;) {
+      std::unique_lock<std::mutex> lk(mu_);
+      cv_.wait_for(lk, std::chrono::milliseconds(interval_ms_),
+                   [this] { return stop_; });
+      const bool stop = stop_;
+      lk.unlock();
+      if (stop) return;
+      Emit("sample");
+    }
+  }
+
+  std::string path_;
+  uint64_t interval_ms_;
+  const ROCKSDB_NAMESPACE::VirtualSSTRegistry* registry_;
+  ROCKSDB_NAMESPACE::DB* db_;
+  FILE* out_ = nullptr;
+  uint64_t start_us_ = 0;
+  std::thread thread_;
+  std::mutex mu_;
+  std::mutex write_mu_;
+  std::condition_variable cv_;
+  bool stop_ = false;
+  std::string phase_ = "init";
+  uint64_t base_rss_ = 0, base_allocated_ = 0, base_resident_ = 0;
+  uint64_t base_cache_ = 0, base_memtables_ = 0;
+};
 
 // Reservation bitmap for --vcomp_global_unique_keys.
 //
@@ -6069,10 +6270,20 @@ class Benchmark {
     const bool membership_drives_keys =
         membership != nullptr && !use_load_trace;
     KeyMembership* const ingest_membership = membership.get();
+    std::unique_ptr<VCompMemoryProfiler> mem_profile;
+    if (!FLAGS_vcomp_memory_profile_out.empty()) {
+      mem_profile = std::make_unique<VCompMemoryProfiler>(
+          FLAGS_vcomp_memory_profile_out,
+          FLAGS_vcomp_memory_profile_interval_ms, registry, db_.db);
+    }
+    auto phase_mark = [&](const char* name) {
+      if (mem_profile != nullptr) mem_profile->SetPhase(name);
+    };
     // Calibration is mandatory loading work, included in Phase 1 and Total.
+    phase_mark("calibration");
     auto phase1_start = FLAGS_env->NowMicros();
     const Options materialization_options = VirtualMaterializationOptions();
-    if (FLAGS_vcomp_sst_size_model == "calibrated") {
+    {
       const uint64_t calibration_start = FLAGS_env->NowMicros();
       SSTSizeModel calibrated;
       std::vector<SSTSizeCalibrationSample> samples;
@@ -6108,18 +6319,12 @@ class Benchmark {
       }
       fprintf(stderr, "SST size calibration: %.6f sec (memory-only)\n",
               (FLAGS_env->NowMicros() - calibration_start) / 1e6);
-    } else if (FLAGS_vcomp_sst_size_model != "logical") {
-      fprintf(stderr, "Invalid --vcomp_sst_size_model: %s\n",
-              FLAGS_vcomp_sst_size_model.c_str());
-      if (load_trace_fp != nullptr) fclose(load_trace_fp);
-      db_bench_exit(1);
-      return;
     }
     const SSTSizeModel& sst_size_model = registry->GetSSTSizeModel();
     fprintf(stderr,
-            "SST size model: %s logical_entry_bytes=%" PRIu64
+            "SST size model: calibrated logical_entry_bytes=%" PRIu64
             " target_bytes=%" PRIu64 " entries_at_target=%" PRIu64 "\n",
-            FLAGS_vcomp_sst_size_model.c_str(), avg_entry_size, target_sst_size,
+            avg_entry_size, target_sst_size,
             sst_size_model.MaxEntries(target_sst_size));
     const uint64_t memtable_capacity =
         static_cast<uint64_t>(FLAGS_memtable_flush_size) * 1024 * 1024 /
@@ -6632,22 +6837,11 @@ class Benchmark {
 
           VirtualSST vsst;
           vsst.plr_model = std::move(plr);
-          if (VirtualSSTKMVEnabled()) {
-            vsst.kmv_sketch = BuildKMVSketchFromSortedKeys(keys);
-            vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(keys);
-          }
+          vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(keys);
           vsst.key_min = keys.front();
           vsst.key_max = keys.back();
           vsst.num_entries = keys.size();
-          vsst.level = 0;
           vsst.size_bytes = sst_size_model.Estimate(keys.size());
-
-          Status cdf_status = CertifyVirtualSST(&vsst);
-          if (!cdf_status.ok()) {
-            fprintf(stderr, "Discrete flush model failed: %s\n",
-                    cdf_status.ToString().c_str());
-            exit(1);
-          }
 
           auto regbuild_t0 = FLAGS_env->NowMicros();
           result.pending_file.file_size = vsst.size_bytes;
@@ -6747,22 +6941,11 @@ class Benchmark {
       // Build VirtualSST.
       VirtualSST vsst;
       vsst.plr_model = std::move(plr);
-      if (VirtualSSTKMVEnabled()) {
-        vsst.kmv_sketch = BuildKMVSketchFromSortedKeys(memtable_buf);
-        vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(memtable_buf);
-      }
+      vsst.kmv_ranges = BuildKMVRangeSketchesFromSortedKeys(memtable_buf);
       vsst.key_min = memtable_buf.front();
       vsst.key_max = memtable_buf.back();
       vsst.num_entries = memtable_buf.size();
-      vsst.level = 0;
       vsst.size_bytes = sst_size_model.Estimate(memtable_buf.size());
-
-      Status cdf_status = CertifyVirtualSST(&vsst);
-      if (!cdf_status.ok()) {
-        fprintf(stderr, "Discrete flush model failed: %s\n",
-                cdf_status.ToString().c_str());
-        exit(1);
-      }
 
       auto t3 = FLAGS_env->NowMicros();
       uint64_t fnum = next_reserved_l0_file++;
@@ -6936,6 +7119,7 @@ class Benchmark {
     auto foreground_end = FLAGS_env->NowMicros();
 
     auto phase1_end = foreground_end;
+    phase_mark("phase1_end");
     uint64_t phase1_total_us = phase1_end - phase1_start;
     double phase1_secs = phase1_total_us / 1e6;
     uint64_t non_keygen_accounted_us =
@@ -7092,6 +7276,7 @@ class Benchmark {
     // ── Final L0 drain ──
     // Foreground is done, so no more virtual L0 files will arrive. Lower the
     // file-count trigger to 1 so the tail can drain through the normal picker.
+    phase_mark("l0_drain");
     fprintf(stderr, "FillVirtual: draining residual L0...\n");
     auto drain_start = FLAGS_env->NowMicros();
     db_.db->SetOptions({{"level0_file_num_compaction_trigger", "1"}});
@@ -7141,6 +7326,7 @@ class Benchmark {
         l0_window_after_drain.refill_us / 1e6,
         l0_window_after_drain.log_apply_us / 1e6);
 
+    phase_mark("materialize");
     // Freeze BG compaction so Phase 2 sees a stable registry/version snapshot.
     // Without this, BG can re-fire virtual compactions during Phase 2's
     // parallel SST write window (~3s), mutating the registry and the version
@@ -7240,8 +7426,9 @@ class Benchmark {
     // Collect level distribution for reporting.
     std::map<int, size_t> level_dist;
     for (const auto& [fnum, vsst] : all_vssts) {
+      (void)vsst;
       auto it = file_level_map.find(fnum);
-      int lvl = (it != file_level_map.end()) ? it->second : vsst->level;
+      int lvl = (it != file_level_map.end()) ? it->second : 0;
       level_dist[lvl]++;
     }
     fprintf(stderr, "  Virtual SSTs: %zu (", all_vssts.size());
@@ -7273,9 +7460,7 @@ class Benchmark {
         tasks[i].vsst = all_vssts[i].second;
         tasks[i].real_fnum = versions->NewFileNumber();
         auto it = file_level_map.find(all_vssts[i].first);
-        tasks[i].level = (it != file_level_map.end())
-                             ? it->second
-                             : all_vssts[i].second->level;
+        tasks[i].level = (it != file_level_map.end()) ? it->second : 0;
         tasks[i].materialize_key_min = tasks[i].vsst->key_min;
         tasks[i].materialize_key_max = tasks[i].vsst->key_max;
       }
@@ -7360,13 +7545,12 @@ class Benchmark {
       std::unordered_map<uint64_t, bool> registry_files;
       uint64_t registry_entries = 0, live_entries = 0, live_files = 0;
       uint64_t all_written = 0, live_written = 0;
-      uint64_t discrete_files = 0, discrete_cells = 0;
-      uint64_t registry_only = 0, version_only = 0, level_mismatches = 0;
+      uint64_t registry_only = 0, version_only = 0;
       uint64_t failed_files = 0, skipped_files = 0, put_failed_files = 0;
       uint64_t all_put_successes = 0;
       uint64_t unique_shortfall_total = 0, unique_short_files = 0;
       std::ostringstream tsv;
-      tsv << "virtual_file\treal_file\tlevel\tregistry_level\tin_version"
+      tsv << "virtual_file\treal_file\tlevel\tin_version"
              "\tplanned_entries\tkey_min\tkey_max\tmaterialize_key_min"
              "\tmaterialize_key_max\tkeys_written\tput_successes"
              "\tskipped_nonincreasing_keys\tdropped_entries\tok"
@@ -7378,10 +7562,6 @@ class Benchmark {
         registry_files[task.virtual_fnum] = true;
         const bool live = file_level_map.count(task.virtual_fnum) != 0;
         const uint64_t planned = task.vsst->num_entries;
-        if (const auto* discrete = task.vsst->plr_model.DiscreteModel()) {
-          ++discrete_files;
-          discrete_cells += discrete->Cells().size();
-        }
         registry_entries += planned;
         all_written += res.keys_written;
         all_put_successes += res.put_successes;
@@ -7396,7 +7576,6 @@ class Benchmark {
           ++live_files;
           live_entries += planned;
           live_written += res.keys_written;
-          level_mismatches += task.level != task.vsst->level;
           auto& count = levels[task.level];
           ++count.files;
           count.planned += planned;
@@ -7407,7 +7586,7 @@ class Benchmark {
           ++registry_only;
         }
         tsv << task.virtual_fnum << '\t' << task.real_fnum << '\t'
-            << task.level << '\t' << task.vsst->level << '\t' << live << '\t'
+            << task.level << '\t' << live << '\t'
             << planned << '\t' << task.vsst->key_min << '\t'
             << task.vsst->key_max << '\t' << task.materialize_key_min << '\t'
             << task.materialize_key_max << '\t' << res.keys_written << '\t'
@@ -7443,15 +7622,10 @@ class Benchmark {
            << ",\n  \"version_files\": " << file_level_map.size()
            << ",\n  \"stage1_live_descriptor_files\": " << live_files
            << ",\n  \"stage1_registry_descriptor_entries\": " << registry_entries
-           << ",\n  \"discrete_model_files\": " << discrete_files
-           << ",\n  \"discrete_model_cells\": " << discrete_cells
-           << ",\n  \"discrete_cell_payload_bytes\": "
-           << discrete_cells * sizeof(DiscreteCDF::Cell)
            << ",\n  \"stage1_live_descriptor_entries\": " << live_entries
            << ",\n  \"registry_only_files\": " << registry_only
            << ",\n  \"version_only_files\": " << version_only
            << ",\n  \"version_only_file_numbers\": [" << missing.str() << ']'
-           << ",\n  \"registry_level_mismatches\": " << level_mismatches
            << ",\n  \"snapshot_complete\": "
            << (registry_only == 0 && version_only == 0)
            << ",\n  \"stage2_sst_keys_written\": " << all_written
@@ -7723,18 +7897,6 @@ class Benchmark {
             // Stream materialized keys directly into the SST writer. This
             // avoids allocating and rereading a uint64_t vector per VSST.
             const auto& segments = task.vsst->plr_model.Segments();
-            const auto* discrete = task.vsst->plr_model.DiscreteModel();
-            auto discrete_cursor = discrete == nullptr
-                                       ? DiscreteCDF::Cursor()
-                                       : discrete->NewCursor();
-            if (discrete != nullptr &&
-                (discrete->Count() != task.vsst->num_entries ||
-                 discrete->Select(0) < task.materialize_key_min ||
-                 discrete->Select(discrete->Count() - 1) > task.materialize_key_max)) {
-              res.report_status = "invalid_discrete_range";
-              res.stop_reason = "discrete_invariant";
-              continue;
-            }
             size_t seg_idx = 0;
             uint64_t prev_materialized_key = 0;
             bool has_prev_materialized_key = false;
@@ -7765,11 +7927,6 @@ class Benchmark {
                 member_have[pick] =
                     (pick == 0 ? member_fresh : member_stale)
                         ->Next(&member_next[pick]);
-              } else if (discrete != nullptr) {
-                if (!discrete_cursor.Next(&k)) {
-                  res.stop_reason = "discrete_cursor_exhausted";
-                  break;
-                }
               } else {
                 double position = static_cast<double>(pos);
 
@@ -7867,18 +8024,14 @@ class Benchmark {
               keys_in_file++;
             }
             res.put_successes = keys_in_file;
-            const bool discrete_cursor_ok = discrete_cursor.status().ok();
             // Entries that no free key could carry are a measured capacity
             // limit of global-unique materialization, so they count as a
             // shortfall. Any other missing entry still fails the file.
-            if ((discrete != nullptr || unique_reservation != nullptr ||
-                 membership != nullptr) &&
+            if ((unique_reservation != nullptr || membership != nullptr) &&
                 (keys_in_file + res.unique_shortfall !=
                      task.vsst->num_entries ||
-                 !discrete_cursor_ok || res.skipped_nonincreasing_keys != 0)) {
-              res.report_status = discrete != nullptr
-                                      ? "discrete_count_mismatch"
-                                      : "unique_count_mismatch";
+                 res.skipped_nonincreasing_keys != 0)) {
+              res.report_status = "unique_count_mismatch";
               continue;
             }
 
@@ -8052,6 +8205,7 @@ class Benchmark {
                    kInvalidBlobFileNumber, 0, 0, epoch, "", "",
                    UniqueId64x2{}, 0, res.tail_size, true);
     }
+    phase_mark("version_edit");
     {
       Status s = db_impl->InstallVirtualCompactionMaterialization(&edit);
       ReadOptions ro;

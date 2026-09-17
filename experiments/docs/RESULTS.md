@@ -1,5 +1,7 @@
 # VComp Measurements
 
+**2026-09-16 PLR error-bound sweep to 4096, and an index of the paper's experiments:** The section 5.6 sweep now runs from an error bound of 2 to 4096 at the default KMV budget, with YCSB C measured on each loaded database under the frozen settings (Zipfian, 50 GiB cache, 48 threads, 300 s). Cost falls until the segment count reaches its floor and then stops: PLR memory 3,076 MB to 8.4 MB and PLR fitting 4.73 s to 3.70 s, both saturating at 256, while key generation and sorting stay flat. Final database size, SST count, per-level placement and SST size distribution do not follow the error bound; repeating the sweep with the exact-membership bitmap disabled (`paramsweep_260916nb`) reaches the same conclusion. Joined data in [../results/plr_error_bound_sweep_260916.tsv](../results/plr_error_bound_sweep_260916.tsv). [PAPER_EXPERIMENTS.md](PAPER_EXPERIMENTS.md) maps every empirical figure and headline number in the current draft to the result files behind it.
+
 **2026-09-07 current Chapter 2/3 results:** F2Load loading and all four reads completed and were reflected in Figures 4/5 and dependent prose. The combined comparison has eight validated load states and twenty-four reads, reusing the previous seven load controls and twenty reads unchanged. F2Load is 134.731 s including final physical completion (pending bytes zero). Use [PAPER_CHAPTER23_COMMON_RESULTS.md](PAPER_CHAPTER23_COMMON_RESULTS.md). Only the previously deferred size-scaling and instrumentation follow-ups remain outside this campaign.
 
 **2026-09-06 common Chapter 2/3 update:** Seven load states and twenty reads completed and were reflected in Figures 2(b), 4 and 5 and their prose. Use [PAPER_CHAPTER23_COMMON_RESULTS.md](PAPER_CHAPTER23_COMMON_RESULTS.md) for the current shared baseline. Earlier paper values below are historical for these comparisons. F2Load recovery/reads and the scaling/breakdown follow-ups remain deferred.
@@ -842,3 +844,100 @@ The residual 3.3% is the unique100 form of the 0.48% coverage gap seen on
 uniform input: in the deepest levels a file's entry budget can be smaller than
 the unclaimed ids in its range, and nothing deeper picks them up.
 
+
+## 11. PLR-only consolidation (2026-09-14)
+
+Acting on section 10, the discrete-CDF representation was removed and the PLR
+merge path — the one the paper describes — became the only one. The same commit
+removed every other code path that the frozen loading configuration could not
+reach.
+
+### 11.1 What was removed
+
+| group | what | where |
+|---|---|---|
+| discrete CDF | `discrete_cdf.{h,cc}`, `discrete_merge.{h,cc}`, `CertifyVirtualSST`, `PLRModel::discrete_model_`, all `discrete != nullptr` branches in merge/split/materialize, `VCOMP_DISCRETE_CDF_ENABLED` | 741 source lines plus call sites |
+| dead code | `VirtualCompact` (no caller), `VirtualSST::EstimateSize` (no caller), `PLRModel::GetSegmentAt` (no caller) | 72 lines |
+| pre-KMV dedup | `NWayMergePLR` with inclusion-exclusion correction (`fd22ee78f7`), `VirtualSSTKMVEnabled`, `VCOMP_KMV_ENABLED` | 173 lines |
+| accuracy tooling | `MaybeCaptureVCompInputs`, `MaybeRecordVCompAccuracy` and their helpers; `--vcomp_accuracy_trace_dir` and its option plumbing; `VCOMP_ACCURACY_CAPTURE_DIR` | 703 lines in `compaction_job.cc` |
+| patch-15 tools | `virtual_compaction_{replay,accuracy_probe,accuracy_chain_probe,discrete_test}.cc`; `run_real_input_accuracy.py`, `run_discrete_fidelity_pilot.py` | never in the build manifests |
+| size model | `--vcomp_sst_size_model` and its `logical` branch; `smoke_sst_size_model.py` | calibration is now unconditional |
+
+Kept deliberately: `--vcomp_exact_membership` **and** `--vcomp_global_unique_keys`
+(both remain selectable), `--vcomp_fidelity_report_dir`, `--load_trace_file`,
+`VCOMP_KMV_SAMPLES` / `VCOMP_KMV_RANGE_BUCKETS`.
+
+### 11.2 Descriptor memory
+
+A whole-file KMV sketch and eight range buckets used to hold the same keys
+twice. The whole-file sketch is gone; the eight equal-count buckets are the
+descriptor's sample, and concatenating them is an unbiased sample of the whole
+file, so the dedup ratio is unchanged. A sample now stores only its 64-bit
+fingerprint: SplitMix64's finalizer is a bijection, so deduplication compares
+fingerprints directly and `KMVUnhash` recovers the key on the two paths that
+test a sample against a key range (verified exact over 21M round-trips
+including `0`, `2^63` and `UINT64_MAX`).
+
+| | before | after |
+|---|---|---|
+| `KMVSample` | 16 B | **8 B** |
+| samples per descriptor | 512 whole-file + 8x64 range = 1024 | **8x64 = 512** |
+| sketch bytes per descriptor | 17,064 B | **4,608 B** (3.70x smaller) |
+| `VirtualSST` header | 144 B | **80 B** |
+| `PLRModel` header | 40 B | **24 B** |
+| `DiscreteCDF::Cell` | 64 B each | **gone** |
+
+`VirtualSST::level` was also removed: it was written at four sites and never
+read for a decision. The level a descriptor materializes at comes from the
+Version, as it always did; a descriptor the Version does not list falls back to
+L0.
+
+### 11.3 Verification
+
+- `make static_lib db_bench` clean, no warnings.
+- `virtual_sst_test`: 12/12 pass, including a new fingerprint round-trip test
+  and a sample-budget test asserting 8 buckets x 64 samples.
+- 4 GB smoke load on the new binary: loads, drains to 0 pending compaction
+  bytes, reopens read-only, and `readrandom` finds 126,579 of 200,000
+  (**63.29%**) against the 63.21% expected for sampling with replacement from a
+  key space of the same size.
+- Removed flags are rejected by gflags; kept flags still parse.
+
+### 11.4 Accuracy tooling kept for Section 5.4
+
+The per-job capture and trace hooks, `virtual_compaction_replay`, the two
+accuracy probes and `run_real_input_accuracy.py` were removed with the rest of
+patch 15 and then restored, ported to the PLR-only API. What did not survive is
+the three-variant A/B they were built to drive: `--variant` accepts only `plr`,
+`BASE_CONFIGS` is one configuration, and the second (archived pre-discrete)
+replay binary is gone. The seven one-parameter sweep settings are unchanged.
+
+Verified on a 2 GB `fillrandom` with `--vcomp_accuracy_trace_dir` set, 62 real
+compaction jobs:
+
+| | |
+|---|---|
+| output file count, exact | 57 / 62 (92%) |
+| output file count, within ±1 | 62 / 62 |
+| \|byte error\| | median 0.80%, p90 1.80%, max 2.54% |
+| \|entry-count error\| | median 0.000%, max 0.001% |
+
+### 11.5 Open
+
+The coverage gap of section 10 is unchanged by this commit and is now the only
+known fidelity gap: 0.48% on uniform input, 3.3% on unique100.
+
+### 11.6 Descriptor cost per record
+
+Measured with `GreedyPLRFit` at `plr_error_bound=8` on uniform random keys drawn
+from a 10^9 domain, which is the frozen loading configuration:
+
+| distinct keys | PLR segments | keys / segment | descriptor bytes | bytes / record |
+|---|---|---|---|---|
+| 65,534 | 343 | 191 | 15,584 | 0.238 |
+| 262,112 | 1,340 | 196 | 47,488 | 0.181 |
+| 1,048,074 | 5,403 | 194 | 177,504 | 0.169 |
+| 8,353,446 | 43,280 | 193 | 1,389,568 | 0.166 |
+
+The 4,608 B sketch is a fixed per-descriptor cost, so bytes per record fall
+toward the PLR asymptote of 32 B / 193 keys = 0.166 B as a descriptor grows.

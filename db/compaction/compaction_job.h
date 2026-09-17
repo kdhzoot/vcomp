@@ -218,6 +218,8 @@ class CompactionJob {
 
   // Iterate through input and compact the kv-pairs.
   void ProcessKeyValueCompaction(SubcompactionState* sub_compact);
+  void MaybeRecordVCompAccuracy();
+  void MaybeCaptureVCompInputs();
 
   CompactionState* compact_;
   InternalStats::CompactionStatsFull internal_stats_;
@@ -314,8 +316,6 @@ class CompactionJob {
   void FinalizeCompactionRun(const Status& status,
                              bool stats_built_from_input_table_prop,
                              uint64_t num_input_range_del);
-  void MaybeRecordVCompAccuracy();
-  void MaybeCaptureVCompInputs();
 
   CompactionServiceJobStatus ProcessKeyValueCompactionWithCompactionService(
       SubcompactionState* sub_compact);

@@ -1,0 +1,4 @@
+phase	system	workload	status	duration_sec	threads	measured_seconds	process_elapsed_sec	operations	throughput_ops_sec	avg_latency_us	successful_gets	engine_keys_read	engine_keys_written	peak_rss_kb	log_dir
+pilot	f2load	workloadc	ok	3	48	3.025	4.277497291564941	3388249	1120162.0	42.712	2036220	3388249	0	11329452	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/mg_em_h08_260915/pilot/workloadc/f2load
+pilot	f2load	mixgraph	ok	5	48	5.091	12.912714958190918	2219954	436044.0	108.618	1190941	1841583	311607	48747732	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/mg_em_h08_260915/pilot/mixgraph/f2load
+full	f2load	mixgraph	ok	300	48	300.041	312.4423336982727	181115579	603635.0	79.513	118727016	150322752	25357865	55031552	/home/smrc/virtual_compaction/vcomp/experiments/artifacts/log_runs/mg_em_h08_260915/full/mixgraph/f2load

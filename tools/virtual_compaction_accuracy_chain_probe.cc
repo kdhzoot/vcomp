@@ -13,9 +13,10 @@ void SketchState(Record* record, const std::string& prefix,
   Keys retained_samples;
   std::vector<bool> covered(truth.size(),false);
   for(const auto& d:descriptors) {
-    entries+=d.num_entries;global_samples+=d.kmv_sketch.samples.size();
-    empty_global+=d.kmv_sketch.samples.empty();incomplete_global+=!d.kmv_sketch.complete;
-    for(const auto& sample:d.kmv_sketch.samples)retained_samples.push_back(sample.key);
+    const auto whole=r::DescriptorSketch(d);
+    entries+=d.num_entries;global_samples+=whole.samples.size();
+    empty_global+=whole.samples.empty();incomplete_global+=!whole.complete;
+    for(const auto& sample:whole.samples)retained_samples.push_back(sample.key());
     for(const auto& range:d.kmv_ranges) {
       ++ranges;range_samples+=range.sketch.samples.size();range_entries+=range.num_entries;
       empty_range+=range.sketch.samples.empty();incomplete_range+=!range.sketch.complete;
@@ -55,13 +56,12 @@ void Chain(const std::string& name,size_t samples) {
     record.Text("carried_state","raw SplitIntoSSTs descriptors, never synthetic materialized keys");
     SketchState(&record,"input",state,truth);SketchState(&record,"output",outputs,truth);
     MaterializedMetrics(&record,"raw_outputs",outputs,truth);
-    MaterializedMetrics(&record,"trimmed_outputs_diagnostic_only",TrimSameLevel(outputs),truth);
+    MaterializedMetrics(&record,"trimmed_outputs_diagnostic_only",TrimSameLevel(outputs,1),truth);
     record.Print();state=std::move(outputs);
   }
 }
 }  // namespace
 int main() {
-  setenv("VCOMP_KMV_ENABLED","1",1);
   for(const auto& name:std::vector<std::string>{"disjoint_interleaved","hot_shared_core","gapped_50"})
     for(size_t samples:{512,2048,16384})Chain(name,samples);
   return 0;

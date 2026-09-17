@@ -1,0 +1,12 @@
+sweep	x	is_default	loading_min	peak_rss_gb	plr_memory_mb	final_db_gb	final_sst_count	db_size_error_pct
+PLR error bound	2	0	16.92	4.543	3076.4	852.4	13792	3.46
+PLR error bound	4	0	6.3	2.434	1121.9	851.0	13740	3.29
+PLR error bound	8	1	2.41	1.613	346.8	850.1	13719	3.18
+PLR error bound	16	0	1.21	1.307	101.3	850.7	13754	3.25
+PLR error bound	32	0	0.89	1.158	32.4	850.4	13733	3.22
+KMV samples	128	0	1.36	1.65	346.6	944.8	17114	14.67
+KMV samples	256	0	1.64	1.671	346.7	894.3	14871	8.54
+KMV samples	512	1	2.41	1.613	346.8	850.1	13719	3.18
+KMV samples	1024	0	4.89	1.549	346.7	833.8	13367	1.2
+KMV samples	2048	0	11.26	1.54	346.7	826.1	13217	0.27
+baseline			58.8			823.9	13498	0

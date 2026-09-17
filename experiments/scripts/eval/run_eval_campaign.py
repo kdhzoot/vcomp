@@ -50,8 +50,8 @@ F2 = dict(use_virtual_compaction=True, plr_error_bound=8,
           vcomp_phase1_shards=8, vcomp_materialize_workers=48,
           vcomp_log_apply_timing=False, vcomp_sort_detail_timing=False)
 BENCH = 'flush,compact0,waitforcompaction,stats,levelstats'
-EXTRA_ENV = {}          # --env KEY=VAL 로 덮어쓴다 (예: VCOMP_DISCRETE_CDF_ENABLED=0)
-RUNTIME_ENV = dict(VCOMP_KMV_ENABLED='1', VCOMP_BG_COMMIT_BATCH_MAX='16',
+EXTRA_ENV = {}          # --env KEY=VAL 로 덮어쓴다 (예: VCOMP_KMV_SAMPLES=256)
+RUNTIME_ENV = dict(VCOMP_BG_COMMIT_BATCH_MAX='16',
                    VCOMP_BG_COMMIT_DELAY_US='100')
 LIVE_FRACTION = 0.70   # DB bytes / logical input, with headroom for the guard
 

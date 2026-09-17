@@ -41,9 +41,10 @@ REFERENCE = dict(key_size=24, value_size=1000,
                  compaction_pri=3)
 
 F2 = dict(use_virtual_compaction=True, plr_error_bound=8,
-          # 847e198c08: write path가 실제로 내는 key id 집합을 재생(bitmap). 없으면
-          # 카디널리티만 맞고 key set은 독립 표본이라 positive lookup이 어긋난다.
-          vcomp_exact_membership=True,
+          # exact membership은 write path의 key stream을 그대로 재생해야 해서
+          # Phase 1 keygen이 단일 스레드가 된다(1 TB에서 7.3 s -> 18.5 s). 끄면
+          # batch마다 독립 RNG를 써서 keygen이 shard 수만큼 병렬로 돈다.
+          vcomp_exact_membership=False,
           # backpressure(기본 on)는 별도 플래그를 넘기지 않는다 — 바이너리 기본값.
           vcomp_register_batch_max=256, vcomp_visible_l0_batch_mb=0,
           vcomp_phase1_shards=8, vcomp_materialize_workers=48,

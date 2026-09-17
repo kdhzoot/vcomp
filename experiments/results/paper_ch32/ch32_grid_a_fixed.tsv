@@ -1,0 +1,33 @@
+group	x_label	system	ops_per_sec	filter_per_lookup	compact_write_GB	run_s	drain_s	total_s	source_db	artifact
+KV size	100 B	baseline	758895	7.431	62.86	131.8	21.8	153.6	/work/vcomp/exp/eval_20260909_night1/E1-100B_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/E1-100B_baseline__workloada
+KV size	100 B	f2load	747389	7.688	65.52	133.8	16.4	150.2	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E1-100B_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/E1-100B_f2load__workloada
+KV size	1 KB	baseline	403887	14.506	802.96	247.6	19.0	266.6	/work/vcomp/exp/eval_20260909_night1/P0-r1_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/P0-r1_baseline__workloada
+KV size	1 KB	f2load	397691	14.099	827.87	251.5	18.8	270.3	/work/vcomp/exp/nobitmap_remaining_20260914_run1/P0fix-r1_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/P0fix-r1_f2load__workloada
+KV size	10 KB	baseline	47860	7.982	11668.23	2089.4	17.0	2106.4	/work/vcomp/exp/eval_20260909_night1/E1-10KB_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/E1-10KB_baseline__workloada
+KV size	10 KB	f2load	45323	8.633	11779.95	2206.3	18.4	2224.7	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E1-10KB_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/E1-10KB_f2load__workloada
+Dataset size	1 TB	baseline	403887	14.506	802.96	247.6	19.0	266.6	/work/vcomp/exp/eval_20260909_night1/P0-r1_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/P0-r1_baseline__workloada
+Dataset size	1 TB	f2load	397691	14.099	827.87	251.5	18.8	270.3	/work/vcomp/exp/nobitmap_remaining_20260914_run1/P0fix-r1_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/P0fix-r1_f2load__workloada
+Dataset size	2 TB	baseline	383418	13.740	901.01	260.8	19.6	280.4	/work/vcomp/exp/eval_20260909_night1/E2-2T_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/E2-2T_baseline__workloada
+Dataset size	2 TB	f2load	372798	13.739	932.90	268.2	21.4	289.6	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E2-2T_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/E2-2T_f2load__workloada
+Dataset size	4 TB	baseline	355040	12.626	1082.91	281.7	22.6	304.3	/work/vcomp/exp/eval_20260909_night1/E2-4T_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/E2-4T_baseline__workloada
+Dataset size	4 TB	f2load	334451	12.548	1131.04	299.0	28.4	327.4	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E2-4T_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/E2-4T_f2load__workloada
+Dataset size	8 TB	baseline	323850	13.029	1089.67	308.8	22.6	331.4	/work/vcomp/exp/eval_20260909_night1/E2-8T_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/E2-8T_baseline__workloada
+Dataset size	8 TB	f2load	312357	12.640	1156.17	320.1	20.0	340.1	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E2-8T_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/E2-8T_f2load__workloada
+Key uniqueness	25%	baseline	441912	14.402	713.78	226.3	15.4	241.7	/work/vcomp/exp/eval_20260909_night1/E3-u25_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/E3-u25_baseline__workloada
+Key uniqueness	25%	f2load	449495	14.255	728.82	222.5	18.6	241.1	/work/vcomp/exp/nobitmap_20260914/E3-u25_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/E3-u25_f2load__workloada
+Key uniqueness	50%	baseline	427700	14.482	718.96	233.8	14.6	248.4	/work/vcomp/exp/eval_20260909_night1/E3-u50_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/E3-u50_baseline__workloada
+Key uniqueness	50%	f2load	424032	14.551	737.05	235.8	7.6	243.4	/work/vcomp/exp/nobitmap_20260914/E3-u50_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/E3-u50_f2load__workloada
+Key uniqueness	63%	baseline	403887	14.506	802.96	247.6	19.0	266.6	/work/vcomp/exp/eval_20260909_night1/P0-r1_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/P0-r1_baseline__workloada
+Key uniqueness	63%	f2load	397691	14.099	827.87	251.5	18.8	270.3	/work/vcomp/exp/nobitmap_remaining_20260914_run1/P0fix-r1_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/P0fix-r1_f2load__workloada
+Key uniqueness	100%	baseline	390299	13.870	858.26	256.2	17.6	273.8	/work/vcomp/exp/eval_20260909_night1/E3-u100_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/E3-u100_baseline__workloada
+Key uniqueness	100%	f2load	375444	13.629	855.38	266.4	17.4	283.8	/work/vcomp/exp/global_unique_20260914/E3-u100_f2load	experiments/artifacts/fix_20260915_ycsba_globaluniq/E3-u100_f2load__workloada
+Compression	off	baseline	403887	14.506	802.96	247.6	19.0	266.6	/work/vcomp/exp/eval_20260909_night1/P0-r1_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/P0-r1_baseline__workloada
+Compression	off	f2load	397691	14.099	827.87	251.5	18.8	270.3	/work/vcomp/exp/nobitmap_remaining_20260914_run1/P0fix-r1_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/P0fix-r1_f2load__workloada
+Compression	on	baseline	396564	14.141	792.94	252.2	8.6	260.8	/work/vcomp/exp/eval_20260909_night1/E7-lz4_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/E7-lz4_baseline__workloada
+Compression	on	f2load	418995	14.092	799.29	238.7	12.4	251.1	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E7-lz4_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/E7-lz4_f2load__workloada
+Level structure	256MB x 4	baseline	437301	19.144	394.04	228.7	20.6	249.3	/work/vcomp/exp/eval_20260909_night1/E4-256m4_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/E4-256m4_baseline__workloada
+Level structure	256MB x 4	f2load	439860	19.173	391.94	227.3	21.6	248.9	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E4-256m4_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/E4-256m4_f2load__workloada
+Level structure	256MB x 10	baseline	403887	14.506	802.96	247.6	19.0	266.6	/work/vcomp/exp/eval_20260909_night1/P0-r1_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/P0-r1_baseline__workloada
+Level structure	256MB x 10	f2load	397691	14.099	827.87	251.5	18.8	270.3	/work/vcomp/exp/nobitmap_remaining_20260914_run1/P0fix-r1_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/P0fix-r1_f2load__workloada
+Level structure	1024MB x 10	baseline	392346	14.077	928.07	254.9	8.0	262.9	/work/vcomp/exp/eval_20260909_night1/E4-1024m10_baseline	experiments/artifacts/fix_20260914_ycsba_fixed_deep/E4-1024m10_baseline__workloada
+Level structure	1024MB x 10	f2load	392320	14.387	917.46	254.9	10.0	264.9	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E4-1024m10_f2load	experiments/artifacts/fix_20260915_ycsba_nobitmap/E4-1024m10_f2load__workloada

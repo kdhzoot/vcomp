@@ -1,0 +1,33 @@
+group	x_label	system	ops_per_sec	filter_per_lookup	positive_lookup_pct	source_ssts	source_db	artifact
+KV size	100 B	baseline	2682192	2.113	60.29	1380	/work/vcomp/exp/eval_20260909_night1/E1-100B_baseline	experiments/artifacts/eval_20260913_e1_baseline_ycsb/E1-100B_baseline__workloadc
+KV size	100 B	f2load	2560926	2.429	62.88	1393	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E1-100B_f2load	experiments/artifacts/nobitmap_remaining_20260914_run1_ycsbc/E1-100B_f2load__workloadc
+KV size	1 KB	baseline	1474872	3.427	60.29	13539	/work/vcomp/exp/eval_20260909_night1/P0-r1_baseline	experiments/artifacts/eval_20260912_ycsb_af/P0-r1_baseline__workloadc
+KV size	1 KB	f2load	1573390	3.344	59.50	13205	/work/vcomp/exp/nobitmap_remaining_20260914_run1/P0fix-r1_f2load	experiments/artifacts/nobitmap_remaining_20260914_run1_ycsbc/P0fix-r1_f2load__workloadc
+KV size	10 KB	baseline	1031044	5.106	60.29	130732	/work/vcomp/exp/eval_20260909_night1/E1-10KB_baseline	experiments/artifacts/eval_20260913_e1_baseline_ycsb/E1-10KB_baseline__workloadc
+KV size	10 KB	f2load	1175045	4.503	63.81	130232	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E1-10KB_f2load	experiments/artifacts/nobitmap_remaining_20260914_run1_ycsbc/E1-10KB_f2load__workloadc
+Dataset size	1 TB	baseline	1474872	3.427	60.29	13539	/work/vcomp/exp/eval_20260909_night1/P0-r1_baseline	experiments/artifacts/eval_20260912_ycsb_af/P0-r1_baseline__workloadc
+Dataset size	1 TB	f2load	1573390	3.344	59.50	13205	/work/vcomp/exp/nobitmap_remaining_20260914_run1/P0fix-r1_f2load	experiments/artifacts/nobitmap_remaining_20260914_run1_ycsbc/P0fix-r1_f2load__workloadc
+Dataset size	2 TB	baseline	1333718	4.085	60.67	27508	/work/vcomp/exp/eval_20260909_night1/E2-2T_baseline	experiments/artifacts/fix_20260913_ycsbc/E2-2T_baseline__workloadc
+Dataset size	2 TB	f2load	1438361	3.856	62.20	26780	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E2-2T_f2load	experiments/artifacts/nobitmap_remaining_20260914_run1_ycsbc/E2-2T_f2load__workloadc
+Dataset size	4 TB	baseline	1249389	4.260	66.12	47740	/work/vcomp/exp/eval_20260909_night1/E2-4T_baseline	experiments/artifacts/fix_20260913_ycsbc/E2-4T_baseline__workloadc
+Dataset size	4 TB	f2load	1353587	4.246	65.17	48079	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E2-4T_f2load	experiments/artifacts/nobitmap_remaining_20260914_run1_ycsbc/E2-4T_f2load__workloadc
+Dataset size	8 TB	baseline	1180006	4.473	65.43	102295	/work/vcomp/exp/eval_20260909_night1/E2-8T_baseline	experiments/artifacts/fix_20260913_ycsbc/E2-8T_baseline__workloadc
+Dataset size	8 TB	f2load	1140933	5.097	63.78	104674	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E2-8T_f2load	experiments/artifacts/nobitmap_remaining_20260914_run1_ycsbc/E2-8T_f2load__workloadc
+Key uniqueness	25%	baseline	3186181	2.550	24.07	4874	/work/vcomp/exp/eval_20260909_night1/E3-u25_baseline	experiments/artifacts/eval_20260912_ycsb_af/E3-u25_baseline__workloadc
+Key uniqueness	25%	f2load	3003735	2.805	27.76	4965	/work/vcomp/exp/nobitmap_20260914/E3-u25_f2load	experiments/artifacts/fix_20260914_ycsbc_nobitmap/E3-u25_f2load__workloadc
+Key uniqueness	50%	baseline	1753623	3.624	50.44	10207	/work/vcomp/exp/eval_20260909_night1/E3-u50_baseline	experiments/artifacts/eval_20260913_e3_ycsb/E3-u50_baseline__workloadc
+Key uniqueness	50%	f2load	1826846	3.483	49.77	10265	/work/vcomp/exp/nobitmap_20260914/E3-u50_f2load	experiments/artifacts/fix_20260914_ycsbc_nobitmap/E3-u50_f2load__workloadc
+Key uniqueness	63%	baseline	1474872	3.427	60.29	13539	/work/vcomp/exp/eval_20260909_night1/P0-r1_baseline	experiments/artifacts/eval_20260912_ycsb_af/P0-r1_baseline__workloadc
+Key uniqueness	63%	f2load	1573390	3.344	59.50	13205	/work/vcomp/exp/nobitmap_remaining_20260914_run1/P0fix-r1_f2load	experiments/artifacts/nobitmap_remaining_20260914_run1_ycsbc/P0fix-r1_f2load__workloadc
+Key uniqueness	100%	baseline	987299	3.639	100.00	18883	/work/vcomp/exp/eval_20260909_night1/E3-u100_baseline	experiments/artifacts/eval_20260913_e3_ycsb/E3-u100_baseline__workloadc
+Key uniqueness	100%	f2load	1043696	3.853	98.47	17747	/work/vcomp/exp/global_unique_20260914/E3-u100_f2load	experiments/artifacts/fix_20260914_ycsbc_global_unique_u100/E3-u100_f2load__workloadc
+Compression	off	baseline	1474872	3.427	60.29	13539	/work/vcomp/exp/eval_20260909_night1/P0-r1_baseline	experiments/artifacts/eval_20260912_ycsb_af/P0-r1_baseline__workloadc
+Compression	off	f2load	1573390	3.344	59.50	13205	/work/vcomp/exp/nobitmap_remaining_20260914_run1/P0fix-r1_f2load	experiments/artifacts/nobitmap_remaining_20260914_run1_ycsbc/P0fix-r1_f2load__workloadc
+Compression	on	baseline	1691141	2.774	60.29	6811	/work/vcomp/exp/eval_20260909_night1/E7-lz4_baseline	experiments/artifacts/eval_20260912_ycsb_af/E7-lz4_baseline__workloadc
+Compression	on	f2load	1636909	3.274	62.86	6902	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E7-lz4_f2load	experiments/artifacts/nobitmap_remaining_20260914_run1_ycsbc/E7-lz4_f2load__workloadc
+Level structure	256MB x 4	baseline	1362138	4.380	60.29	12561	/work/vcomp/exp/eval_20260909_night1/E4-256m4_baseline	experiments/artifacts/eval_20260913_e4_ycsb/E4-256m4_baseline__workloadc
+Level structure	256MB x 4	f2load	1468452	4.168	61.03	12569	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E4-256m4_f2load	experiments/artifacts/nobitmap_remaining_20260914_run1_ycsbc/E4-256m4_f2load__workloadc
+Level structure	256MB x 10	baseline	1474872	3.427	60.29	13539	/work/vcomp/exp/eval_20260909_night1/P0-r1_baseline	experiments/artifacts/eval_20260912_ycsb_af/P0-r1_baseline__workloadc
+Level structure	256MB x 10	f2load	1573390	3.344	59.50	13205	/work/vcomp/exp/nobitmap_remaining_20260914_run1/P0fix-r1_f2load	experiments/artifacts/nobitmap_remaining_20260914_run1_ycsbc/P0fix-r1_f2load__workloadc
+Level structure	1024MB x 10	baseline	1501543	2.520	60.29	13021	/work/vcomp/exp/eval_20260909_night1/E4-1024m10_baseline	experiments/artifacts/eval_20260913_e4_ycsb/E4-1024m10_baseline__workloadc
+Level structure	1024MB x 10	f2load	1468293	2.897	63.91	12946	/work/vcomp/exp/nobitmap_remaining_20260914_run1/E4-1024m10_f2load	experiments/artifacts/nobitmap_remaining_20260914_run1_ycsbc/E4-1024m10_f2load__workloadc

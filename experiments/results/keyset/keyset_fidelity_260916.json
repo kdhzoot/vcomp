@@ -1,0 +1,23 @@
+{
+ "tool": "experiments/scripts/load/keyset_scan.cc (모든 SST를 SstFileReader로 스캔, key id 비트맵)",
+ "u100_1TB": {
+  "domain": 1048576000,
+  "baseline":            {"db": "eval_20260909_night1/E3-u100_baseline",   "ssts": 18883, "entries": 1048576000, "distinct": 1048576000, "coverage_pct": 100.0000},
+  "f2load_global_unique":{"db": "global_unique_20260914/E3-u100_f2load",   "ssts": 17747, "entries": 1029274894, "distinct": 1029274894, "coverage_pct": 98.1593,
+                          "missing": 19301106, "invented": 0, "jaccard": 0.981593},
+  "f2load_deep_first":   {"db": "deepfirst_20260915/u100-deep_f2load",     "ssts": 17754, "entries": 1042894274, "distinct": 1042894274, "coverage_pct": 99.4581,
+                          "missing": 5681726, "invented": 0, "jaccard": 0.994581}
+ },
+ "E2_4T_nobitmap": {
+  "domain": 4194304000,
+  "baseline":   {"db": "eval_20260909_night1/E2-4T_baseline",              "ssts": 47740, "entries": 2821450783, "distinct": 2651316728, "coverage_pct": 63.2123},
+  "f2load_eb8": {"db": "nobitmap_remaining_20260914_run1/E2-4T_f2load",    "ssts": 48079, "entries": 2833246163, "distinct": 2661115802, "coverage_pct": 63.4459,
+                 "missing": 969140228, "invented": 978939302, "intersection": 1682176500, "jaccard": 0.463377,
+                 "expected_intersection_if_independent": 1682152949},
+  "f2load_eb32":{"db": "plr_eb32_20260916/E2-4T-eb32_f2load",              "ssts": 48079, "entries": 2832810026, "distinct": 2660710800, "coverage_pct": 63.4363,
+                 "missing": 969395156, "invented": 978789228, "intersection": 1681921572, "jaccard": 0.463326,
+                 "expected_intersection_if_independent": 1681896937},
+  "eb8_vs_eb32_symmetric_difference": 1913833760,
+  "note": "교집합이 |A||B|/|D| 와 1.4e-5 이내로 일치 -> 독립 무작위 표본과 통계적으로 구분 불가"
+ }
+}

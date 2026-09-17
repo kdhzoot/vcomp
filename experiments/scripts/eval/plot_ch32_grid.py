@@ -22,7 +22,7 @@ GROUPS = [('KV size',        'kv',  [('E1-100B', 'E1-100B', '100 B'), ('P0-r1', 
           ('Compression',    'cp',  [('P0-r1', 'P0fix-r1', 'off'), ('E7-lz4', 'E7-lz4', 'on')]),
           ('Level structure','lv',  [('E4-256m4', 'E4-256m4', '256MB x 4'), ('P0-r1', 'P0fix-r1', '256MB x 10'), ('E4-1024m10', 'E4-1024m10', '1024MB x 10')])]
 METRICS = [('ops', 'Throughput\n(ops/s)', 'big'), ('fpr', 'Filter checks\n/ lookup', 'dec'),
-           ('found', 'Positive\nlookup (%)', 'pct'), ('ssts', 'SST count', 'big')]
+           ('found', 'Positive\nlookup (%)', 'pct')]
 fam = 'Cambria' if any('cambria' in f.name.lower() for f in font_manager.fontManager.ttflist) else 'DejaVu Serif'
 plt.rcParams.update({'font.family': fam, 'hatch.linewidth': 2.0})
 def resolve(name):
@@ -76,7 +76,7 @@ def get(n):
 P0 = get('P0-r1_baseline')
 
 ratios = [len(pts) for _, _, pts in GROUPS]
-fig, axes = plt.subplots(len(METRICS), len(GROUPS), figsize=(1.35 * sum(ratios) + 3.0, 16.0), dpi=200, sharey='row',
+fig, axes = plt.subplots(len(METRICS), len(GROUPS), figsize=(1.35 * sum(ratios) + 3.0, 13.5), dpi=200, sharey='row',
                          gridspec_kw={'width_ratios': ratios})
 for i, (key, ylabel, kind) in enumerate(METRICS):
     f = fmt(kind)

@@ -1,0 +1,49 @@
+group	x_label	point	metric	baseline	f2load_mean	f2load_sd	n
+KV size	100 B	E1-100B	ops	2682192.0000	2114393.8000	214823.2102	5
+KV size	100 B	E1-100B	fpr	2.1130	2.9378	0.0087	5
+KV size	100 B	E1-100B	found	60.2900	64.6533	2.4049	5
+KV size	1 KB	P0fix-r1	ops	1474872.0000	1396604.2000	43072.4820	5
+KV size	1 KB	P0fix-r1	fpr	3.4270	4.0790	0.0195	5
+KV size	1 KB	P0fix-r1	found	60.2900	63.7650	2.2223	5
+KV size	10 KB	E1-10KB	ops	1031044.0000	1142413.6000	30481.1267	5
+KV size	10 KB	E1-10KB	fpr	5.1060	4.7478	0.3849	5
+KV size	10 KB	E1-10KB	found	60.2900	64.4243	3.0722	5
+Dataset size	1 TB	P0fix-r1	ops	1474872.0000	1396604.2000	43072.4820	5
+Dataset size	1 TB	P0fix-r1	fpr	3.4270	4.0790	0.0195	5
+Dataset size	1 TB	P0fix-r1	found	60.2900	63.7650	2.2223	5
+Dataset size	2 TB	E2-2T	ops	1333718.0000	1424602.4000	72943.2278	5
+Dataset size	2 TB	E2-2T	fpr	4.0850	3.8187	0.3365	5
+Dataset size	2 TB	E2-2T	found	60.6700	63.0659	1.7015	5
+Dataset size	4 TB	E2-4T	ops	1249389.0000	1389098.2000	18173.5271	5
+Dataset size	4 TB	E2-4T	fpr	4.2600	3.9032	0.1556	5
+Dataset size	4 TB	E2-4T	found	66.1200	64.3686	0.3883	5
+Dataset size	8 TB	E2-8T	ops	1180006.0000	1230156.6000	21499.6587	5
+Dataset size	8 TB	E2-8T	fpr	4.4730	4.4366	0.2976	5
+Dataset size	8 TB	E2-8T	found	65.4300	61.8934	2.2740	5
+Key uniqueness	25%	E3-u25	ops	3186181.0000	3220418.8000	51293.4314	5
+Key uniqueness	25%	E3-u25	fpr	2.5500	2.5666	0.0295	5
+Key uniqueness	25%	E3-u25	found	24.0700	27.4437	2.8727	5
+Key uniqueness	50%	E3-u50	ops	1753623.0000	1672675.4000	254371.6811	5
+Key uniqueness	50%	E3-u50	fpr	3.6240	3.6483	0.4768	5
+Key uniqueness	50%	E3-u50	found	50.4400	52.1401	2.7657	5
+Key uniqueness	63%	P0fix-r1	ops	1474872.0000	1396604.2000	43072.4820	5
+Key uniqueness	63%	P0fix-r1	fpr	3.4270	4.0790	0.0195	5
+Key uniqueness	63%	P0fix-r1	found	60.2900	63.7650	2.2223	5
+Key uniqueness	100%	E3-u100	ops	987299.0000	1061169.2000	9799.8500	5
+Key uniqueness	100%	E3-u100	fpr	3.6390	3.4862	0.1277	5
+Key uniqueness	100%	E3-u100	found	100.0000	99.4770	0.0489	5
+Compression	off	P0fix-r1	ops	1474872.0000	1396604.2000	43072.4820	5
+Compression	off	P0fix-r1	fpr	3.4270	4.0790	0.0195	5
+Compression	off	P0fix-r1	found	60.2900	63.7650	2.2223	5
+Compression	on	E7-lz4	ops	1691141.0000	1690125.4000	8349.8358	5
+Compression	on	E7-lz4	fpr	2.7740	2.8531	0.0973	5
+Compression	on	E7-lz4	found	60.2900	63.0003	2.6615	5
+Level structure	256MB x 4	E4-256m4	ops	1362138.0000	1390718.0000	51517.7036	5
+Level structure	256MB x 4	E4-256m4	fpr	4.3800	4.4096	0.1116	5
+Level structure	256MB x 4	E4-256m4	found	60.2900	61.0719	2.0400	5
+Level structure	256MB x 10	P0fix-r1	ops	1474872.0000	1396604.2000	43072.4820	5
+Level structure	256MB x 10	P0fix-r1	fpr	3.4270	4.0790	0.0195	5
+Level structure	256MB x 10	P0fix-r1	found	60.2900	63.7650	2.2223	5
+Level structure	1024MB x 10	E4-1024m10	ops	1501543.0000	1553822.2000	25683.0476	5
+Level structure	1024MB x 10	E4-1024m10	fpr	2.5200	2.3515	0.1874	5
+Level structure	1024MB x 10	E4-1024m10	found	60.2900	61.8723	2.7531	5

@@ -5,7 +5,7 @@
 쓰기가 섞인 워크로드(A/B/D/E/F)는 DB를 변형하므로 셀마다 새로 staging 하고
 측정이 끝나면 staging 사본만 지운다(원본 SST 는 하드링크라 그대로 남는다).
 """
-import argparse, datetime, hashlib, json, re, shutil, subprocess, sys, time
+import argparse, datetime, hashlib, json, os, re, shutil, subprocess, sys, time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -13,7 +13,10 @@ sys.path.insert(0, str(REPO / 'experiments/lib'))
 from ch23_common import BASE, command, stage_db, db_identity, deep_copy_db   # noqa: E402
 
 ART = REPO / 'experiments/artifacts'
-PROFILER = REPO.parent / 'vcomp-prof' / 'db_bench'
+# 읽기 바이너리. 기본은 계측 빌드지만, 그 트리가 없는 호스트에서는
+# VCOMP_YCSB_BINARY 로 덮어쓴다 (양쪽 arm이 같은 바이너리를 쓰기만 하면 비교는 유효).
+PROFILER = Path(os.environ.get('VCOMP_YCSB_BINARY',
+                               REPO.parent / 'vcomp-prof' / 'db_bench'))
 GIB = 1024 ** 3
 
 
@@ -44,9 +47,9 @@ def options(db, log, workload, duration, cache, num, key, value, dist):
                 benchmarks=bench,
                 use_existing_db=True, readonly=False,
                 disable_auto_compactions=False, memtablerep='skip_list',
-                threads=48, duration=(0 if FIXED_OPS else duration),
+                threads=THREADS, duration=(0 if FIXED_OPS else duration),
                 # fixed-work: --reads는 스레드당 op 수(ycsb_operationcount_) → 총 FIXED_OPS
-                reads=((FIXED_OPS + 47) // 48 if FIXED_OPS else 10000000000),
+                reads=((FIXED_OPS + THREADS - 1) // THREADS if FIXED_OPS else 10000000000),
                 seed=87654321, ops_between_duration_checks=1,
                 cache_type='lru_cache', cache_size=cache,
                 cache_index_and_filter_blocks=True,
@@ -64,6 +67,8 @@ def options(db, log, workload, duration, cache, num, key, value, dist):
 COPY_MODE = 'hardlink'
 DROP_CACHES = False
 FIXED_OPS = 0
+# 측정 스레드 수. frozen 캠페인은 48이지만 online CPU가 적은 호스트에서는 낮춘다.
+THREADS = 48
 
 
 def run_cell(src, staging, out, workload, duration, cache, num, key, value, dist):
@@ -178,10 +183,13 @@ def main():
                    help='총 op 수 고정(fixed-work). >0이면 duration=0, reads=총/48, 벤치에 waitforcompaction 추가(drain 포함 시간 기록)')
     p.add_argument('--drop-caches', action='store_true',
                    help='staging 뒤 sync + echo 3 > /proc/sys/vm/drop_caches (sudo -n 필요)')
+    p.add_argument('--threads', type=int, default=48,
+                   help='YCSB 측정 스레드 수 (frozen 구성은 48)')
     p.add_argument('--copy-mode', default='hardlink', choices=['hardlink', 'deep'],
                    help='deep: SST를 실제 복사(병렬 cp) — 물리 배치 차이 제거; 셀 종료 후 삭제')
     a = p.parse_args()
-    global COPY_MODE, DROP_CACHES, FIXED_OPS; COPY_MODE = a.copy_mode; DROP_CACHES = a.drop_caches; FIXED_OPS = a.fixed_ops
+    global COPY_MODE, DROP_CACHES, FIXED_OPS, THREADS
+    COPY_MODE = a.copy_mode; DROP_CACHES = a.drop_caches; FIXED_OPS = a.fixed_ops; THREADS = a.threads
     root = ART / a.run_id
     root.mkdir(parents=True, exist_ok=True)
     (root / 'manifest.json').write_text(json.dumps(dict(

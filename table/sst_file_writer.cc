@@ -68,6 +68,8 @@ struct SstFileWriter::Rep {
   // cached pages from page cache.
   uint64_t last_fadvise_size = 0;
   bool skip_filters;
+  // Applied to the output file in Open(); 0 leaves the file system default.
+  size_t preallocation_block_size = 0;
   std::string db_session_id;
   uint64_t next_file_number = 1;
   size_t ts_sz;
@@ -326,6 +328,10 @@ SstFileWriter::~SstFileWriter() {
   }
 }
 
+void SstFileWriter::SetPreallocationBlockSize(size_t size) {
+  rep_->preallocation_block_size = size;
+}
+
 Status SstFileWriter::Open(const std::string& file_path, Temperature temp) {
   Rep* r = rep_.get();
   Status s;
@@ -339,6 +345,9 @@ Status SstFileWriter::Open(const std::string& file_path, Temperature temp) {
   }
 
   sst_file->SetIOPriority(r->io_priority);
+  if (r->preallocation_block_size > 0) {
+    sst_file->SetPreallocationBlockSize(r->preallocation_block_size);
+  }
 
   CompressionType compression_type;
   CompressionOptions compression_opts;

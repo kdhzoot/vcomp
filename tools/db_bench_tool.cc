@@ -948,6 +948,18 @@ DEFINE_uint64(vcomp_global_unique_keys_max_mb, 1024,
               "reservation bitmap (one bit per key id in the trace key "
               "domain). fillvirtual fails before loading if it needs more.");
 
+DEFINE_bool(vcomp_materialize_preallocate, false,
+            "Preallocate each materialized SST the way compaction outputs are "
+            "(max(target file size, estimated size) + 10%, at most 1 GiB), so "
+            "files written by concurrent workers stay contiguous on disk. Off "
+            "by default: at 1 TB it left YCSB A/C unchanged and slowed "
+            "materialization by 8-10%.");
+DEFINE_bool(vcomp_membership_plan, true,
+            "With --vcomp_exact_membership, decide before materialization how "
+            "many unclaimed key ids each file takes from each part of its "
+            "range, by a max flow over the file ranges and entry counts. A "
+            "shallower level then takes the ids no deeper file has room for. "
+            "Off: each file spreads its picks evenly over its range.");
 DEFINE_bool(vcomp_exact_membership, false,
             "fillvirtual only: record every ingested key id in a bitmap and "
             "materialize from that bitmap instead of inverting the PLR model. "
@@ -2480,6 +2492,98 @@ class BaselineKeyStream {
   std::thread worker_;
 };
 
+// Max flow (Dinic) for the exact-membership plan. The graph is small: one
+// node per segment of the key domain and one per file, so a few tens of
+// thousands of nodes at 1 TB.
+class MembershipPlanFlow {
+ public:
+  explicit MembershipPlanFlow(size_t nodes)
+      : g_(nodes), level_(nodes), it_(nodes) {}
+
+  // Returns the edge's index inside g_[u], to read its flow afterwards.
+  size_t AddEdge(size_t u, size_t v, uint64_t cap) {
+    g_[u].push_back(Edge{v, cap, g_[v].size()});
+    g_[v].push_back(Edge{u, 0, g_[u].size() - 1});
+    return g_[u].size() - 1;
+  }
+  uint64_t Residual(size_t u, size_t idx) const { return g_[u][idx].cap; }
+
+  uint64_t MaxFlow(size_t s, size_t t) {
+    uint64_t total = 0;
+    while (Bfs(s, t)) {
+      std::fill(it_.begin(), it_.end(), 0);
+      total += Augment(s, t);
+    }
+    return total;
+  }
+
+ private:
+  struct Edge {
+    size_t to;
+    uint64_t cap;
+    size_t rev;
+  };
+
+  bool Bfs(size_t s, size_t t) {
+    std::fill(level_.begin(), level_.end(), -1);
+    std::vector<size_t> q{s};
+    level_[s] = 0;
+    for (size_t h = 0; h < q.size(); h++) {
+      const size_t u = q[h];
+      for (const Edge& e : g_[u]) {
+        if (e.cap > 0 && level_[e.to] < 0) {
+          level_[e.to] = level_[u] + 1;
+          q.push_back(e.to);
+        }
+      }
+    }
+    return level_[t] >= 0;
+  }
+
+  // Blocking flow with an explicit stack, so a long augmenting path does not
+  // recurse once per node.
+  uint64_t Augment(size_t s, size_t t) {
+    uint64_t total = 0;
+    std::vector<std::pair<size_t, size_t>> path;  // (node, edge index)
+    size_t u = s;
+    while (true) {
+      if (u == t) {
+        uint64_t f = UINT64_MAX;
+        for (const auto& pe : path) f = std::min(f, g_[pe.first][pe.second].cap);
+        for (const auto& pe : path) {
+          Edge& e = g_[pe.first][pe.second];
+          e.cap -= f;
+          g_[e.to][e.rev].cap += f;
+        }
+        total += f;
+        path.clear();
+        u = s;
+        continue;
+      }
+      bool advanced = false;
+      for (; it_[u] < g_[u].size(); ++it_[u]) {
+        const Edge& e = g_[u][it_[u]];
+        if (e.cap > 0 && level_[e.to] == level_[u] + 1) {
+          path.emplace_back(u, it_[u]);
+          u = e.to;
+          advanced = true;
+          break;
+        }
+      }
+      if (advanced) continue;
+      if (u == s) return total;
+      level_[u] = -1;  // dead end for the rest of this phase
+      u = path.back().first;
+      path.pop_back();
+      ++it_[u];
+    }
+  }
+
+  std::vector<std::vector<Edge>> g_;
+  std::vector<int> level_;
+  std::vector<size_t> it_;
+};
+
 class KeyMembership {
  public:
   static std::unique_ptr<KeyMembership> Create(uint64_t key_domain,
@@ -2632,6 +2736,26 @@ class KeyMembership {
                    Mode mode = kPresent) const {
     return Cursor(this, first, last, want, mode);
   }
+
+  // Several cursors over ascending, disjoint ranges read as one stream. With
+  // the plan, a file takes a fixed number of unclaimed ids from each segment
+  // of its range, so it reads one cursor per segment; the segments ascend, so
+  // the stream stays sorted.
+  class ChainCursor {
+   public:
+    void Add(Cursor c) { parts_.push_back(std::move(c)); }
+    bool Next(uint64_t* key) {
+      while (pos_ < parts_.size()) {
+        if (parts_[pos_].Next(key)) return true;
+        pos_++;
+      }
+      return false;
+    }
+
+   private:
+    std::vector<Cursor> parts_;
+    size_t pos_ = 0;
+  };
 
  private:
   KeyMembership(uint64_t key_domain, uint64_t words)
@@ -7735,7 +7859,137 @@ class Benchmark {
               "  Phase 2 materialize workers: %zu, level groups: %zu\n",
               num_workers, groups.size());
 
+      // Exact-membership plan: how many unclaimed key ids each file takes
+      // from each segment of its range.
+      //
+      // A key id can only go into a file whose range contains it, and within
+      // a level the ranges are disjoint, so each id has at most one candidate
+      // file per level. Without a plan, levels run shallowest first and each
+      // file spreads its picks evenly over its range, blind to which of those
+      // ids a deeper file will have no room for; a shallow file then spends
+      // its entries on ids the deeper level could have held and leaves behind
+      // ids that nothing deeper can take. The entry counts themselves are
+      // left as the model set them.
+      //
+      // Cut the key domain at every file boundary into segments. Every id in
+      // a segment has the same candidate files, so only a count per segment
+      // matters. A max flow source -> segment (its unclaimed ids) -> each
+      // covering file -> sink (the file's num_entries) is the largest set of
+      // ids any assignment can place, and the flow on segment -> file is how
+      // many that file must take there. What the flow cannot place is the
+      // part no assignment could: ids in a range whose files have fewer
+      // entries than it has distinct ids.
+      //
+      // Many flows reach that maximum, and they differ in how much they hand
+      // to shallow files. A shallow file's planned ids are taken from wherever
+      // the flow put them, so an arbitrary maximum can fill it from a few
+      // segments and narrow its key range far below the materialize range.
+      // The flow is therefore filled deepest level first: the deepest files
+      // are connected to the sink and saturated, then the next level up is
+      // connected and augmentation continues. Augmenting never lowers the flow
+      // into a file already connected, so each level holds as much as it can
+      // before any shallower level is asked, and a shallow file is planned
+      // only the ids nothing below it has room for. The rest of its entries
+      // are spread over its range as before.
+      struct MemberSegment {
+        uint64_t lo, hi, take;
+      };
+      std::vector<std::vector<MemberSegment>> member_plan(tasks.size());
+      std::vector<char> member_in_plan(tasks.size(), 0);
+      bool member_plan_built = false;
+      auto build_member_plan = [&](int from_level) {
+        const auto plan_start = FLAGS_env->NowMicros();
+        const uint64_t domain_max = membership->key_domain() - 1;
+        std::vector<size_t> plan_tasks;
+        std::vector<uint64_t> cuts;
+        for (size_t i = 0; i < tasks.size(); i++) {
+          const auto& t = tasks[i];
+          if (t.level == 0 || t.level < from_level) continue;
+          if (t.vsst->num_entries == 0 || t.vsst->plr_model.Empty()) continue;
+          const uint64_t hi = std::min(t.materialize_key_max, domain_max);
+          if (t.materialize_key_min > hi) continue;
+          plan_tasks.push_back(i);
+          cuts.push_back(t.materialize_key_min);
+          cuts.push_back(hi + 1);
+        }
+        std::sort(cuts.begin(), cuts.end());
+        cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
+        if (plan_tasks.empty() || cuts.size() < 2) return;
+        const size_t nseg = cuts.size() - 1;
+        std::vector<uint64_t> demand(nseg);
+        std::vector<char> covered(nseg, 0);
+        uint64_t demand_total = 0;
+        for (size_t j = 0; j < nseg; j++) {
+          demand[j] = membership->CountPresent(cuts[j], cuts[j + 1] - 1,
+                                               KeyMembership::kNewest);
+          demand_total += demand[j];
+        }
+        const size_t kSrc = 0, kSnk = 1, seg0 = 2, file0 = 2 + nseg;
+        MembershipPlanFlow flow(file0 + plan_tasks.size());
+        for (size_t j = 0; j < nseg; j++) {
+          if (demand[j] > 0) flow.AddEdge(kSrc, seg0 + j, demand[j]);
+        }
+        struct Link {
+          size_t seg, edge;
+        };
+        std::vector<std::vector<Link>> links(plan_tasks.size());
+        std::map<int, std::vector<size_t>, std::greater<int>> by_level;
+        size_t edges = 0;
+        for (size_t k = 0; k < plan_tasks.size(); k++) {
+          const auto& t = tasks[plan_tasks[k]];
+          const uint64_t hi = std::min(t.materialize_key_max, domain_max);
+          const size_t s0 = std::lower_bound(cuts.begin(), cuts.end(),
+                                             t.materialize_key_min) -
+                            cuts.begin();
+          const size_t s1 =
+              std::lower_bound(cuts.begin(), cuts.end(), hi + 1) - cuts.begin();
+          for (size_t j = s0; j < s1; j++) {
+            covered[j] = 1;
+            if (demand[j] == 0) continue;
+            links[k].push_back(
+                Link{j, flow.AddEdge(seg0 + j, file0 + k, demand[j])});
+            edges++;
+          }
+          by_level[t.level].push_back(k);
+        }
+        uint64_t placed = 0;
+        for (const auto& lv : by_level) {   // deepest level first
+          for (size_t k : lv.second) {
+            flow.AddEdge(file0 + k, kSnk, tasks[plan_tasks[k]].vsst->num_entries);
+          }
+          placed += flow.MaxFlow(kSrc, kSnk);
+        }
+        uint64_t orphan = 0;
+        for (size_t j = 0; j < nseg; j++) {
+          if (!covered[j]) orphan += demand[j];
+        }
+        for (size_t k = 0; k < plan_tasks.size(); k++) {
+          const size_t ti = plan_tasks[k];
+          member_in_plan[ti] = 1;
+          for (const Link& l : links[k]) {
+            const uint64_t take = demand[l.seg] - flow.Residual(seg0 + l.seg, l.edge);
+            member_plan[ti].push_back(
+                MemberSegment{cuts[l.seg], cuts[l.seg + 1] - 1, take});
+          }
+        }
+        member_plan_built = true;
+        fprintf(stderr,
+                "  Phase 2a membership plan: %zu files, %zu segments, %zu "
+                "links, unclaimed ids %" PRIu64 ", placeable %" PRIu64
+                " (%.4f%%), unplaceable %" PRIu64 " (no file covers %" PRIu64
+                ", files too small %" PRIu64 "), %.3f sec\n",
+                plan_tasks.size(), nseg, edges, demand_total, placed,
+                demand_total == 0 ? 100.0 : 100.0 * placed / demand_total,
+                demand_total - placed, orphan, demand_total - placed - orphan,
+                (FLAGS_env->NowMicros() - plan_start) / 1e6);
+      };
+
       for (const auto& group : groups) {
+      if (membership != nullptr && FLAGS_vcomp_membership_plan &&
+          !member_plan_built && !group.empty() &&
+          tasks[group.front()].level != 0) {
+        build_member_plan(tasks[group.front()].level);
+      }
       const bool overlapping_group =
           (unique_reservation != nullptr || membership != nullptr) &&
           tasks[group.front()].level == 0;
@@ -7837,7 +8091,7 @@ class Benchmark {
             // Claims are buffered and applied after the file is written: the
             // stale cursor reads the same bitmap, and claiming mid-file would
             // let it see this file's own fresh keys.
-            std::unique_ptr<KeyMembership::Cursor> member_fresh;
+            std::unique_ptr<KeyMembership::ChainCursor> member_fresh;
             std::unique_ptr<KeyMembership::Cursor> member_stale;
             bool member_have[2] = {false, false};
             uint64_t member_next[2] = {0, 0};
@@ -7849,16 +8103,63 @@ class Benchmark {
               }
               const uint64_t member_lo = task.materialize_key_min;
               const uint64_t want = task.vsst->num_entries;
-              const uint64_t fresh_avail = membership->CountPresent(
-                  member_lo, member_hi, KeyMembership::kNewest);
               const uint64_t stale_avail = membership->CountPresent(
                   member_lo, member_hi, KeyMembership::kStale);
-              const uint64_t want_fresh = std::min(want, fresh_avail);
+              member_fresh.reset(new KeyMembership::ChainCursor());
+              uint64_t fresh_avail = 0;
+              uint64_t want_fresh = 0;
+              if (member_in_plan[idx]) {
+                // Take the planned ids of each segment first. Whatever room
+                // the file has after that goes to the remaining unclaimed ids
+                // in proportion to how many each segment still holds, which
+                // keeps the even spread of the unplanned path. The planned
+                // takes never exceed num_entries, since the flow into a file
+                // is capped by it, and a shallower file can only have claimed
+                // ids, never added any, so each segment holds at most what
+                // the plan counted.
+                const auto& segs = member_plan[idx];
+                std::vector<uint64_t> avail(segs.size()), take(segs.size());
+                uint64_t planned = 0;
+                for (size_t j = 0; j < segs.size(); j++) {
+                  avail[j] = membership->CountPresent(segs[j].lo, segs[j].hi,
+                                                      KeyMembership::kNewest);
+                  take[j] = std::min(segs[j].take, avail[j]);
+                  fresh_avail += avail[j];
+                  planned += take[j];
+                }
+                want_fresh = std::min(want, fresh_avail);
+                const uint64_t extra = want_fresh - planned;
+                const uint64_t room = fresh_avail - planned;
+                uint64_t handed = 0;
+                if (extra > 0 && room > 0) {
+                  for (size_t j = 0; j < segs.size(); j++) {
+                    const uint64_t e = static_cast<uint64_t>(
+                        (static_cast<__uint128_t>(extra) * (avail[j] - take[j])) /
+                        room);
+                    take[j] += e;
+                    handed += e;
+                  }
+                  for (size_t j = 0; j < segs.size() && handed < extra; j++) {
+                    const uint64_t add =
+                        std::min(avail[j] - take[j], extra - handed);
+                    take[j] += add;
+                    handed += add;
+                  }
+                }
+                for (size_t j = 0; j < segs.size(); j++) {
+                  if (take[j] == 0) continue;
+                  member_fresh->Add(membership->NewCursor(
+                      segs[j].lo, segs[j].hi, take[j], KeyMembership::kNewest));
+                }
+              } else {
+                fresh_avail = membership->CountPresent(member_lo, member_hi,
+                                                       KeyMembership::kNewest);
+                want_fresh = std::min(want, fresh_avail);
+                member_fresh->Add(membership->NewCursor(
+                    member_lo, member_hi, want_fresh, KeyMembership::kNewest));
+              }
               const uint64_t want_stale =
                   std::min(want - want_fresh, stale_avail);
-              member_fresh.reset(new KeyMembership::Cursor(
-                  membership->NewCursor(member_lo, member_hi, want_fresh,
-                                        KeyMembership::kNewest)));
               member_stale.reset(new KeyMembership::Cursor(
                   membership->NewCursor(member_lo, member_hi, want_stale,
                                         KeyMembership::kStale)));
@@ -7886,6 +8187,17 @@ class Benchmark {
               env_opts.use_mmap_writes = false;
             }
             SstFileWriter sst_writer(env_opts, sst_opts);
+            if (FLAGS_vcomp_materialize_preallocate) {
+              // Same size rule as Compaction::OutputFilePreallocationSize().
+              // Without it, workers writing in parallel get their blocks
+              // interleaved and every file ends up in several extents, which
+              // makes later compactions reading these files I/O-bound.
+              uint64_t prealloc = std::max<uint64_t>(
+                  sst_opts.target_file_size_base, task.vsst->size_bytes);
+              prealloc = std::min<uint64_t>(uint64_t{1} << 30,
+                                            prealloc + prealloc / 10);
+              sst_writer.SetPreallocationBlockSize(static_cast<size_t>(prealloc));
+            }
             Status s = sst_writer.Open(sst_path);
             if (!s.ok()) {
               res.report_status = "open_failed";
@@ -7924,9 +8236,9 @@ class Benchmark {
                 }
                 k = member_next[pick];
                 if (pick == 0) member_claims.push_back(k);
-                member_have[pick] =
-                    (pick == 0 ? member_fresh : member_stale)
-                        ->Next(&member_next[pick]);
+                member_have[pick] = pick == 0
+                                        ? member_fresh->Next(&member_next[0])
+                                        : member_stale->Next(&member_next[1]);
               } else {
                 double position = static_cast<double>(pos);
 

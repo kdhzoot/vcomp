@@ -103,6 +103,11 @@ class SstFileWriter {
 
   ~SstFileWriter();
 
+  // Preallocate the output file in chunks of `size` bytes as it is written,
+  // the way compaction outputs are, so the file is laid out contiguously on
+  // disk. Must be called before Open(). 0 (the default) disables it.
+  void SetPreallocationBlockSize(size_t size);
+
   // Prepare SstFileWriter to write into file located at "file_path".
   Status Open(const std::string& file_path,
               Temperature temp = Temperature::kUnknown);

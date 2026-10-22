@@ -21,6 +21,21 @@ directory convention and setup on another server, see
 
 ## Current State
 
+Merge and sketch defaults, 2026-10-22: `NWayMergeKMVRangeAware` reads each
+input's entries inside a merge interval from its PLR rank, and KMV sketches keep
+64 range buckets of 64 samples (4096 per descriptor). The earlier split, which
+spread a KMV bucket's count evenly over the bucket's key width, stays selectable
+as `VCOMP_MERGE_RANK_MASS=0`; `VCOMP_KMV_SAMPLES=512 VCOMP_KMV_RANGE_BUCKETS=8`
+restores the earlier budget. With exact membership on skewed 1 TB input
+(zipf 0.99) the old pair left 0.9% of the key ids without a placeable entry and
+narrowed the L1-L3 file ranges, so YCSB C read 21% fewer filters than baseline;
+the new defaults leave 0.017% unplaced and restore positive lookup to within
+0.02 pp of baseline, at roughly 15% more loading time. Exact membership also
+plans, before materialization, how many unclaimed ids each file takes from each
+part of its range (`--vcomp_membership_plan`, on by default). The measurements
+are in `experiments/artifacts/kmv_sweep_261021/` (local) and summarized in the
+F2Load comparison tables.
+
 Merge representation, 2026-09-14: the discrete-CDF correction that ran as the
 default between 2026-09-08 and 2026-09-14 has been removed, leaving the PLR
 merge, split, and materialization path the paper describes. The 1 TB comparison
@@ -334,8 +349,8 @@ which turned sampling noise into a systematic undercount on every merge.
 
 Because range buckets hold equal-count strata, concatenating a descriptor's
 buckets samples the whole descriptor without bias, so no separate whole-file
-sketch is kept. `VCOMP_KMV_SAMPLES` (512) and `VCOMP_KMV_RANGE_BUCKETS` (8) set
-the budget. A `DiscreteCDF` certificate occupied this section between
+sketch is kept. `VCOMP_KMV_SAMPLES` (4096) and `VCOMP_KMV_RANGE_BUCKETS` (64) set
+the budget; the defaults were 512 and 8 until 2026-10-22. A `DiscreteCDF` certificate occupied this section between
 `9c7ab9cfa3` and 2026-09-14 and has been removed; see "Merge representation:
 PLR only".
 
@@ -611,8 +626,14 @@ PLR segments at ingestion: each segment is a maximal run of keys that a straight
 line predicts within `--plr_error_bound` ranks, so segment boundaries mark where
 key density changes. `NWayMergeKMVRangeAware` merges N descriptors by sweeping
 the union of their segment boundaries: every interval between two consecutive
-breakpoints gets a slope from the inputs active there, rescaled so the intervals
-sum to the KMV dedup estimate. `SplitIntoSSTs` cuts the merged model at rank
+breakpoints gets the inputs' entries in it, read from each input's PLR rank
+and multiplied by the distinct ratio of the KMV samples that fall in it, and the
+intervals are then rescaled to sum to the KMV dedup estimate. Until 2026-10-22
+the interval mass came from spreading each KMV bucket's count evenly over the
+bucket's key width; `VCOMP_MERGE_RANK_MASS=0` selects that split. It is accurate
+for flush outputs, whose keys are spread evenly, but not for compaction outputs
+whose density steps where an overlapping input ends, and the error compounds
+because each output's buckets feed the next merge. `SplitIntoSSTs` cuts the merged model at rank
 positions and `Inverse` turns each position back into a key; `MaterializeKeys`
 walks the segments linearly to emit the run.
 
@@ -632,7 +653,7 @@ dedup-ratio estimator of `42653d7406` is the likelier fix.
 ### KMV sketches
 
 Each descriptor keeps `VCOMP_KMV_SAMPLES` fingerprints split evenly across
-`VCOMP_KMV_RANGE_BUCKETS` (8) equal-count range buckets, 512 samples in total.
+`VCOMP_KMV_RANGE_BUCKETS` (64) equal-count range buckets, 4096 samples in total.
 There is no separate whole-file sketch: the buckets partition the descriptor's
 keys into equal-mass strata, so their concatenation is a sample of the whole
 file and the dedup ratio computed from it is unbiased. A sample stores only its
@@ -697,6 +718,18 @@ deepest levels a file's entry count can be smaller than the unclaimed ids in its
 range, and nothing deeper picks them up. It only ever loses keys, never invents
 them, and it accounts for the whole remaining positive lookup gap
 (60.292 x 0.995242 = 60.006 predicted, 60.042 measured).
+
+Since 2026-10-02 the shallowest-first order no longer decides which files take
+which ids: `--vcomp_membership_plan` first solves a max flow from range segments
+(capacity = unclaimed ids in the segment) through the files covering them
+(capacity = `num_entries`), augmenting the deepest level first so shallow files
+keep their spread, and each file then takes its planned ids per segment before
+spreading any remaining budget evenly. The plan places exactly as many ids as
+the descriptors allow, so what is left is a capacity shortage in the descriptors
+themselves: key ranges whose covering files hold fewer entries than distinct
+ids. On skewed input that shortage came from KMV sampling and the key-width
+merge split, and shrank from 0.9% to 0.017% of the ids with the 2026-10-22
+defaults.
 
 ### Global-unique materialization (`--vcomp_global_unique_keys`)
 

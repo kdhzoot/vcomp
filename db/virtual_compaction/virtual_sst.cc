@@ -18,8 +18,11 @@ namespace ROCKSDB_NAMESPACE {
 
 namespace {
 
-constexpr size_t kDefaultKMVSamples = 512;
-constexpr size_t kDefaultKMVRangeBuckets = 8;
+// 64 range buckets of 64 samples each. The 2026-10-21/22 1 TB sweep (rank merge,
+// skewed input) left 0.017% of keys without a placeable entry at this budget,
+// against about 0.9% for the earlier 8 x 64, for 0.3 GB more peak memory.
+constexpr size_t kDefaultKMVSamples = 4096;
+constexpr size_t kDefaultKMVRangeBuckets = 64;
 
 // Invert y = x ^ (x >> shift) over GF(2): the inverse of (I + R) is
 // (I + R)(I + R^2)(I + R^4)..., which terminates once the shift reaches 64.
@@ -157,6 +160,86 @@ size_t VirtualSSTKMVRangeBuckets() {
   }
   return parsed == 0 ? kDefaultKMVRangeBuckets : parsed;
 }
+
+namespace {
+
+// The merge reads an input's entries inside a key interval from its PLR rank.
+// VCOMP_MERGE_RANK_MASS=0 selects the legacy split, which spreads each KMV
+// bucket's count evenly over the bucket's key width; at 1 TB with skewed
+// input that split leaves key ranges short of entries (2026-10-21 sweep).
+bool VirtualSSTRankMass() {
+  static const bool enabled = [] {
+    const char* value = std::getenv("VCOMP_MERGE_RANK_MASS");
+    return value == nullptr || value[0] != '0';
+  }();
+  return enabled;
+}
+
+// Entries of `v` whose key is <= k, read from its PLR rank (CDF) instead of
+// spreading a KMV bucket's count evenly over the bucket's key width.
+long double RankAtOrBelow(const VirtualSST& v, uint64_t k) {
+  if (v.num_entries == 0 || k < v.key_min) return 0.0L;
+  if (k >= v.key_max) return static_cast<long double>(v.num_entries);
+  if (v.plr_model.Empty()) {
+    return static_cast<long double>(v.num_entries) *
+           static_cast<long double>(k - v.key_min + 1) /
+           static_cast<long double>(v.key_max - v.key_min + 1);
+  }
+  const long double r = static_cast<long double>(v.plr_model.Predict(k)) + 1.0L;
+  return std::min<long double>(static_cast<long double>(v.num_entries),
+                               std::max<long double>(0.0L, r));
+}
+
+// Fraction of the sampled entries of `inputs` inside [key_min, key_max] that
+// are distinct; 1 when no sample falls there.
+long double SampledUniqueRatio(const std::vector<const VirtualSST*>& inputs,
+                               uint64_t key_min, uint64_t key_max) {
+  uint64_t theta_hash = MaxHash();
+  for (const auto* input : inputs) {
+    if (input == nullptr || input->key_max < key_min || input->key_min > key_max) continue;
+    for (const auto& range : input->kmv_ranges) {
+      if (range.key_max < key_min || range.key_min > key_max) continue;
+      theta_hash = std::min(theta_hash, range.sketch.theta_hash);
+    }
+  }
+  std::vector<KMVSample> samples;
+  for (const auto* input : inputs) {
+    if (input == nullptr || input->key_max < key_min || input->key_min > key_max) continue;
+    for (const auto& range : input->kmv_ranges) {
+      if (range.key_max < key_min || range.key_min > key_max) continue;
+      for (const auto& sample : range.sketch.samples) {
+        if (sample.hash > theta_hash) continue;
+        const uint64_t key = sample.key();
+        if (key >= key_min && key <= key_max) samples.push_back(sample);
+      }
+    }
+  }
+  const uint64_t sampled_entries = samples.size();
+  if (sampled_entries == 0) return 1.0L;
+  SortUniqueByHash(&samples);
+  return static_cast<long double>(samples.size()) /
+         static_cast<long double>(sampled_entries);
+}
+
+// Rewrites each bucket count of an output descriptor from its own PLR, so the
+// next merge reads the dedup-adjusted shape rather than a width-even split.
+void RebucketEntriesByRank(VirtualSST* v) {
+  if (v->kmv_ranges.empty() || v->num_entries == 0) return;
+  long double prev = 0.0L;
+  uint64_t assigned = 0;
+  for (size_t i = 0; i < v->kmv_ranges.size(); i++) {
+    auto& range = v->kmv_ranges[i];
+    const long double cur = RankAtOrBelow(*v, range.key_max);
+    uint64_t n = static_cast<uint64_t>(std::llround(std::max<long double>(0.0L, cur - prev)));
+    const uint64_t left = v->num_entries - assigned;
+    if (i + 1 == v->kmv_ranges.size() || n > left) n = left;
+    range.num_entries = n;
+    assigned += n;
+    prev = cur;
+  }
+}
+
+}  // namespace
 
 std::vector<KMVRangeSketch> BuildKMVRangeSketchesFromSortedKeys(
     const std::vector<uint64_t>& sorted_keys,
@@ -436,6 +519,7 @@ PLRModel NWayMergeKMVRangeAware(const std::vector<const VirtualSST*>& inputs,
   merged.reserve(breakpoints.size() - 1);
   size_t next_model = 0;
   long double raw_total_entries = 0.0L;
+  const bool rank_mass = VirtualSSTRankMass();
 
   for (size_t i = 0; i + 1 < breakpoints.size(); i++) {
     uint64_t k_start = breakpoints[i];
@@ -481,12 +565,32 @@ PLRModel NWayMergeKMVRangeAware(const std::vector<const VirtualSST*>& inputs,
       interval_inputs.push_back(inputs[j]);
     }
 
+    const long double width =
+        std::max<long double>(1.0L, static_cast<long double>(k_end - k_start));
+    if (rank_mass) {
+      // Entries of every input in (k_start, k_end] (the first interval also
+      // takes k_start) straight from the input ranks, times the sampled
+      // distinct ratio of the interval. Consecutive intervals telescope, so
+      // the undeduplicated sum is exactly the inputs' entry total.
+      long double mass = 0.0L;
+      for (const auto* input : inputs) {
+        if (input == nullptr || input->key_max < k_start || input->key_min > k_end) continue;
+        const long double below =
+            i == 0 ? (k_start == 0 ? 0.0L : RankAtOrBelow(*input, k_start - 1))
+                   : RankAtOrBelow(*input, k_start);
+        mass += std::max<long double>(0.0L, RankAtOrBelow(*input, k_end) - below);
+      }
+      const long double entries =
+          mass > 0.0L ? mass * SampledUniqueRatio(inputs, k_start, k_end) : 0.0L;
+      raw_total_entries += entries;
+      merged.push_back({k_start, k_end, static_cast<double>(entries / width), 0.0});
+      continue;
+    }
+
     uint64_t interval_entries =
         EstimateKMVUnionEntriesForRange(interval_inputs, k_start, k_end);
     raw_total_entries += static_cast<long double>(interval_entries);
 
-    const long double width =
-        std::max<long double>(1.0L, static_cast<long double>(k_end - k_start));
     const long double naive_mass =
         std::max<long double>(0.0L, static_cast<long double>(slope_sum) * width);
     double slope = 0.0;
@@ -711,6 +815,7 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
       vsst.kmv_ranges = MergeKMVRangeSketchesForOutput(
           *kmv_inputs, vsst.key_min, vsst.key_max, total_entries, kmv_samples,
           /*max_ranges=*/0);
+      if (VirtualSSTRankMass()) RebucketEntriesByRank(&vsst);
     }
     result.push_back(std::move(vsst));
     return result;
@@ -851,6 +956,7 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
       vsst.kmv_ranges = MergeKMVRangeSketchesForOutput(
           *kmv_inputs, key_start, key_end, n_entries, kmv_samples,
           /*max_ranges=*/0);
+      if (VirtualSSTRankMass()) RebucketEntriesByRank(&vsst);
     }
 
     result.push_back(std::move(vsst));

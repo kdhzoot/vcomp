@@ -679,3 +679,67 @@ only, and the descriptor shrank from 17,064 B of sketch to 4,608 B
    manifest, a replay build manifest and a replay PASS validation, all of which
    name the 2026-09-08 binaries. Rebuild those three against the consolidated
    binary before the 100 GiB captures.
+
+## Queued after the rank merge and 64 x 64 sketch defaults (2026-10-22)
+
+Defaults since `c8bf4ae7b`: merge intervals take their entries from the input
+PLR ranks (`VCOMP_MERGE_RANK_MASS=0` restores the key-width split), KMV sketches
+keep 64 buckets x 64 samples, `--vcomp_membership_plan` on,
+`--vcomp_materialize_preallocate` off. Raw outputs of the sweep that chose them:
+`artifacts/kmv_sweep_261021/` (`summarize.py`, `precond_log.txt`). Host state to
+know before any of these: the weekly `fstrim.timer` is disabled (2026-10-21), and
+the SSDs were filled to 7.6 TB NUSE with deleted filler data on 2026-10-21 to
+match baseline's read latency (YCSB C SST read p50/p99 113/212 us against
+baseline's 115/213). That state persists until a full `fstrim /work`.
+
+1. **Clean-SSD re-measurement of both arms.** `fstrim /work` and settle before
+   every load (`run_loadskew_reps.py --fstrim /work`), baseline and F2Load
+   alternating, alpha 0 and 0.99, 3 loads each, YCSB A + C, NUSE recorded per
+   cell. Expect a device effect, not a structural one: on 2026-10-12 a trimmed
+   baseline still read at 115/213 us while trimmed F2Load read at 60/101 us,
+   because F2Load writes the whole DB in about a minute into free space. Report
+   throughput and latency with that caveat, and the structural metrics
+   (positive lookup, filter checks, level shape, DB size) as the fidelity
+   result. About 12.5 h, almost all of it the six baseline loads.
+2. **DB size above baseline.** *Cause found and fixed 2026-10-22* (40 GiB
+   structure diagnostics, `artifacts/diag40_261022/`): `EstimateKMVUnionEntries`
+   skipped dedup for a whole merge whenever one input bucket had no samples,
+   which merge outputs produce at 64 samples per bucket (31% of L0->L1 and 18%
+   of L3->L4 merges at 64 x 64). With the fix 40 GiB loads match baseline's
+   entry count within 0.4% at both alphas. Remaining: confirm at 1 TB.
+   Original note: the whole excess is in the last level, and it
+   grows as the sketch thins: rank 64 x 64 puts 457 GiB in L5 against
+   baseline's 399 GiB at alpha 0.99 (511 against 446 at alpha 0), 128 x 128
+   puts 427 (480), and 512 samples per bucket stay within about 1%. Under-dedup
+   at low samples per bucket is the suspect: a merge interval with no sample
+   in it gets a distinct ratio of 1, and a merge whose surviving samples (under
+   the smallest theta) show no duplicate returns the undeduplicated count. Run
+   the per-job accuracy probe on real 10 GiB compaction inputs (as on
+   2026-10-06) at 8 x 64, 64 x 64 and 64 x 512 with the rank merge, by output
+   level, last level first; then try a minimum-sample fallback to the
+   enclosing range's ratio instead of 1.
+3. **Filter checks at 64 x 64.** *40 GiB, 2026-10-22:* F2Load's L1 ends about
+   twice as wide as baseline's (alpha 0: 7.8% of the key space against 4.5%).
+   Baseline runs 260-274 intra-L0 merges and only about 40 large L0->L1 jobs,
+   because a compaction takes time and L0 files pile up meanwhile; F2Load's
+   virtual compactions finish at once, so it runs no intra-L0 and 2.5x as many
+   small L0->L1 jobs. The correction is to reproduce that backlog.
+   Original note: alpha 0: 4.08 against baseline's 3.64, and all
+   of the excess is L1 (0.68, 0.98, 0.61 per load against 0.17-0.42). Alpha
+   0.99: 3.43 against 3.68, spread over the levels, with L4 consistently
+   narrower (0.91-0.94 against 0.96-0.97). For L1, test the standing hypothesis
+   that F2Load's L1 files end wider because it never runs intra-L0 (L0->L0)
+   merges: compare L1 file ranges (`lsm_ranges`) and the last L0->L1 and
+   L1->L2 jobs of both arms at 10 GiB and 1 TB alpha 0. For L4, compare L4
+   range coverage the same way. The L1 excess is to be corrected, not only
+   explained: once the cause is confirmed, emulate intra-L0 merges (baseline at
+   40 GiB, alpha 0.99, ran 300 L0->L0 jobs; F2Load runs none) or otherwise
+   leave L1 in baseline's end-of-load state, and re-measure the per-level
+   filter checks.
+4. **PLR sensitivity.** The rank merge now reads PLR ranks directly, so the
+   error bound affects merge accuracy and not only descriptor memory. Sweep
+   `--plr_error_bound` over 2, 4, 8 (default), 16, 32 and 64 at 1 TB, alpha 0
+   and 0.99, 2 loads each, with the new defaults: peak RSS, fillvirtual time
+   (Phase 1 / wait / materialize), unplaced ids, DB size and level shape, YCSB
+   C (and A where time allows). About 6 h with C only. This replaces item 4 of
+   the 2026-09-14 list.

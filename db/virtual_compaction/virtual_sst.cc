@@ -316,7 +316,15 @@ uint64_t EstimateKMVUnionEntries(const std::vector<const VirtualSST*>& inputs,
   for (const auto* input : inputs) {
     if (input == nullptr || input->kmv_ranges.empty()) return naive_entries;
     for (const auto& range : input->kmv_ranges) {
-      if (range.sketch.samples.empty() && !range.sketch.complete) {
+      // A bucket without samples is still a valid bottom-k sketch when it has
+      // a theta: none of its keys hash at or below theta, so it adds no sample
+      // and only lowers the common cut. Merge outputs produce such buckets
+      // whenever no input sample of their range survives the cut, and skipping
+      // the whole estimate for them dropped the dedup of every merge that read
+      // one (31% of L0->L1 jobs at 64 x 64, 2026-10-22). Only a bucket that
+      // carries no sketch at all leaves nothing to estimate from.
+      if (range.sketch.samples.empty() && !range.sketch.complete &&
+          range.sketch.theta_hash == MaxHash()) {
         return naive_entries;
       }
       complete = complete && range.sketch.complete;

@@ -346,6 +346,13 @@ exactly for disjoint inputs. `EstimateKMVUnionEntriesForRange` multiplies the
 same ratio by the proportional in-range density. The earlier form rescaled the
 sample count by `1/theta` and clamped it to `naive_entries` from above only,
 which turned sampling noise into a systematic undercount on every merge.
+A range bucket with no samples still counts as a sketch when it has a theta
+(none of its keys hash at or below it); only a bucket with no sketch at all
+makes the estimate fall back to `naive_entries`. Until 2026-10-22 any empty
+bucket triggered that fallback, and merge outputs produce empty buckets often
+enough at 64 samples per bucket that whole merges went undeduplicated: 40 GiB
+loads came out 3.4-4.7% above baseline's entry count, and within 0.4% with the
+fix.
 
 Because range buckets hold equal-count strata, concatenating a descriptor's
 buckets samples the whole descriptor without bias, so no separate whole-file

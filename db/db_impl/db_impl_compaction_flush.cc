@@ -6015,6 +6015,40 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
       &virtual_sst_registry_->GetSSTSizeModel());
   uint64_t split_us = immutable_db_options_.clock->NowMicros() - split_t0;
 
+  // KMV state of this job, for the VCOMP_KMV_JOB line: how many samples the
+  // inputs carry, the smallest theta among their buckets (the merge keeps only
+  // samples at or below it), how many samples survive that cut and how many
+  // of those are duplicates, and how many samples the outputs keep.
+  uint64_t kmv_in_samples = 0, kmv_in_buckets = 0, kmv_used = 0, kmv_used_unique = 0;
+  uint64_t kmv_theta = UINT64_MAX;
+  for (const auto* v : input_vsst_ptrs) {
+    for (const auto& r : v->kmv_ranges) {
+      kmv_in_samples += r.sketch.samples.size();
+      kmv_in_buckets++;
+      kmv_theta = std::min(kmv_theta, r.sketch.theta_hash);
+    }
+  }
+  {
+    std::vector<uint64_t> used;
+    for (const auto* v : input_vsst_ptrs) {
+      for (const auto& r : v->kmv_ranges) {
+        for (const auto& smp : r.sketch.samples) {
+          if (smp.hash <= kmv_theta) used.push_back(smp.hash);
+        }
+      }
+    }
+    kmv_used = used.size();
+    std::sort(used.begin(), used.end());
+    kmv_used_unique = static_cast<uint64_t>(std::unique(used.begin(), used.end()) - used.begin());
+  }
+  uint64_t kmv_out_samples = 0, kmv_out_buckets = 0;
+  for (const auto& v : output_vssts) {
+    for (const auto& r : v.kmv_ranges) {
+      kmv_out_samples += r.sketch.samples.size();
+      kmv_out_buckets++;
+    }
+  }
+
   auto key_width = [](uint64_t key_min, uint64_t key_max) -> uint64_t {
     return key_max >= key_min ? key_max - key_min + 1 : 0;
   };
@@ -6226,6 +6260,18 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
         naive_entries, dedup_estimate, total_us, gather_us, merge_us,
         split_us, mutex_wait_us, edit_build_us, log_apply_us,
         commit_queue_wait_us, commit_batch_size);
+    ROCKS_LOG_BUFFER(
+        log_buffer,
+        "[%s] VCOMP_KMV_JOB job=%d start_level=%d output_level=%d "
+        "in_files=%zu in_buckets=%" PRIu64 " in_samples=%" PRIu64
+        " theta=%.6e used=%" PRIu64 " used_unique=%" PRIu64
+        " out_files=%zu out_buckets=%" PRIu64 " out_samples=%" PRIu64
+        " naive=%" PRIu64 " estimate=%" PRIu64,
+        cfd->GetName().c_str(), job_id, c->start_level(), output_level,
+        input_vsst_ptrs.size(), kmv_in_buckets, kmv_in_samples,
+        static_cast<double>(kmv_theta) / 18446744073709551615.0, kmv_used,
+        kmv_used_unique, output_vssts.size(), kmv_out_buckets, kmv_out_samples,
+        naive_entries, total_entries);
     ROCKS_LOG_BUFFER(
         log_buffer,
         "[%s] VCOMP_WRITE_JOB job=%d start_level=%d output_level=%d "

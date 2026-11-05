@@ -1150,11 +1150,17 @@ class DBImpl : public DB {
     // Refill calls that were stopped / reduced to one file by backpressure.
     uint64_t backpressure_stops = 0;
     uint64_t backpressure_trickles = 0;
+    // File-count window (0: byte window). The smallest window that was
+    // handed to a compaction, for checking that the tail was not starved.
+    uint64_t target_visible_files = 0;
+    uint64_t min_window_files = 0;
   };
 
   void ConfigureVirtualL0Window(uint64_t target_visible_bytes,
                                 uint64_t max_register_batch_files,
-                                bool backpressure);
+                                bool backpressure,
+                                uint64_t target_visible_files = 0,
+                                uint64_t total_expected_files = 0);
   Status EnqueueVirtualL0Files(std::vector<VirtualL0WindowFile>&& files,
                                VirtualL0RegistrationStats* stats = nullptr);
   Status RefillVirtualL0Window(VirtualL0RegistrationStats* stats = nullptr);
@@ -1566,6 +1572,14 @@ class DBImpl : public DB {
   uint64_t virtual_l0_visible_files_ = 0;
   uint64_t virtual_l0_visible_bytes_ = 0;
   uint64_t virtual_l0_target_visible_bytes_ = 0;
+  // When > 0 the window is filled by file count in one VersionEdit, and the
+  // per-window target is spread over the files still expected so the last
+  // window is a full-sized one instead of whatever is left over. Baseline's
+  // final L0 -> L1 merges ~2.4 GB of L0 into a still-full L1 (34-39 output
+  // files at 1 TB / 1 KB); a 1-2 file remainder would leave L1 files that
+  // each span a third of the key space.
+  uint64_t virtual_l0_target_visible_files_ = 0;
+  uint64_t virtual_l0_total_expected_files_ = 0;
   uint64_t virtual_l0_max_register_batch_files_ = 1;
   // Gate the synthetic L0 feed with the column family's write-stall
   // conditions, the way fillrandom's flushes are gated. Without it the feed

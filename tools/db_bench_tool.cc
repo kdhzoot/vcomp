@@ -1050,6 +1050,15 @@ DEFINE_uint64(vcomp_visible_l0_batch_mb, 0,
               "Target total registered virtual L0 size, in MiB. Set to zero "
               "to use the column family's max_compaction_bytes.");
 
+DEFINE_uint64(vcomp_visible_l0_files, 20,
+              "fillvirtual: virtual L0 files per window, registered in one "
+              "VersionEdit, with the windows planned over the expected L0 "
+              "count so the last one is full-sized too. 20 + the ~16 L1 files "
+              "waiting on L1 -> L2 reproduces baseline's L0 -> L1 merges "
+              "(34-39 output files at 1 TB / 1 KB). 0 restores the byte "
+              "window (vcomp_visible_l0_batch_mb), which fills 24 + 1 and "
+              "leaves the remainder for a tiny final compaction.");
+
 DEFINE_bool(vcomp_l0_backpressure, true,
             "Gate virtual L0 registration with the column family's write-stall "
             "conditions (level0_slowdown/stop_writes_trigger, soft/hard_pending_"
@@ -6735,7 +6744,9 @@ class Benchmark {
                   1, cfd->GetLatestMutableCFOptions().max_compaction_bytes);
     db_impl->ConfigureVirtualL0Window(visible_l0_batch_bytes,
                                       register_batch_max,
-                                      FLAGS_vcomp_l0_backpressure);
+                                      FLAGS_vcomp_l0_backpressure,
+                                      FLAGS_vcomp_visible_l0_files,
+                                      total_flushes_expected);
     const uint64_t reserved_l0_file_base =
         versions->FetchAddFileNumber(total_flushes_expected);
     uint64_t next_reserved_l0_file = reserved_l0_file_base;
@@ -7378,7 +7389,8 @@ class Benchmark {
         "  L0 visible window: queued=%" PRIu64 " registered=%" PRIu64
         " consumed=%" PRIu64 " pending=%" PRIu64 " visible=%" PRIu64
         " batches=%" PRIu64 " max_batch=%" PRIu64 " max_batch_mb=%.2f"
-        " max_pending=%" PRIu64 " target_mb=%.2f\n",
+        " max_pending=%" PRIu64 " target_mb=%.2f target_files=%" PRIu64
+        " min_window_files=%" PRIu64 "\n",
         l0_window_after_wait.queued_files,
         l0_window_after_wait.registered_files,
         l0_window_after_wait.consumed_files,
@@ -7388,7 +7400,9 @@ class Benchmark {
         l0_window_after_wait.max_register_batch,
         l0_window_after_wait.max_register_batch_bytes / 1024.0 / 1024.0,
         l0_window_after_wait.max_pending_files,
-        l0_window_after_wait.target_visible_bytes / 1024.0 / 1024.0);
+        l0_window_after_wait.target_visible_bytes / 1024.0 / 1024.0,
+        l0_window_after_wait.target_visible_files,
+        l0_window_after_wait.min_window_files);
     fprintf(stderr,
         "  L0 backpressure: %s stops=%" PRIu64 " trickles=%" PRIu64 "\n",
         FLAGS_vcomp_l0_backpressure ? "on" : "off",

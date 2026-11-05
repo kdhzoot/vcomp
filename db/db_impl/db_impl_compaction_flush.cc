@@ -5189,9 +5189,14 @@ DBImpl::VirtualCompactionStats DBImpl::GetVirtualCompactionStats() const {
 
 void DBImpl::ConfigureVirtualL0Window(uint64_t target_visible_bytes,
                                       uint64_t max_register_batch_files,
-                                      bool backpressure) {
+                                      bool backpressure,
+                                      uint64_t target_visible_files,
+                                      uint64_t total_expected_files) {
   InstrumentedMutexLock l(&mutex_);
   virtual_l0_target_visible_bytes_ = target_visible_bytes;
+  virtual_l0_target_visible_files_ = target_visible_files;
+  virtual_l0_total_expected_files_ = total_expected_files;
+  virtual_l0_window_stats_.target_visible_files = target_visible_files;
   virtual_l0_backpressure_ = backpressure;
   virtual_l0_max_register_batch_files_ =
       std::max<uint64_t>(1, max_register_batch_files);
@@ -5276,6 +5281,21 @@ Status DBImpl::RefillVirtualL0WindowLocked(VirtualL0RegistrationStats* stats) {
   const uint64_t target_bytes = virtual_l0_target_visible_bytes_ > 0
                                     ? virtual_l0_target_visible_bytes_
                                     : virtual_l0_pending_.front().file_size;
+  // File-count window: spread the remaining files evenly over the windows
+  // still needed, so the final L0 -> L1 compaction merges a full-sized batch
+  // (a 1-2 file tail produces L1 files spanning most of the key space).
+  uint64_t target_files = virtual_l0_target_visible_files_;
+  if (target_files > 0 && virtual_l0_total_expected_files_ > 0) {
+    const uint64_t consumed = virtual_l0_window_stats_.consumed_files;
+    const uint64_t left = virtual_l0_total_expected_files_ > consumed
+                              ? virtual_l0_total_expected_files_ - consumed
+                              : 0;
+    if (left > 0) {
+      const uint64_t windows = (left + target_files - 1) / target_files;
+      target_files = (left + windows - 1) / windows;
+    }
+  }
+  const bool by_count = target_files > 0;
   Status s;
 
   // Mirror the write stalls that pace fillrandom's flushes. The stop
@@ -5307,7 +5327,9 @@ Status DBImpl::RefillVirtualL0WindowLocked(VirtualL0RegistrationStats* stats) {
 
   bool trickled = false;
   while (!virtual_l0_pending_.empty() &&
-         virtual_l0_visible_bytes_ < target_bytes && !trickled) {
+         (by_count ? virtual_l0_visible_files_ < target_files
+                   : virtual_l0_visible_bytes_ < target_bytes) &&
+         !trickled) {
     const Pressure p = pressure();
     if (p == kStop) {
       virtual_l0_window_stats_.backpressure_stops++;
@@ -5323,19 +5345,23 @@ Status DBImpl::RefillVirtualL0WindowLocked(VirtualL0RegistrationStats* stats) {
     batch.reserve(virtual_l0_max_register_batch_files_);
     uint64_t batch_bytes = 0;
     const uint64_t remaining = target_bytes - virtual_l0_visible_bytes_;
-    const size_t batch_cap =
+    size_t batch_cap =
         trickle ? 1 : static_cast<size_t>(virtual_l0_max_register_batch_files_);
+    if (by_count && !trickle) {
+      batch_cap = static_cast<size_t>(std::min<uint64_t>(
+          batch_cap, target_files - virtual_l0_visible_files_));
+    }
 
     while (!virtual_l0_pending_.empty() && batch.size() < batch_cap) {
       const uint64_t file_size = virtual_l0_pending_.front().file_size;
-      if (!batch.empty() && batch_bytes + file_size > remaining) {
+      if (!by_count && !batch.empty() && batch_bytes + file_size > remaining) {
         break;
       }
       batch_bytes += file_size;
       virtual_l0_pending_bytes_ -= file_size;
       batch.push_back(std::move(virtual_l0_pending_.front()));
       virtual_l0_pending_.pop_front();
-      if (batch_bytes >= remaining) {
+      if (!by_count && batch_bytes >= remaining) {
         break;
       }
     }
@@ -5443,6 +5469,10 @@ void DBImpl::AccountVirtualL0CompactionLocked(uint64_t input_files,
   virtual_l0_visible_bytes_ += output_bytes;
   virtual_l0_window_stats_.consumed_files += input_files;
   virtual_l0_window_stats_.consumed_bytes += input_bytes;
+  if (input_files > 0 && (virtual_l0_window_stats_.min_window_files == 0 ||
+                          input_files < virtual_l0_window_stats_.min_window_files)) {
+    virtual_l0_window_stats_.min_window_files = input_files;
+  }
   virtual_l0_window_stats_.visible_files = virtual_l0_visible_files_;
   virtual_l0_window_stats_.visible_bytes = virtual_l0_visible_bytes_;
 }

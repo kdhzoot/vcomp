@@ -6520,7 +6520,8 @@ Status VersionSet::ProcessManifestWrites(
         }
       }
 
-      if (s.ok()) {
+      if (s.ok() && (new_descriptor_log ||
+                     manifest_sync_enabled_.load(std::memory_order_relaxed))) {
         uint64_t sync_t0 = now_micros();
         io_s =
             SyncManifest(db_options_, write_options, raw_desc_log_ptr->file());

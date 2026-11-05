@@ -1057,6 +1057,13 @@ DEFINE_bool(vcomp_l0_backpressure, true,
             "level near its target during the load so the tree shape tracks "
             "baseline at scale.");
 
+DEFINE_bool(vcomp_manifest_sync, false,
+            "fillvirtual: fsync the MANIFEST on every virtual edit. Off by "
+            "default: the virtual state is in memory until materialization, "
+            "whose final edit is synced and persists the records before it. "
+            "At 1 TB the per-edit syncs (11.5K x 5 ms) were most of the "
+            "virtual compaction wait.");
+
 DEFINE_bool(vcomp_log_apply_timing, true,
             "Collect detailed LogAndApply timing breakdown for fillvirtual. "
             "Disable to measure instrumentation overhead.");
@@ -6459,6 +6466,7 @@ class Benchmark {
     db_impl->ResetVirtualCompactionStats();
     versions->ResetLogAndApplyBreakdownStats();
     versions->SetLogAndApplyBreakdownEnabled(FLAGS_vcomp_log_apply_timing);
+    versions->SetManifestSyncEnabled(FLAGS_vcomp_manifest_sync);
 
     auto subtract_log_apply_stats =
         [](const VersionSet::LogAndApplyBreakdownStats& a,
@@ -7451,6 +7459,7 @@ class Benchmark {
         l0_window_after_drain.log_apply_us / 1e6);
 
     phase_mark("materialize");
+    versions->SetManifestSyncEnabled(true);  // the final edit persists all
     // Freeze BG compaction so Phase 2 sees a stable registry/version snapshot.
     // Without this, BG can re-fire virtual compactions during Phase 2's
     // parallel SST write window (~3s), mutating the registry and the version

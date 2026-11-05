@@ -1384,6 +1384,12 @@ class VersionSet {
   void SetLogAndApplyBreakdownEnabled(bool enabled) {
     log_apply_breakdown_enabled_.store(enabled, std::memory_order_relaxed);
   }
+  // fillvirtual: the LSM state lives in memory until materialization, so
+  // the MANIFEST need not be synced on every virtual edit. Records are still
+  // written; the next synced write (the materialization edit) persists them.
+  void SetManifestSyncEnabled(bool enabled) {
+    manifest_sync_enabled_.store(enabled, std::memory_order_relaxed);
+  }
 
   void WakeUpWaitingManifestWriters();
 
@@ -1914,6 +1920,7 @@ class VersionSet {
   std::atomic<uint64_t> log_apply_writer_callback_us_{0};
   std::atomic<uint64_t> log_apply_total_us_{0};
   std::atomic<bool> log_apply_breakdown_enabled_{true};
+  std::atomic<bool> manifest_sync_enabled_{true};
 
  private:
   // REQUIRES db mutex at beginning. may release and re-acquire db mutex

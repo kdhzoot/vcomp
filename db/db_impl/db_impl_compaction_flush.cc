@@ -5370,6 +5370,11 @@ Status DBImpl::RefillVirtualL0WindowLocked(VirtualL0RegistrationStats* stats) {
       break;
     }
 
+    // Install time as the files' age, as a flush would; zero reads as expired
+    // for TTL-based output cutting.
+    int64_t now_signed = 0;
+    immutable_db_options_.clock->GetCurrentTime(&now_signed).PermitUncheckedError();
+    const uint64_t now = static_cast<uint64_t>(now_signed);
     VersionEdit edit;
     for (const auto& file : batch) {
       std::string smallest_key =
@@ -5383,8 +5388,8 @@ Status DBImpl::RefillVirtualL0WindowLocked(VirtualL0RegistrationStats* stats) {
                    file.file_size, smallest, largest,
                    /* smallest_seqno */ 0, /* largest_seqno */ 0,
                    /* marked_for_compaction */ false, Temperature::kUnknown,
-                   kInvalidBlobFileNumber, /* oldest_ancester_time */ 0,
-                   /* file_creation_time */ 0, file.epoch_number,
+                   kInvalidBlobFileNumber, /* oldest_ancester_time */ now,
+                   /* file_creation_time */ now, file.epoch_number,
                    /* file_checksum */ "", /* file_checksum_func_name */ "",
                    UniqueId64x2{}, /* compensated_range_deletion_size */ 0,
                    /* tail_size */ 0,

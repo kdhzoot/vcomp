@@ -8522,6 +8522,12 @@ class Benchmark {
       for (size_t i = 0; i < tasks.size(); i++) {
         edit.DeleteFile(tasks[i].level, tasks[i].virtual_fnum);
       }
+    // Files carry the install time as their oldest ancestor and creation time,
+    // as a flush would. Zero reads as older than ttl/2, so with
+    // kMinOverlappingRatio and ttl > 0 every later compaction cut its output at
+    // each of these files' boundaries (FillFilesToCutForTtl), splitting outputs
+    // into small files (experiments/docs/F2LOAD_GRANDPARENT_CUT_ALIGNMENT.md §8).
+    const uint64_t install_time = FLAGS_env->NowMicros() / 1000000;
     for (const auto& res : results) {
       if (!res.ok || res.keys_written == 0) continue;
       // SstFileWriter emits sequence-zero external SSTs. The install helper
@@ -8537,8 +8543,8 @@ class Benchmark {
       uint64_t epoch = cfd->NewEpochNumber();
       edit.AddFile(res.level, res.file_number, 0, res.file_size,
                    smallest, largest, 0, 0, false, Temperature::kUnknown,
-                   kInvalidBlobFileNumber, 0, 0, epoch, "", "",
-                   UniqueId64x2{}, 0, res.tail_size, true);
+                   kInvalidBlobFileNumber, install_time, install_time, epoch,
+                   "", "", UniqueId64x2{}, 0, res.tail_size, true);
     }
     phase_mark("version_edit");
     {

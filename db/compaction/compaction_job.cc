@@ -1536,8 +1536,11 @@ void CompactionJob::MaybeRecordVCompAccuracy() {
     uint64_t gp_min = ExtractPrefix64(gp->smallest.user_key());
     uint64_t gp_max = ExtractPrefix64(gp->largest.user_key());
     if (gp_max < gp_min) std::swap(gp_min, gp_max);
+    // First key after the cut, as in DBImpl's virtual compaction.
     gp_boundaries.push_back(gp_min);
-    gp_boundaries.push_back(gp_max);
+    if (gp_max < std::numeric_limits<uint64_t>::max()) {
+      gp_boundaries.push_back(gp_max + 1);
+    }
   }
   std::sort(gp_boundaries.begin(), gp_boundaries.end());
 

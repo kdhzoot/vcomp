@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <deque>
+#include <limits>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -6027,8 +6028,12 @@ Status DBImpl::RunVirtualCompaction(Compaction* c,
       uint64_t gp_min = extract_key(fmd->smallest);
       uint64_t gp_max = extract_key(fmd->largest);
       if (gp_max < gp_min) std::swap(gp_min, gp_max);
+      // A boundary is the first key of the output file after the cut: the
+      // cut past a grandparent file keeps its largest key on the left.
       gp_boundaries.push_back(gp_min);
-      gp_boundaries.push_back(gp_max);
+      if (gp_max < std::numeric_limits<uint64_t>::max()) {
+        gp_boundaries.push_back(gp_max + 1);
+      }
       gp_ranges.emplace_back(gp_min, gp_max);
     }
     std::sort(gp_boundaries.begin(), gp_boundaries.end());

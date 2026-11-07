@@ -781,6 +781,55 @@ PLRModel ScalePLRPositions(const PLRModel& plr, double scale) {
   return PLRModel(std::move(segments));
 }
 
+// The rank at which a cut separates the keys below a grandparent boundary from
+// the keys at or above it: the smallest position p with Inverse(p) >= bkey, so
+// that Inverse(p - 1) < bkey. Rounding Predict(bkey) is only accurate to the
+// PLR error bound, while the output files' key ranges and their materialised
+// keys come from Inverse(); a cut a few ranks off the boundary made one of the
+// two neighbouring outputs reach a few keys into the grandparent file. In a
+// 1 TB load at PLR 16, 45-67% of the L3/L4 file cuts straddled a next-level
+// file this way (6-8% for a baseline load, 2026-11-07), which raised the fan-in
+// of the real compactions after loading and stalled YCSB A. Searching with
+// Inverse() itself puts the cut exactly where the materialised keys cross
+// bkey. Keeps the rounded prediction when the model is not monotone around
+// the boundary; returns false when even that is out of range.
+static bool GrandparentCutPosition(const PLRModel& plr, uint64_t bkey,
+                                   uint64_t total_entries, uint64_t* pos) {
+  double pos_d = plr.Predict(bkey);
+  if (!(pos_d > 0 && pos_d < static_cast<double>(total_entries))) return false;
+  const uint64_t guess = static_cast<uint64_t>(std::round(pos_d));
+  *pos = guess;
+  auto reaches = [&](uint64_t p) {
+    return plr.Inverse(static_cast<double>(p)) >= bkey;
+  };
+  // Bracket the crossing around the prediction, Inverse(lo) < bkey <=
+  // Inverse(hi). The prediction is off by at most the PLR error bound, so a
+  // geometric widening finds the bracket in a few probes.
+  constexpr uint64_t kMaxWiden = 1 << 16;
+  uint64_t lo = guess, hi = guess;
+  if (reaches(guess)) {
+    for (uint64_t step = 1; reaches(lo); step *= 2) {
+      if (lo == 0 || step > kMaxWiden) return true;
+      lo = lo > step ? lo - step : 0;
+    }
+  } else {
+    for (uint64_t step = 1; !reaches(hi); step *= 2) {
+      if (hi >= total_entries - 1 || step > kMaxWiden) return true;
+      hi = std::min(hi + step, total_entries - 1);
+    }
+  }
+  while (hi - lo > 1) {
+    uint64_t mid = lo + (hi - lo) / 2;
+    if (reaches(mid)) {
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+  }
+  *pos = hi;
+  return true;
+}
+
 std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
                                       uint64_t total_entries,
                                       uint64_t target_sst_size,
@@ -855,9 +904,9 @@ std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
   if (!grandparent_boundaries.empty() && target_level > 0) {
     for (uint64_t bkey : grandparent_boundaries) {
       if (bkey <= global_min || bkey >= global_max) continue;
-      double pos_d = plr.Predict(bkey);
-      if (pos_d > 0 && pos_d < static_cast<double>(total_entries)) {
-        gp_positions.push_back(static_cast<uint64_t>(std::round(pos_d)));
+      uint64_t pos = 0;
+      if (GrandparentCutPosition(plr, bkey, total_entries, &pos)) {
+        gp_positions.push_back(pos);
       }
     }
     std::sort(gp_positions.begin(), gp_positions.end());

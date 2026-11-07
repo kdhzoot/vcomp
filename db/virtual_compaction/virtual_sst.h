@@ -100,7 +100,10 @@ PLRModel ScalePLRPositions(const PLRModel& plr, double scale);
 // target_sst_size bytes. Uses PLR Inverse to find split key boundaries.
 // If grandparent_boundaries is non-empty, output SSTs are also split at these
 // key boundaries to limit overlap with the next level (matching RocksDB's
-// grandparent boundary split behavior).
+// grandparent boundary split behavior). Each boundary is the first key that
+// belongs to the output file after the cut: a grandparent file's smallest key,
+// or its largest key + 1. A cut placed for a boundary leaves every key below it
+// in the file before the cut and every key at or above it in the file after.
 std::vector<VirtualSST> SplitIntoSSTs(const PLRModel& plr,
                                       uint64_t total_entries,
                                       uint64_t target_sst_size,

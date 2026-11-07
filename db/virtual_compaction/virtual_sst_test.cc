@@ -147,6 +147,61 @@ TEST(VirtualSSTTest, PhysicalBytesDriveGrandparentThreshold) {
   ASSERT_EQ(legacy.front().num_entries, 40U);  // 250 logical bytes did not cross.
 }
 
+TEST(VirtualSSTTest, GrandparentCutsDoNotStraddleBoundaries) {
+  // Uneven gaps, so a PLR with error bound 8 mispredicts ranks by a few
+  // positions as the loader's models do.
+  std::vector<uint64_t> keys;
+  uint64_t k = 1000;
+  for (uint64_t i = 0; i < 6000; i++) {
+    k += 40 + (i * 2654435761ULL) % 120;
+    keys.push_back(k);
+  }
+  const PLRModel plr = GreedyPLRFit(keys, 8.0);
+  // Grandparent files of 250 keys separated by one-key gaps, given as the
+  // first key at or above each boundary (smallest, largest + 1). Every
+  // boundary lies beyond the dynamic pre-cut threshold, so each one cuts.
+  std::vector<uint64_t> boundaries;
+  for (size_t i = 250; i + 250 < keys.size(); i += 250) {
+    boundaries.push_back(keys[i]);
+    boundaries.push_back(keys[i + 249] + 1);
+  }
+  const auto output = SplitIntoSSTs(plr, keys.size(), 10000, 50, keys.front(),
+                                    keys.back(), 1, boundaries);
+  // One cut per 250 keys (largest + 1 of one file is the smallest of the next).
+  size_t expected_files = 1;
+  for (size_t i = 250; i < keys.size(); i += 250) expected_files++;
+  ASSERT_EQ(output.size(), expected_files);
+  uint64_t count = 0;
+  std::vector<std::vector<uint64_t>> materialized;
+  for (const auto& file : output) {
+    count += file.num_entries;
+    materialized.push_back(MaterializeKeys(file));
+    ASSERT_EQ(materialized.back().size(), file.num_entries);
+  }
+  ASSERT_EQ(count, keys.size());
+  // A cut placed a few ranks off its boundary makes both neighbouring outputs
+  // overlap the same grandparent file [keys[j], keys[j + 249]]; an exact cut
+  // never does, by key range or by materialised keys.
+  auto overlaps = [&](uint64_t lo, uint64_t hi, size_t j) {
+    return hi >= keys[j] && lo <= keys[j + 249];
+  };
+  for (size_t f = 0; f + 1 < output.size(); f++) {
+    const auto& a = output[f];
+    const auto& b = output[f + 1];
+    for (size_t j = 0; j + 249 < keys.size(); j += 250) {
+      ASSERT_FALSE(overlaps(a.key_min, a.key_max, j) &&
+                   overlaps(b.key_min, b.key_max, j))
+          << "outputs [" << a.key_min << ", " << a.key_max << "] and ["
+          << b.key_min << ", " << b.key_max
+          << "] both overlap grandparent [" << keys[j] << ", "
+          << keys[j + 249] << "]";
+      ASSERT_FALSE(
+          overlaps(materialized[f].front(), materialized[f].back(), j) &&
+          overlaps(materialized[f + 1].front(), materialized[f + 1].back(), j));
+    }
+  }
+}
+
 TEST(VirtualSSTTest, CompleteKMVSketchDeduplicatesExactUnion) {
   auto left = MakeVirtualSST(KeyRange(0, 32));
   auto right = MakeVirtualSST(KeyRange(16, 48));

@@ -960,6 +960,15 @@ DEFINE_bool(vcomp_membership_plan, true,
             "range, by a max flow over the file ranges and entry counts. A "
             "shallower level then takes the ids no deeper file has room for. "
             "Off: each file spreads its picks evenly over its range.");
+DEFINE_bool(vcomp_membership_pin_ends, false,
+            "With --vcomp_exact_membership, add to every materialized file the "
+            "ingested key ids closest to both ends of its planned key range, "
+            "on top of its entry count. A file whose budget the plan spends "
+            "on one crowded part of its range otherwise ends up with a much "
+            "narrower [smallest, largest] than planned, and point lookups "
+            "probe fewer filters than baseline (L1-L3 at zipf 0.99). The ends "
+            "are ingested keys, so no key outside the ingested set appears.");
+
 DEFINE_bool(vcomp_exact_membership, false,
             "fillvirtual only: record every ingested key id in a bitmap and "
             "materialize from that bitmap instead of inverting the PLR model. "
@@ -2685,6 +2694,38 @@ class KeyMembership {
       return true;
     });
     return present;
+  }
+
+  // Smallest / largest present key id in [first, last]; false if none.
+  bool FirstPresent(uint64_t first, uint64_t last, uint64_t* key) const {
+    bool found = false;
+    ForEachWord(first, last, [&](uint64_t word, uint64_t mask) {
+      const uint64_t bits = mask & Load(word);
+      if (bits == 0) return true;
+      *key = (word << 6) + static_cast<uint64_t>(CountTrailingZeroBits(bits));
+      found = true;
+      return false;
+    });
+    return found;
+  }
+  bool LastPresent(uint64_t first, uint64_t last, uint64_t* key) const {
+    if (first > last || first >= key_domain_) return false;
+    if (last >= key_domain_) last = key_domain_ - 1;
+    for (uint64_t word = last >> 6;; word--) {
+      const uint64_t low_bit = (word == (first >> 6)) ? (first & 63) : 0;
+      const uint64_t high_bit = (word == (last >> 6)) ? (last & 63) : 63;
+      uint64_t mask = (~uint64_t{0}) << low_bit;
+      if (high_bit < 63) mask &= (uint64_t{1} << (high_bit + 1)) - 1;
+      const uint64_t bits = mask & Load(word);
+      if (bits != 0) {
+        *key = (word << 6) + 63 - static_cast<uint64_t>(__builtin_clzll(bits));
+        return true;
+      }
+      if (word == (first >> 6)) return false;
+    }
+  }
+  bool IsNewest(uint64_t key) const {
+    return CountPresent(key, key, kNewest) == 1;
   }
 
   uint64_t Total() const {
@@ -8119,6 +8160,8 @@ class Benchmark {
             bool member_have[2] = {false, false};
             uint64_t member_next[2] = {0, 0};
             std::vector<uint64_t> member_claims;
+            bool pin_lo_pending = false, pin_hi_pending = false;
+            uint64_t pin_lo = 0, pin_hi = 0, pinned = 0;
             if (membership != nullptr) {
               uint64_t member_hi = task.materialize_key_max;
               if (member_hi >= membership->key_domain()) {
@@ -8191,6 +8234,18 @@ class Benchmark {
               member_claims.reserve(want_fresh);
               member_have[0] = member_fresh->Next(&member_next[0]);
               member_have[1] = member_stale->Next(&member_next[1]);
+              if (FLAGS_vcomp_membership_pin_ends &&
+                  (member_have[0] || member_have[1])) {
+                uint64_t head = UINT64_MAX;
+                if (member_have[0]) head = member_next[0];
+                if (member_have[1]) head = std::min(head, member_next[1]);
+                pin_lo_pending =
+                    membership->FirstPresent(member_lo, member_hi, &pin_lo) &&
+                    pin_lo < head;
+                pin_hi_pending =
+                    membership->LastPresent(member_lo, member_hi, &pin_hi) &&
+                    pin_hi > head;
+              }
               if (!member_have[0] && !member_have[1]) {
                 res.report_status = "skipped";
                 res.stop_reason = "membership_empty_range";
@@ -8238,14 +8293,32 @@ class Benchmark {
             std::string prev_key_str;
             uint64_t keys_in_file = 0;
 
-            for (uint64_t pos = 0; pos < task.vsst->num_entries; pos++) {
+            const uint64_t pin_room =
+                FLAGS_vcomp_membership_pin_ends && membership != nullptr ? 2 : 0;
+            for (uint64_t pos = 0; pos < task.vsst->num_entries + pin_room;
+                 pos++) {
               if (unique_reservation != nullptr &&
                   keys_in_file >= unique_target) {
                 res.stop_reason = "unique_capacity_exhausted";
                 break;
               }
               uint64_t k;
-              if (member_fresh != nullptr) {
+              if (member_fresh != nullptr && pin_lo_pending) {
+                // The planned range's first ingested key, ahead of the budget.
+                k = pin_lo;
+                pin_lo_pending = false;
+                pinned++;
+                if (membership->IsNewest(k)) member_claims.push_back(k);
+              } else if (member_fresh != nullptr && !member_have[0] &&
+                         !member_have[1] && pin_hi_pending) {
+                k = pin_hi;  // and its last, after the budget
+                pin_hi_pending = false;
+                pinned++;
+                if (membership->IsNewest(k)) member_claims.push_back(k);
+              } else if (member_fresh != nullptr) {
+                if (pos >= task.vsst->num_entries + pinned) {
+                  break;  // budget spent; only pinned ends may exceed it
+                }
                 int pick;
                 if (member_have[0] && member_have[1]) {
                   pick = member_next[0] <= member_next[1] ? 0 : 1;
@@ -8259,6 +8332,7 @@ class Benchmark {
                 }
                 k = member_next[pick];
                 if (pick == 0) member_claims.push_back(k);
+                if (pin_hi_pending && k >= pin_hi) pin_hi_pending = false;
                 member_have[pick] = pick == 0
                                         ? member_fresh->Next(&member_next[0])
                                         : member_stale->Next(&member_next[1]);
@@ -8363,7 +8437,7 @@ class Benchmark {
             // limit of global-unique materialization, so they count as a
             // shortfall. Any other missing entry still fails the file.
             if ((unique_reservation != nullptr || membership != nullptr) &&
-                (keys_in_file + res.unique_shortfall !=
+                (keys_in_file - pinned + res.unique_shortfall !=
                      task.vsst->num_entries ||
                  res.skipped_nonincreasing_keys != 0)) {
               res.report_status = "unique_count_mismatch";
